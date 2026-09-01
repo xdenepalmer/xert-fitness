@@ -6496,6 +6496,89 @@ final class ModelsTests: XCTestCase {
         )
     }
 
+    func testAdminFitboxBridgeHealthDecodesPerWorkflowEvidenceWithoutMutationAuthority() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let health = try decoder.decode(AdminFitboxBridgeHealth.self, from: Data("""
+        {
+          "ready": true,
+          "environment": { "ready": true, "missing": [] },
+          "jobs_24h": { "completed": 1, "failed": 0 },
+          "profile_refreshes_24h": { "completed": 1, "failed": 0 },
+          "active": 0,
+          "stale": 0,
+          "events_24h": 3,
+          "reconciliation": 2,
+          "event_types": [
+            {
+              "event_type": "class_session_booked",
+              "events_24h": 3,
+              "needs_review": 2,
+              "last_received_at": "2026-09-02T06:30:00Z",
+              "latest_processing_state": "needs_review",
+              "latest_review_reason": "MISSING_STABLE_EVENT_IDENTITY"
+            }
+          ]
+        }
+        """.utf8))
+
+        XCTAssertTrue(health.ready)
+        XCTAssertTrue(health.hasReviewRequired)
+        XCTAssertEqual(health.profile_refreshes_24h?.completed, 1)
+        XCTAssertEqual(health.eventSummaries.count, 1)
+        XCTAssertEqual(health.eventSummaries[0].title, "Class booked")
+        XCTAssertEqual(health.eventSummaries[0].events_24h, 3)
+        XCTAssertEqual(health.eventSummaries[0].needs_review, 2)
+        XCTAssertEqual(
+            health.eventSummaries[0].reviewReasonLabel,
+            "Missing a stable provider event ID or timestamp"
+        )
+        XCTAssertNotNil(health.eventSummaries[0].last_received_at)
+    }
+
+    func testAdminFitboxLeadStateDecodesReadOnlyProfileSnapshot() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let state = try decoder.decode(AdminFitboxLeadState.self, from: Data("""
+        {
+          "link": {
+            "id": "a9c7bc2e-3fa4-4dcf-8e19-f4defa0ce041",
+            "fitbox_gym_id": "545",
+            "fitbox_user_id": "90210",
+            "fitbox_status": "active",
+            "profile_first_name": "Test",
+            "profile_last_name": "Member",
+            "profile_email": "test@example.com",
+            "profile_phone": "0400000000",
+            "profile_synced_at": "2026-09-02T06:30:00Z",
+            "linked_at": "2026-09-01T06:30:00Z",
+            "last_verified_at": "2026-09-02T06:30:00Z"
+          },
+          "current_job": {
+            "id": "019f8650-5ee0-7ca2-892f-c83961192ef4",
+            "job_type": "get_user",
+            "status": "completed",
+            "fitbox_user_id": "90210",
+            "fitbox_status": "active",
+            "last_error_code": null,
+            "dispatched_at": "2026-09-02T06:29:59Z",
+            "completed_at": "2026-09-02T06:30:00Z",
+            "created_at": "2026-09-02T06:29:58Z"
+          },
+          "recent_jobs": [],
+          "ready": true,
+          "configuration_issue": null,
+          "profile_refresh_ready": true,
+          "profile_refresh_issue": null
+        }
+        """.utf8))
+
+        XCTAssertEqual(state.link?.profile_email, "test@example.com")
+        XCTAssertNotNil(state.link?.profile_synced_at)
+        XCTAssertTrue(state.current_job?.isProfileRefresh == true)
+        XCTAssertEqual(state.profile_refresh_ready, true)
+    }
+
     private func order(
         id: UUID,
         status: String,

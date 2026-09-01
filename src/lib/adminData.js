@@ -129,6 +129,22 @@ export async function sendLeadToFitbox(leadId) {
   return body;
 }
 
+export async function refreshFitboxUser(leadId) {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-fitbox-integration', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'refresh_user', lead_id: String(leadId || '') }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox profile refresh could not be started.'));
+  return body;
+}
+
 export async function updateLegacyBookingNotes(id, adminNotes) {
   const mutation = normalizeLegacyBookingNotes(id, adminNotes);
   const { error } = await supabase.rpc('admin_update_request', {
@@ -1765,6 +1781,7 @@ export async function getOperationsHealth() {
       const stale = Number(result.stale || 0);
       const events = Number(result.events_24h || 0);
       const reconciliation = Number(result.reconciliation || 0);
+      const profileRefreshes = Number(result.profile_refreshes_24h?.completed || 0);
       if (!result.environment?.ready) {
         return {
           status: 'attention',
@@ -1776,14 +1793,14 @@ export async function getOperationsHealth() {
         return {
           status: 'attention',
           count: failed + stale,
-          detail: `${completed} completed, ${failed} failed and ${stale} stale handoff${failed + stale === 1 ? '' : 's'}; ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
+          detail: `${completed} completed, ${failed} failed and ${stale} stale handoff${failed + stale === 1 ? '' : 's'}; ${profileRefreshes} read-only profile refresh${profileRefreshes === 1 ? '' : 'es'}, ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
           action: 'Open Member Leads, review the affected lead and retry only after correcting its details or provider issue.',
         };
       }
       return {
         count: reconciliation || completed,
         status: reconciliation > 0 ? 'attention' : 'ok',
-        detail: `Zapier bridge is ready; ${completed} prospect handoff${completed === 1 ? '' : 's'} completed, ${active} in progress, ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
+        detail: `Zapier bridge is ready; ${completed} total job${completed === 1 ? '' : 's'} completed, including ${profileRefreshes} read-only profile refresh${profileRefreshes === 1 ? '' : 'es'}; ${active} in progress, ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
         action: reconciliation > 0 ? 'Review the FitBox reconciliation queue before treating provider changes as authoritative.' : null,
       };
     }),

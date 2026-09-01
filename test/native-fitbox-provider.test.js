@@ -41,6 +41,12 @@ test('native iOS booking, account and Command Centre expose the provider handoff
   assert.match(adminView, /Use FitBox for memberships & bookings/);
   assert.match(adminView, /Native booking and checkout will not be used as a fallback/);
   assert.match(adminView, /value\.payments_enabled = false/);
+  assert.match(adminView, /Section\("FitBox event evidence"\)/);
+  assert.match(adminView, /Read-only evidence from Zapier/);
+  assert.match(adminView, /never change XERT bookings, memberships, subscriptions, attendance or charges/);
+  assert.match(adminView, /This screen cannot approve or mutate provider data/);
+  assert.match(adminView, /verified FitBox ID as a reference only/);
+  assert.match(adminView, /billing changes remain in FitBox and are not available from this screen/);
 });
 
 test('web account cancellation consumes the same provider contract', async () => {
@@ -50,4 +56,21 @@ test('web account cancellation consumes the same provider contract', async () =>
   assert.match(account, /provider\.capabilities\.canCancelInternally/);
   assert.match(account, /providerAllowsNativeCancellation/);
   assert.match(account, /Manage in FitBox/);
+});
+
+test('native iOS Command Centre refreshes a FitBox profile without provider mutation', async () => {
+  const [adminModels, adminStore, api, adminView] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+  ]);
+
+  assert.match(adminModels, /let profile_synced_at: Date\?/);
+  assert.match(adminModels, /var isProfileRefresh: Bool \{ job_type == "get_user" \}/);
+  assert.match(api, /action: "refresh_user"/);
+  assert.match(adminStore, /func refreshFitboxUser/);
+  assert.match(adminView, /Refresh read-only profile/);
+  assert.match(adminView, /XERT profile, memberships, bookings and billing are never changed/);
+  assert.match(adminView, /Read-only profile refreshes/);
 });

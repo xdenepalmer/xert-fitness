@@ -2,8 +2,11 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { createRequestTrace, requestHeader, requestJson } from '../src/lib/serverHttp.js';
 import {
+  FITBOX_EVENT_TYPES,
   fitboxIntegrationEnvironment,
   fitboxEventEnvironment,
+  fitboxGetUserDispatchPayload,
+  fitboxGetUserEnvironment,
   fitboxProspectDispatchPayload,
   normalizeFitboxCallback,
   normalizeFitboxEvent,
@@ -28,8 +31,13 @@ function safeHashMatch(receivedHash, expectedHash) {
   return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
-function callbackErrorCode(message) {
+function callbackErrorCode(message, jobType = 'register_prospect') {
   const normalized = String(message || '').toUpperCase();
+  if (jobType === 'get_user') {
+    if (/NOT FOUND|NOTHING COULD BE FOUND|NO USER/.test(normalized)) return 'FITBOX_USER_NOT_FOUND';
+    if (/INVALID|REQUIRED|MISSING/.test(normalized)) return 'FITBOX_PROFILE_REFRESH_INVALID';
+    return 'FITBOX_PROFILE_REFRESH_REJECTED';
+  }
   if (/DUPLICATE/.test(normalized)) return 'FITBOX_DUPLICATE_REVIEW';
   if (/INVALID|REQUIRED|MISSING/.test(normalized)) return 'FITBOX_PROSPECT_INVALID';
   return 'FITBOX_PROVIDER_REJECTED';
@@ -58,7 +66,7 @@ async function handleFitboxCallback(request, admin, trace) {
 
   try {
     const { data: job, error: jobError } = await admin.from('fitbox_integration_jobs')
-      .select('id, callback_token_hash, fitbox_gym_id, status, expires_at')
+      .select('id, job_type, callback_token_hash, fitbox_gym_id, fitbox_user_id, status, expires_at')
       .eq('id', callback.jobId).maybeSingle();
     if (jobError) throw jobError;
     const receivedHash = callbackTokenHash(callback.callbackToken);
@@ -77,11 +85,45 @@ async function handleFitboxCallback(request, admin, trace) {
       const { data, error } = await admin.rpc('fail_fitbox_prospect_job', {
         p_job_id: callback.jobId,
         p_callback_token_hash: receivedHash,
-        p_error_code: callbackErrorCode(callback.message),
+        p_error_code: callbackErrorCode(callback.message, job.job_type),
       });
       if (error) throw error;
-      console.warn('FitBox rejected a prospect handoff.', { requestId: trace.requestId, jobId: callback.jobId, errorCode: data?.last_error_code });
+      console.warn('FitBox Zapier job returned a provider failure.', { requestId: trace.requestId, jobId: callback.jobId, jobType: job.job_type, errorCode: data?.last_error_code });
       return json({ received: true, status: 'failed' });
+    }
+    if (job.job_type === 'get_user') {
+      if (!callback.status || !callback.profile?.email) {
+        await admin.rpc('fail_fitbox_prospect_job', {
+          p_job_id: callback.jobId,
+          p_callback_token_hash: receivedHash,
+          p_error_code: 'FITBOX_PROFILE_REFRESH_INVALID',
+        });
+        return json({ error: 'FitBox returned an incomplete profile result.' }, 422);
+      }
+      const { data, error } = await admin.rpc('complete_fitbox_get_user_job', {
+        p_job_id: callback.jobId,
+        p_callback_token_hash: receivedHash,
+        p_fitbox_gym_id: callback.gymId,
+        p_fitbox_user_id: callback.userId,
+        p_fitbox_status: callback.status,
+        p_profile_first_name: callback.profile?.firstName || null,
+        p_profile_last_name: callback.profile?.lastName || null,
+        p_profile_email: callback.profile?.email || null,
+        p_profile_phone: callback.profile?.phone || null,
+      });
+      if (error) {
+        if (/FITBOX_LOOKUP_IDENTITY_MISMATCH/.test(error.message || '')) {
+          await admin.rpc('fail_fitbox_prospect_job', {
+            p_job_id: callback.jobId,
+            p_callback_token_hash: receivedHash,
+            p_error_code: 'FITBOX_LOOKUP_IDENTITY_MISMATCH',
+          });
+          return json({ error: 'FitBox profile identity requires operator review.' }, 409);
+        }
+        throw error;
+      }
+      console.info('FitBox read-only profile refresh completed.', { requestId: trace.requestId, jobId: callback.jobId });
+      return json({ received: true, status: data?.status || 'completed' });
     }
     const { data, error } = await admin.rpc('complete_fitbox_prospect_job', {
       p_job_id: callback.jobId,
@@ -105,7 +147,7 @@ async function handleFitboxCallback(request, admin, trace) {
     return json({ received: true, status: data?.status || 'completed' });
   } catch (error) {
     if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox callback storage is unavailable.' }, 503);
-    if (/FITBOX_CALLBACK_(?:REJECTED|CONFLICT)|FITBOX_JOB_NOT_ACTIVE|FITBOX_GYM_MISMATCH/.test(error.message || '')) {
+    if (/FITBOX_CALLBACK_(?:REJECTED|CONFLICT)|FITBOX_JOB_NOT_ACTIVE|FITBOX_JOB_TYPE_MISMATCH|FITBOX_GYM_MISMATCH/.test(error.message || '')) {
       return json({ error: 'Callback was not accepted.' }, 409);
     }
     return json({ error: 'Callback could not be processed.' }, 500);
@@ -182,12 +224,22 @@ function requestLeadID(request) {
 }
 
 async function leadIntegrationState(admin, leadId) {
+  const { error: expiryError } = await admin.from('fitbox_integration_jobs').update({
+    status: 'expired',
+    last_error_code: 'FITBOX_PROFILE_REFRESH_EXPIRED',
+    updated_at: new Date().toISOString(),
+  }).eq('job_type', 'get_user')
+    .eq('lead_type', 'member_interest')
+    .eq('lead_id', leadId)
+    .in('status', ['queued', 'dispatched', 'dispatch_unknown'])
+    .lt('expires_at', new Date().toISOString());
+  if (expiryError) throw expiryError;
   const [linkResult, jobsResult] = await Promise.all([
     admin.from('fitbox_member_links')
-      .select('id, fitbox_gym_id, fitbox_user_id, fitbox_status, linked_at, last_verified_at')
+      .select('id, fitbox_gym_id, fitbox_user_id, fitbox_status, profile_first_name, profile_last_name, profile_email, profile_phone, profile_synced_at, linked_at, last_verified_at')
       .eq('lead_type', 'member_interest').eq('lead_id', leadId).maybeSingle(),
     admin.from('fitbox_integration_jobs')
-      .select('id, status, fitbox_user_id, fitbox_status, last_error_code, dispatched_at, completed_at, created_at')
+      .select('id, job_type, status, fitbox_user_id, fitbox_status, last_error_code, dispatched_at, completed_at, created_at')
       .eq('lead_type', 'member_interest').eq('lead_id', leadId)
       .order('created_at', { ascending: false }).limit(5),
   ]);
@@ -203,32 +255,67 @@ async function leadIntegrationState(admin, leadId) {
 async function integrationHealth(admin) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString();
   const staleBefore = new Date(Date.now() - 15 * 60 * 1_000).toISOString();
-  const [completed, failed, active, stale, latest, events, reviews, lastEvent] = await Promise.all([
+  const [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, active, stale, latest, eventTypes] = await Promise.all([
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'completed').gte('updated_at', since),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('updated_at', since),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'completed').gte('updated_at', since),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'failed').gte('updated_at', since),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'failed')
+      .in('last_error_code', ['FITBOX_USER_NOT_FOUND', 'FITBOX_LOOKUP_IDENTITY_MISMATCH']),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'dispatched', 'dispatch_unknown']),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'dispatched', 'dispatch_unknown']).lt('updated_at', staleBefore),
     admin.from('fitbox_integration_jobs').select('status, fitbox_user_id, last_error_code, updated_at').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
-    admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true }).gte('received_at', since),
-    admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true }).eq('processing_state', 'needs_review'),
-    admin.from('fitbox_integration_events').select('event_type, processing_state, review_reason, received_at').order('received_at', { ascending: false }).limit(1).maybeSingle(),
+    Promise.all(FITBOX_EVENT_TYPES.map(async eventType => {
+      const [recent, reviews, latestEvent] = await Promise.all([
+        admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true })
+          .eq('event_type', eventType).gte('received_at', since),
+        admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true })
+          .eq('event_type', eventType).eq('processing_state', 'needs_review'),
+        admin.from('fitbox_integration_events')
+          .select('processing_state, review_reason, received_at')
+          .eq('event_type', eventType).order('received_at', { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      for (const result of [recent, reviews, latestEvent]) if (result.error) throw result.error;
+      return {
+        event_type: eventType,
+        events_24h: Number(recent.count || 0),
+        needs_review: Number(reviews.count || 0),
+        last_received_at: latestEvent.data?.received_at || null,
+        latest_processing_state: latestEvent.data?.processing_state || null,
+        latest_review_reason: latestEvent.data?.review_reason || null,
+      };
+    })),
   ]);
-  for (const result of [completed, failed, active, stale, latest, events, reviews, lastEvent]) if (result.error) throw result.error;
+  for (const result of [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, active, stale, latest]) if (result.error) throw result.error;
+  const events = eventTypes.reduce((sum, event) => sum + event.events_24h, 0);
+  const reviews = eventTypes.reduce((sum, event) => sum + event.needs_review, 0);
+  const lastEvent = eventTypes
+    .filter(event => event.last_received_at)
+    .sort((left, right) => Date.parse(right.last_received_at) - Date.parse(left.last_received_at))[0] || null;
   const environment = fitboxIntegrationEnvironment(process.env);
+  const getUserEnvironment = fitboxGetUserEnvironment(process.env);
   const eventEnvironment = fitboxEventEnvironment(process.env);
+  const reconciliation = reviews + Number(profileRefreshReviews.count || 0);
   return {
-    ready: environment.ready && eventEnvironment.ready && Number(failed.count || 0) === 0 && Number(stale.count || 0) === 0,
+    ready: environment.ready && getUserEnvironment.ready && eventEnvironment.ready && Number(failed.count || 0) === 0 && Number(stale.count || 0) === 0,
     environment: {
-      ready: environment.ready && eventEnvironment.ready,
-      missing: [...environment.missing, ...eventEnvironment.missing],
+      ready: environment.ready && getUserEnvironment.ready && eventEnvironment.ready,
+      missing: [...new Set([...environment.missing, ...getUserEnvironment.missing, ...eventEnvironment.missing])],
     },
     jobs_24h: { completed: Number(completed.count || 0), failed: Number(failed.count || 0) },
+    profile_refreshes_24h: { completed: Number(profileRefreshes.count || 0), failed: Number(profileRefreshFailures.count || 0) },
     active: Number(active.count || 0),
     stale: Number(stale.count || 0),
     last_job: latest.data || null,
-    events_24h: Number(events.count || 0),
-    reconciliation: Number(reviews.count || 0),
-    last_event: lastEvent.data || null,
+    events_24h: events,
+    reconciliation,
+    event_types: eventTypes,
+    last_event: lastEvent ? {
+      event_type: lastEvent.event_type,
+      processing_state: lastEvent.latest_processing_state,
+      review_reason: lastEvent.latest_review_reason,
+      received_at: lastEvent.last_received_at,
+    } : null,
   };
 }
 
@@ -247,6 +334,63 @@ async function dispatchProspect(config, payload, fetchImpl = fetch) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function startGetUserRefresh({ admin, access, leadId }) {
+  const config = fitboxGetUserEnvironment(process.env);
+  if (!config.ready) throw new Error('FITBOX_GET_USER_NOT_CONFIGURED');
+  const existing = await leadIntegrationState(admin, leadId);
+  if (!existing.link) throw new Error('FITBOX_LINK_REQUIRED');
+  if (['queued', 'dispatched', 'dispatch_unknown'].includes(existing.current_job?.status)) {
+    throw new Error('FITBOX_JOB_IN_PROGRESS');
+  }
+
+  const callbackToken = randomBytes(32).toString('base64url');
+  const { data: job, error: jobError } = await admin.from('fitbox_integration_jobs').insert({
+    job_type: 'get_user',
+    lead_type: 'member_interest',
+    lead_id: leadId,
+    status: 'queued',
+    callback_token_hash: callbackTokenHash(callbackToken),
+    fitbox_gym_id: existing.link.fitbox_gym_id,
+    fitbox_user_id: existing.link.fitbox_user_id,
+    created_by: access.user.id,
+  }).select('id, job_type, status, fitbox_user_id, fitbox_status, last_error_code, dispatched_at, completed_at, created_at').single();
+  if (jobError) {
+    if (jobError.code === '23505') throw new Error('FITBOX_JOB_IN_PROGRESS');
+    throw jobError;
+  }
+
+  const payload = fitboxGetUserDispatchPayload({
+    jobId: job.id,
+    callbackToken,
+    fitboxUserId: existing.link.fitbox_user_id,
+    environment: process.env,
+  });
+  try {
+    await dispatchProspect(config, payload);
+  } catch {
+    // Get User is read-only, so a dispatch failure is safe to retry and cannot
+    // create a second member or mutate provider state.
+    await admin.from('fitbox_integration_jobs').update({
+      status: 'failed',
+      last_error_code: 'ZAPIER_PROFILE_REFRESH_FAILED',
+      attempt_count: 1,
+      updated_at: new Date().toISOString(),
+    }).eq('id', job.id).eq('status', 'queued');
+    throw new Error('FITBOX_PROFILE_REFRESH_DISPATCH_FAILED');
+  }
+
+  const { data: dispatched, error: dispatchError } = await admin.from('fitbox_integration_jobs').update({
+    status: 'dispatched',
+    dispatched_at: new Date().toISOString(),
+    attempt_count: 1,
+    updated_at: new Date().toISOString(),
+  }).eq('id', job.id).eq('status', 'queued')
+    .select('id, job_type, status, fitbox_user_id, fitbox_status, last_error_code, dispatched_at, completed_at, created_at').maybeSingle();
+  if (dispatchError) throw dispatchError;
+  if (dispatched) return { job: publicFitboxJob(dispatched), link: existing.link };
+  return leadIntegrationState(admin, leadId);
 }
 
 export default async function handler(request, response) {
@@ -269,7 +413,14 @@ export default async function handler(request, response) {
       const leadId = requestLeadID(request);
       const state = await leadIntegrationState(admin, leadId);
       const environment = fitboxIntegrationEnvironment(process.env);
-      return json({ ...state, ready: environment.ready, configuration_issue: environment.ready ? null : 'FitBox Zapier handoff is not configured.' });
+      const getUserEnvironment = fitboxGetUserEnvironment(process.env);
+      return json({
+        ...state,
+        ready: environment.ready,
+        configuration_issue: environment.ready ? null : 'FitBox Zapier handoff is not configured.',
+        profile_refresh_ready: getUserEnvironment.ready,
+        profile_refresh_issue: getUserEnvironment.ready ? null : 'FitBox read-only profile refresh is not configured.',
+      });
     } catch (error) {
       if (error.message === 'INVALID_FITBOX_LEAD_ID') return json({ error: 'Lead selection is invalid.' }, 400);
       if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox integration storage is not installed.' }, 503);
@@ -284,10 +435,7 @@ export default async function handler(request, response) {
   } catch {
     return json({ error: 'FitBox request is invalid.' }, 400);
   }
-  if (body?.action !== 'register_prospect') return json({ error: 'FitBox request is invalid.' }, 400);
-
-  const config = fitboxIntegrationEnvironment(process.env);
-  if (!config.ready) return json({ error: 'FitBox Zapier handoff is not configured.' }, 503);
+  if (!['register_prospect', 'refresh_user'].includes(body?.action)) return json({ error: 'FitBox request is invalid.' }, 400);
 
   let leadId;
   try {
@@ -295,6 +443,22 @@ export default async function handler(request, response) {
   } catch {
     return json({ error: 'Lead selection is invalid.' }, 400);
   }
+
+  if (body.action === 'refresh_user') {
+    try {
+      return json(await startGetUserRefresh({ admin, access, leadId }), 202);
+    } catch (error) {
+      if (error.message === 'FITBOX_GET_USER_NOT_CONFIGURED') return json({ error: 'FitBox read-only profile refresh is not configured.' }, 503);
+      if (error.message === 'FITBOX_LINK_REQUIRED') return json({ error: 'Link this lead to a verified FitBox user before refreshing its profile.' }, 409);
+      if (error.message === 'FITBOX_JOB_IN_PROGRESS') return json({ error: 'This lead already has a FitBox job in progress.' }, 409);
+      if (error.message === 'FITBOX_PROFILE_REFRESH_DISPATCH_FAILED') return json({ error: 'Zapier could not start the read-only FitBox profile refresh. It is safe to retry.' }, 502);
+      if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox profile refresh storage is not installed.' }, 503);
+      return json({ error: 'The FitBox profile refresh could not be started.' }, 500);
+    }
+  }
+
+  const config = fitboxIntegrationEnvironment(process.env);
+  if (!config.ready) return json({ error: 'FitBox Zapier handoff is not configured.' }, 503);
 
   try {
     const existing = await leadIntegrationState(admin, leadId);

@@ -11505,6 +11505,12 @@ private struct AdminLeadDetailView: View {
         let job = state?.current_job
         let isLoading = admin.loadingFitboxLeadIDs.contains(lead.id)
         let isSending = admin.sendingFitboxLeadIDs.contains(lead.id)
+        let isRefreshingProfile = admin.refreshingFitboxProfileIDs.contains(lead.id)
+        let profileInProgress = job?.isProfileRefresh == true
+            && ["queued", "dispatched", "dispatch_unknown"].contains(job?.status ?? "")
+        let profileNeedsReview = job?.isProfileRefresh == true
+            && job?.status == "failed"
+            && ["FITBOX_USER_NOT_FOUND", "FITBOX_LOOKUP_IDENTITY_MISMATCH"].contains(job?.last_error_code ?? "")
         Section("FitBox") {
             if isLoading && state == nil {
                 HStack { ProgressView(); Text("Checking FitBox link…") }
@@ -11513,6 +11519,44 @@ private struct AdminLeadDetailView: View {
                     .foregroundStyle(Color.green)
                 detailRow("Provider status", link.fitbox_status ?? "prospect")
                 detailRow("Last verified", link.last_verified_at.formatted(date: .abbreviated, time: .shortened))
+                if let syncedAt = link.profile_synced_at {
+                    detailRow("FitBox name", fitboxProfileName(link))
+                    detailRow("FitBox email", nonBlankFitboxValue(link.profile_email) ?? "Not supplied")
+                    detailRow("FitBox phone", nonBlankFitboxValue(link.profile_phone) ?? "Not supplied")
+                    detailRow("Read-only snapshot", syncedAt.formatted(date: .abbreviated, time: .shortened))
+                } else {
+                    Text("No FitBox profile snapshot yet.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.7))
+                }
+                if job?.isProfileRefresh == true, ["failed", "expired"].contains(job?.status ?? "") {
+                    Label(
+                        fitboxProfileError(job?.last_error_code),
+                        systemImage: profileNeedsReview ? "exclamationmark.triangle.fill" : "arrow.clockwise.circle"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(profileNeedsReview ? Color.orange : Color.red)
+                }
+                Button {
+                    Task { _ = await admin.refreshFitboxUser(session: session, lead: lead) }
+                } label: {
+                    HStack {
+                        if isRefreshingProfile || profileInProgress { ProgressView() }
+                        Label(profileInProgress ? "Refreshing FitBox profile…" : "Refresh read-only profile", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.xertSteel)
+                .disabled(isLoading || isSending || isRefreshingProfile || profileInProgress || state?.profile_refresh_ready == false || profileNeedsReview)
+                if state?.profile_refresh_ready == false {
+                    Text(state?.profile_refresh_issue ?? "FitBox read-only profile refresh is not configured.")
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                }
+                Text("Reads name, email, phone and provider status only. XERT profile, memberships, bookings and billing are never changed.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.xertPale.opacity(0.58))
             } else if job?.needsProviderReview == true {
                 Label("Review in FitBox before retrying", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.orange)
@@ -11536,6 +11580,10 @@ private struct AdminLeadDetailView: View {
                 .foregroundStyle(Color.xertNavy)
                 .disabled(isSending || !mutationAllowed)
             }
+            Text("XERT keeps the verified FitBox ID as a reference only. Membership, booking, subscription and billing changes remain in FitBox and are not available from this screen.")
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.58))
+                .fixedSize(horizontal: false, vertical: true)
             if let error = admin.fitboxLeadErrors[lead.id] {
                 Text(error).font(.caption).foregroundStyle(Color.red)
             }
@@ -11544,9 +11592,32 @@ private struct AdminLeadDetailView: View {
             } label: {
                 Label(isLoading ? "Refreshing…" : "Refresh FitBox status", systemImage: "arrow.clockwise")
             }
-            .disabled(isLoading || isSending)
+            .disabled(isLoading || isSending || isRefreshingProfile)
         }
         .task { await admin.loadFitboxLeadState(session: session, leadID: lead.id) }
+    }
+
+    private func fitboxProfileName(_ link: AdminFitboxMemberLink) -> String {
+        let name = [nonBlankFitboxValue(link.profile_first_name), nonBlankFitboxValue(link.profile_last_name)]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        return name.isEmpty ? "Not supplied" : name
+    }
+
+    private func nonBlankFitboxValue(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private func fitboxProfileError(_ code: String?) -> String {
+        switch code {
+        case "FITBOX_USER_NOT_FOUND": return "FitBox could not find the linked user. Review the link before retrying."
+        case "FITBOX_LOOKUP_IDENTITY_MISMATCH": return "FitBox returned a different user identity. The XERT link was not changed."
+        case "FITBOX_PROFILE_REFRESH_INVALID": return "FitBox returned an incomplete profile result."
+        case "FITBOX_PROFILE_REFRESH_REJECTED": return "FitBox rejected the read-only profile refresh."
+        case "FITBOX_PROFILE_REFRESH_EXPIRED": return "The read-only profile refresh expired without a callback. It is safe to retry."
+        default: return "The read-only FitBox profile refresh did not complete. It is safe to retry."
+        }
     }
 
     private var leadSaveBar: some View {
@@ -13915,6 +13986,23 @@ private struct AdminOperationsHealthView: View {
         return "XERT-native booking, credits and Stripe session packs are selected."
     }
 
+    private var fitboxReviewReady: Bool? {
+        guard admin.fitboxBridgeHealthError == nil,
+              let bridge = admin.fitboxBridgeHealth else { return nil }
+        return !bridge.hasReviewRequired
+    }
+
+    private var fitboxReviewDetail: String {
+        guard admin.fitboxBridgeHealthError == nil,
+              let bridge = admin.fitboxBridgeHealth else {
+            return "The live FitBox review queue could not be verified. No provider event is treated as an XERT update."
+        }
+        if bridge.reconciliation == 0 {
+            return "No inbound FitBox evidence is waiting for owner review."
+        }
+        return "\(bridge.reconciliation) inbound FitBox event\(bridge.reconciliation == 1 ? " is" : "s are") waiting for review. XERT has not changed any booking, membership, subscription or charge from these events."
+    }
+
     private var databaseDetail: String {
         guard let databaseReady else {
             return admin.loadedSources.contains("schema health")
@@ -13985,7 +14073,9 @@ private struct AdminOperationsHealthView: View {
                         Button {
                             XertHaptics.play(.softImpact)
                             Task {
-                                await admin.refreshHealth(session: session)
+                                async let coreHealth: Void = admin.refreshHealth(session: session)
+                                async let fitboxHealth: Void = admin.refreshFitboxBridgeHealth(session: session)
+                                _ = await (coreHealth, fitboxHealth)
                                 XertHaptics.play(unavailableHealthSources.isEmpty ? .success : .warning)
                             }
                         } label: {
@@ -14026,7 +14116,9 @@ private struct AdminOperationsHealthView: View {
                     Button {
                         XertHaptics.play(.softImpact)
                         Task {
-                            await admin.refreshHealth(session: session)
+                            async let coreHealth: Void = admin.refreshHealth(session: session)
+                            async let fitboxHealth: Void = admin.refreshFitboxBridgeHealth(session: session)
+                            _ = await (coreHealth, fitboxHealth)
                             XertHaptics.play(memberLaunchGate.phase == .verifying ? .warning : .success)
                         }
                     } label: {
@@ -14075,6 +14167,11 @@ private struct AdminOperationsHealthView: View {
                     detail: fitboxBridgeDetail
                 )
                 HealthStatusRow(
+                    title: "FitBox review queue",
+                    ready: fitboxReviewReady,
+                    detail: fitboxReviewDetail
+                )
+                HealthStatusRow(
                     title: "Database contract",
                     ready: databaseReady,
                     detail: databaseDetail
@@ -14097,7 +14194,8 @@ private struct AdminOperationsHealthView: View {
             }
             if let bridge = admin.fitboxBridgeHealth {
                 Section("FitBox activity (24 hours)") {
-                    HealthCountRow(label: "Prospects completed", value: bridge.jobs_24h.completed)
+                    HealthCountRow(label: "FitBox jobs completed", value: bridge.jobs_24h.completed)
+                    HealthCountRow(label: "Read-only profile refreshes", value: bridge.profile_refreshes_24h?.completed ?? 0)
                     HealthCountRow(label: "Handoffs in progress", value: bridge.active)
                     HealthCountRow(label: "Provider events received", value: bridge.events_24h)
                     HealthCountRow(label: "Awaiting reconciliation", value: bridge.reconciliation)
@@ -14108,6 +14206,40 @@ private struct AdminOperationsHealthView: View {
                         )
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.orange)
+                    }
+                }
+                Section("FitBox event evidence") {
+                    Label(
+                        "Read-only evidence from Zapier. These events never change XERT bookings, memberships, subscriptions, attendance or charges.",
+                        systemImage: "eye.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.xertSteel)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("owner.fitbox.readOnlyEvidence")
+
+                    if bridge.eventSummaries.isEmpty {
+                        Label(
+                            "Per-workflow evidence is unavailable in this server snapshot. Refresh after the latest deployment completes.",
+                            systemImage: "clock.badge.exclamationmark"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(bridge.eventSummaries) { summary in
+                            FitboxEventEvidenceRow(summary: summary)
+                        }
+                    }
+
+                    if bridge.hasReviewRequired {
+                        Label(
+                            "Review these records against FitBox before relying on any provider status. This screen cannot approve or mutate provider data.",
+                            systemImage: "exclamationmark.shield.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -14252,7 +14384,8 @@ private struct AdminOperationsHealthView: View {
         if !bridge.environment.ready {
             return "Missing server configuration: \(bridge.environment.missing.joined(separator: ", "))."
         }
-        return "\(bridge.jobs_24h.completed) prospect handoff\(bridge.jobs_24h.completed == 1 ? "" : "s") completed; \(bridge.events_24h) provider event\(bridge.events_24h == 1 ? "" : "s") received; \(bridge.reconciliation) awaiting review."
+        let profileRefreshes = bridge.profile_refreshes_24h?.completed ?? 0
+        return "\(bridge.jobs_24h.completed) total job\(bridge.jobs_24h.completed == 1 ? "" : "s") completed, including \(profileRefreshes) read-only profile refresh\(profileRefreshes == 1 ? "" : "es"); \(bridge.events_24h) provider event\(bridge.events_24h == 1 ? "" : "s") received; \(bridge.reconciliation) awaiting review."
     }
 
     private func visiblePushReason(_ reason: String?) -> String? {
@@ -14265,6 +14398,58 @@ private struct AdminOperationsHealthView: View {
                 .lowercased()
         }
         return reason
+    }
+}
+
+private struct FitboxEventEvidenceRow: View {
+    let summary: AdminFitboxBridgeHealth.EventSummary
+
+    private var latestEvidence: String {
+        guard let receivedAt = summary.last_received_at else {
+            return "No evidence received yet"
+        }
+        return "Latest evidence \(receivedAt.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(summary.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.xertOffWhite)
+                Spacer(minLength: 8)
+                Text("\(summary.events_24h) / 24h")
+                    .font(.caption2.weight(.bold).monospacedDigit())
+                    .foregroundStyle(Color.xertSteel)
+            }
+            Text(latestEvidence)
+                .font(.caption)
+                .foregroundStyle(Color.xertPale.opacity(0.58))
+            if summary.needs_review > 0 {
+                Label(
+                    "\(summary.needs_review) require\(summary.needs_review == 1 ? "s" : "") review",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                if let reason = summary.reviewReasonLabel {
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(Color.xertPale.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if summary.latest_processing_state != nil {
+                Label("No review waiting", systemImage: "checkmark.circle")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.green)
+            }
+        }
+        .padding(.vertical, 3)
+        .listRowBackground(Color.xertInk)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(summary.title). \(summary.events_24h) received in 24 hours. \(latestEvidence). \(summary.needs_review) require review."
+        )
     }
 }
 

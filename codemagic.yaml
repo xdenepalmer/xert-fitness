@@ -344,6 +344,7 @@ workflows:
               "forms_surveys_builder",
               "form_response_snapshots",
               "fitbox_zapier_bridge",
+              "fitbox_get_user_refresh",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

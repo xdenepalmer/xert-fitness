@@ -56,7 +56,8 @@ with required (capability, migration) as (
     ('owner_stripe_price_provisioning', 'supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql'),
     ('forms_surveys_builder', 'supabase/migrations/20260811010000_xert_forms_surveys.sql'),
     ('form_response_snapshots', 'supabase/migrations/20260813020000_require_versioned_form_submissions.sql'),
-    ('fitbox_zapier_bridge', 'supabase/migrations/20260902010000_fitbox_zapier_bridge.sql')
+    ('fitbox_zapier_bridge', 'supabase/migrations/20260902010000_fitbox_zapier_bridge.sql'),
+    ('fitbox_get_user_refresh', 'supabase/migrations/20260902020000_fitbox_get_user_refresh.sql')
 ), readiness as (
   select
     required.capability,

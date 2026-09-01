@@ -1925,6 +1925,7 @@ struct AdminLead: Identifiable, Codable, Hashable {
 
 struct AdminFitboxJob: Identifiable, Codable, Hashable {
     let id: UUID
+    let job_type: String?
     let status: String
     let fitbox_user_id: String?
     let fitbox_status: String?
@@ -1937,6 +1938,8 @@ struct AdminFitboxJob: Identifiable, Codable, Hashable {
         status == "dispatch_unknown"
             || (status == "failed" && last_error_code != "ZAPIER_DISPATCH_FAILED")
     }
+
+    var isProfileRefresh: Bool { job_type == "get_user" }
 }
 
 struct AdminFitboxMemberLink: Codable, Hashable {
@@ -1944,6 +1947,11 @@ struct AdminFitboxMemberLink: Codable, Hashable {
     let fitbox_gym_id: String
     let fitbox_user_id: String
     let fitbox_status: String?
+    let profile_first_name: String?
+    let profile_last_name: String?
+    let profile_email: String?
+    let profile_phone: String?
+    let profile_synced_at: Date?
     let linked_at: Date
     let last_verified_at: Date
 }
@@ -1954,6 +1962,8 @@ struct AdminFitboxLeadState: Codable, Hashable {
     let recent_jobs: [AdminFitboxJob]
     let ready: Bool
     let configuration_issue: String?
+    let profile_refresh_ready: Bool?
+    let profile_refresh_issue: String?
 }
 
 struct AdminFitboxMutationResponse: Codable, Hashable {
@@ -1970,14 +1980,56 @@ struct AdminFitboxBridgeHealth: Codable, Hashable {
         let completed: Int
         let failed: Int
     }
+    struct EventSummary: Identifiable, Codable, Hashable {
+        var id: String { event_type }
+        let event_type: String
+        let events_24h: Int
+        let needs_review: Int
+        let last_received_at: Date?
+        let latest_processing_state: String?
+        let latest_review_reason: String?
+
+        var title: String {
+            switch event_type {
+            case "class_session_booked": return "Class booked"
+            case "class_session_cancelled": return "Class cancelled"
+            case "user_first_session_booked": return "First class booked"
+            case "user_profile_changed": return "Profile changed"
+            case "user_status_changed": return "Member status changed"
+            case "user_subscription_changed": return "Subscription changed"
+            default:
+                return event_type
+                    .replacingOccurrences(of: "_", with: " ")
+                    .capitalized
+            }
+        }
+
+        var reviewReasonLabel: String? {
+            switch latest_review_reason {
+            case "MISSING_STABLE_EVENT_IDENTITY":
+                return "Missing a stable provider event ID or timestamp"
+            case "PROVIDER_CONTRACT_UNVERIFIED":
+                return "Provider event ordering is not yet trusted"
+            case .some(let reason):
+                return reason.replacingOccurrences(of: "_", with: " ").lowercased()
+            case nil:
+                return nil
+            }
+        }
+    }
 
     let ready: Bool
     let environment: Environment
     let jobs_24h: Jobs
+    let profile_refreshes_24h: Jobs?
     let active: Int
     let stale: Int
     let events_24h: Int
     let reconciliation: Int
+    let event_types: [EventSummary]?
+
+    var eventSummaries: [EventSummary] { event_types ?? [] }
+    var hasReviewRequired: Bool { reconciliation > 0 }
 }
 
 struct AdminLeadReport {
@@ -3034,7 +3086,8 @@ enum AdminSchemaReadiness {
         "booking_decision_notifications",
         "staff_assisted_booking",
         "member_onboarding_foundation", "member_activation_cockpit",
-        "forms_surveys_builder", "form_response_snapshots"
+        "forms_surveys_builder", "form_response_snapshots",
+        "fitbox_zapier_bridge", "fitbox_get_user_refresh"
     ]
 
     static func missing(from rows: [AdminSchemaCapability]) -> [String] {

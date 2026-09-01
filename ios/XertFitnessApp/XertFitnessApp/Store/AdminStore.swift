@@ -161,6 +161,7 @@ final class AdminStore: ObservableObject {
     @Published private(set) var fitboxLeadStates: [AdminLeadIdentifier: AdminFitboxLeadState] = [:]
     @Published private(set) var loadingFitboxLeadIDs: Set<AdminLeadIdentifier> = []
     @Published private(set) var sendingFitboxLeadIDs: Set<AdminLeadIdentifier> = []
+    @Published private(set) var refreshingFitboxProfileIDs: Set<AdminLeadIdentifier> = []
     @Published private(set) var fitboxLeadErrors: [AdminLeadIdentifier: String] = [:]
     @Published private(set) var fitboxBridgeHealth: AdminFitboxBridgeHealth?
     @Published private(set) var fitboxBridgeHealthError: String?
@@ -1975,6 +1976,23 @@ final class AdminStore: ObservableObject {
         defer { sendingFitboxLeadIDs.remove(lead.id) }
         do {
             _ = try await api.adminSendLeadToFitbox(session: session, leadID: lead.id)
+            fitboxLeadStates[lead.id] = nil
+            await loadFitboxLeadState(session: session, leadID: lead.id, force: true)
+            XertHaptics.play(.success)
+            return true
+        } catch {
+            fitboxLeadErrors[lead.id] = error.localizedDescription
+            XertHaptics.play(.error)
+            return false
+        }
+    }
+
+    func refreshFitboxUser(session: AuthSession, lead: AdminLead) async -> Bool {
+        guard !refreshingFitboxProfileIDs.contains(lead.id) else { return false }
+        refreshingFitboxProfileIDs.insert(lead.id)
+        defer { refreshingFitboxProfileIDs.remove(lead.id) }
+        do {
+            _ = try await api.adminRefreshFitboxUser(session: session, leadID: lead.id)
             fitboxLeadStates[lead.id] = nil
             await loadFitboxLeadState(session: session, leadID: lead.id, force: true)
             XertHaptics.play(.success)

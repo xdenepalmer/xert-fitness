@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
+  FITBOX_EVENT_TYPES,
   fitboxIntegrationEnvironment,
   fitboxEventEnvironment,
+  fitboxGetUserDispatchPayload,
+  fitboxGetUserEnvironment,
   fitboxProspectDispatchPayload,
   normalizeFitboxCallback,
   normalizeFitboxEvent,
@@ -17,6 +20,7 @@ const JOB_ID = 'a9c7bc2e-3fa4-4dcf-8e19-f4defa0ce041';
 const TOKEN = 'a'.repeat(43);
 const ENV = {
   ZAPIER_FITBOX_REGISTER_HOOK_URL: 'https://hooks.zapier.com/hooks/catch/1/2/',
+  ZAPIER_FITBOX_GET_USER_HOOK_URL: 'https://hooks.zapier.com/hooks/catch/1/3/',
   APP_BASE_URL: 'https://xertfitness.com.au/',
   FITBOX_GYM_ID: '545',
 };
@@ -33,6 +37,27 @@ test('FitBox prospect data is deliberately bounded and requires a usable identit
   assert.throws(() => prospectForFitbox({ full_name: 'Byron Palmer', email: 'b@example.com' }), /FITBOX_PHONE_REQUIRED/);
   assert.equal(normalizeFitboxLeadID(' 12345 '), '12345');
   assert.throws(() => normalizeFitboxLeadID('../123'), /INVALID_FITBOX_LEAD_ID/);
+});
+
+test('Get User refresh is a separate fail-closed, read-only Zapier job', () => {
+  assert.deepEqual(fitboxGetUserEnvironment(ENV).missing, []);
+  assert.deepEqual(
+    fitboxGetUserEnvironment({ ...ENV, ZAPIER_FITBOX_GET_USER_HOOK_URL: 'https://example.com/not-zapier' }).missing,
+    ['ZAPIER_FITBOX_GET_USER_HOOK_URL']
+  );
+  assert.deepEqual(fitboxGetUserDispatchPayload({
+    jobId: JOB_ID,
+    callbackToken: TOKEN,
+    fitboxUserId: '90210',
+    environment: ENV,
+  }), {
+    event_type: 'xert_fitbox_get_user',
+    job_id: JOB_ID,
+    callback_url: 'https://xertfitness.com.au/api/fitbox-prospect-result',
+    callback_token: TOKEN,
+    fitbox_gym_id: '545',
+    fitbox_user_id: '90210',
+  });
 });
 
 test('FitBox integration fails closed until every server-only setting is valid', () => {
@@ -90,11 +115,31 @@ test('FitBox callback accepts modern RFC UUIDv7 job identifiers', () => {
   assert.equal(callback.jobId, '019f8650-5ee0-7ca2-892f-c83961192ef4');
 });
 
+test('Get User callback keeps only the verified read-only profile fields', () => {
+  const callback = normalizeFitboxCallback({
+    job_id: JOB_ID,
+    callback_token: TOKEN,
+    fitbox_gym_id: '545',
+    fitbox_user_id: '90210',
+    fitbox_status: ' Active ',
+    fitbox_first_name: ' Test ',
+    fitbox_last_name: ' Member ',
+    fitbox_email: ' TEST@EXAMPLE.COM ',
+    fitbox_phone: ' 0400 000 000 ',
+    fitbox_date_of_birth: '2020-01-01',
+  });
+  assert.deepEqual(callback.profile, {
+    firstName: 'Test', lastName: 'Member', email: 'test@example.com', phone: '0400 000 000',
+  });
+  assert.equal(callback.fitbox_date_of_birth, undefined);
+});
+
 test('all verified FitBox triggers normalize into a minimal read-only envelope', () => {
   const eventTypes = [
     'class_session_booked', 'class_session_cancelled', 'user_first_session_booked',
     'user_profile_changed', 'user_status_changed', 'user_subscription_changed',
   ];
+  assert.deepEqual(FITBOX_EVENT_TYPES, eventTypes);
   for (const event_type of eventTypes) {
     assert.deepEqual(normalizeFitboxEvent({
       event_type,
@@ -134,12 +179,18 @@ test('FitBox server endpoints remain server-only and use the durable callback co
   const contract = await readFile(new URL('../src/lib/fitboxIntegration.js', import.meta.url), 'utf8');
   assert.match(admin, /auth\.getUser\(token\)/);
   assert.match(contract, /ZAPIER_FITBOX_REGISTER_HOOK_URL/);
+  assert.match(contract, /ZAPIER_FITBOX_GET_USER_HOOK_URL/);
   assert.match(admin, /callback_token_hash/);
   assert.doesNotMatch(admin, /SUPABASE_SERVICE_ROLE_KEY[^\n]*VITE_/);
   assert.match(admin, /complete_fitbox_prospect_job/);
+  assert.match(admin, /complete_fitbox_get_user_job/);
+  assert.match(admin, /action === 'refresh_user'/);
   assert.match(admin, /fail_fitbox_prospect_job/);
   assert.match(admin, /normalizeFitboxCallback\(zapierDataEnvelope\(body\)\)/);
   assert.match(admin, /normalizeFitboxEvent\(zapierDataEnvelope\(body\)\)/);
+  assert.match(admin, /event_types: eventTypes/);
+  assert.match(admin, /needs_review: Number\(reviews\.count/);
+  assert.match(admin, /last_received_at: latestEvent\.data\?\.received_at/);
   assert.match(admin, /timingSafeEqual/);
   const vercel = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
   assert.match(vercel, /fitbox-prospect-result/);
@@ -150,6 +201,7 @@ test('FitBox server endpoints remain server-only and use the durable callback co
 
 test('FitBox migration is fail-closed, admin-readable and service-mutated only', async () => {
   const sql = await readFile(new URL('../supabase/migrations/20260902010000_fitbox_zapier_bridge.sql', import.meta.url), 'utf8');
+  const upgrade = await readFile(new URL('../supabase/migrations/20260902020000_fitbox_get_user_refresh.sql', import.meta.url), 'utf8');
   assert.match(sql, /create table if not exists public\.fitbox_integration_jobs/i);
   assert.match(sql, /create table if not exists public\.fitbox_member_links/i);
   assert.match(sql, /create table if not exists public\.fitbox_integration_events/i);
@@ -159,6 +211,11 @@ test('FitBox migration is fail-closed, admin-readable and service-mutated only',
   assert.match(sql, /using \(public\.is_admin\(\)\)/i);
   assert.match(sql, /revoke all on table public\.fitbox_integration_jobs from public, anon, authenticated/i);
   assert.match(sql, /grant execute on function public\.complete_fitbox_prospect_job[\s\S]*to service_role/i);
+  assert.match(sql, /complete_fitbox_get_user_job/i);
+  assert.match(sql, /profile_synced_at/i);
+  assert.match(upgrade, /check \(job_type in \('register_prospect', 'get_user'\)\)/i);
+  assert.match(upgrade, /XERT identity, membership, booking or billing state/i);
+  assert.match(upgrade, /grant execute on function public\.complete_fitbox_get_user_job[\s\S]*to service_role/i);
   assert.match(sql, /FITBOX_IDENTITY_CONFLICT/);
   assert.match(sql, /values \('fitbox_zapier_bridge'\)/i);
 });

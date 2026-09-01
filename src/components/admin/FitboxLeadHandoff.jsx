@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Send, TriangleAlert } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getFitboxLeadState, sendLeadToFitbox } from '@/lib/adminData';
+import { getFitboxLeadState, refreshFitboxUser, sendLeadToFitbox } from '@/lib/adminData';
 
 const ERROR_LABELS = {
   ZAPIER_DISPATCH_FAILED: 'Zapier did not accept the handoff.',
@@ -11,6 +11,12 @@ const ERROR_LABELS = {
   FITBOX_DUPLICATE_REVIEW: 'FitBox reported a possible duplicate. Review it in FitBox.',
   FITBOX_IDENTITY_CONFLICT: 'This FitBox identity conflicts with an existing XERT link.',
   FITBOX_CALLBACK_EXPIRED: 'Zapier did not return a result before the handoff expired.',
+  ZAPIER_PROFILE_REFRESH_FAILED: 'Zapier could not start the read-only profile refresh. It is safe to retry.',
+  FITBOX_USER_NOT_FOUND: 'FitBox could not find the linked user. Review the link before retrying.',
+  FITBOX_PROFILE_REFRESH_INVALID: 'FitBox returned an incomplete profile result.',
+  FITBOX_PROFILE_REFRESH_REJECTED: 'FitBox rejected the read-only profile refresh.',
+  FITBOX_LOOKUP_IDENTITY_MISMATCH: 'FitBox returned a different user identity. The XERT link was not changed.',
+  FITBOX_PROFILE_REFRESH_EXPIRED: 'The read-only profile refresh expired without a callback. It is safe to retry.',
 };
 
 function statusLabel(status) {
@@ -21,6 +27,7 @@ export default function FitboxLeadHandoff({ lead }) {
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [refreshingProfile, setRefreshingProfile] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
 
@@ -55,12 +62,32 @@ export default function FitboxLeadHandoff({ lead }) {
     }
   };
 
+  const refreshProfile = async () => {
+    setRefreshingProfile(true);
+    setError('');
+    try {
+      const next = await refreshFitboxUser(lead.id);
+      setState(current => ({ ...current, ...next }));
+      toast({ title: 'FitBox refresh started', description: 'XERT is fetching a read-only profile snapshot. No member or billing details will be changed.' });
+      window.setTimeout(() => void load(), 1_500);
+    } catch (refreshError) {
+      setError(refreshError.message);
+      toast({ title: 'FitBox refresh failed', description: refreshError.message, variant: 'destructive' });
+    } finally {
+      setRefreshingProfile(false);
+    }
+  };
+
   const job = state?.current_job;
   const linked = state?.link;
   const inProgress = ['queued', 'dispatched', 'dispatch_unknown'].includes(job?.status);
   const failed = job?.status === 'failed';
   const safeToRetry = failed && job?.last_error_code === 'ZAPIER_DISPATCH_FAILED';
   const needsProviderReview = failed && !safeToRetry;
+  const profileJob = job?.job_type === 'get_user' ? job : null;
+  const profileInProgress = ['queued', 'dispatched', 'dispatch_unknown'].includes(profileJob?.status);
+  const profileNeedsReview = profileJob?.status === 'failed'
+    && ['FITBOX_USER_NOT_FOUND', 'FITBOX_LOOKUP_IDENTITY_MISMATCH'].includes(profileJob.last_error_code);
 
   return (
     <section className="mb-6 border border-xert-steel/30 bg-xert-charcoal/50 p-4" aria-labelledby="fitbox-handoff-title">
@@ -69,7 +96,7 @@ export default function FitboxLeadHandoff({ lead }) {
           <h4 id="fitbox-handoff-title" className="font-display text-sm uppercase text-xert-offwhite">FitBox</h4>
           <p className="mt-1 font-body text-xs leading-5 text-xert-concrete/50">Membership and billing stay in FitBox. XERT keeps this lead and the verified FitBox ID linked.</p>
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading || sending} aria-label="Refresh FitBox status" title="Refresh FitBox status" className="min-h-11 min-w-11 inline-flex items-center justify-center text-xert-steel disabled:opacity-40">
+        <button type="button" onClick={() => void load()} disabled={loading || sending || refreshingProfile} aria-label="Refresh FitBox status" title="Refresh FitBox status" className="min-h-11 min-w-11 inline-flex items-center justify-center text-xert-steel disabled:opacity-40">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
@@ -81,6 +108,30 @@ export default function FitboxLeadHandoff({ lead }) {
           <div className="flex items-center gap-2 text-emerald-300"><CheckCircle2 className="h-4 w-4" /><span className="font-display text-xs uppercase">Linked</span></div>
           <p className="mt-2 font-body text-sm text-xert-offwhite">FitBox user {linked.fitbox_user_id}</p>
           <p className="mt-0.5 font-body text-xs text-xert-concrete/50">Provider status: {statusLabel(linked.fitbox_status || 'prospect')}</p>
+          {linked.profile_synced_at ? (
+            <dl className="mt-3 space-y-1 border-t border-emerald-500/20 pt-3 font-body text-xs text-xert-concrete/70">
+              <div><dt className="inline text-xert-concrete/40">FitBox name: </dt><dd className="inline">{[linked.profile_first_name, linked.profile_last_name].filter(Boolean).join(' ') || 'Not supplied'}</dd></div>
+              <div><dt className="inline text-xert-concrete/40">FitBox email: </dt><dd className="inline break-all">{linked.profile_email || 'Not supplied'}</dd></div>
+              <div><dt className="inline text-xert-concrete/40">FitBox phone: </dt><dd className="inline">{linked.profile_phone || 'Not supplied'}</dd></div>
+              <div><dt className="inline text-xert-concrete/40">Read-only snapshot: </dt><dd className="inline">{new Date(linked.profile_synced_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</dd></div>
+            </dl>
+          ) : <p className="mt-2 font-body text-xs text-xert-concrete/50">No FitBox profile snapshot yet.</p>}
+          {['failed', 'expired'].includes(profileJob?.status) && (
+            <p className={`mt-3 font-body text-xs leading-5 ${profileNeedsReview ? 'text-amber-200' : 'text-red-200'}`}>
+              {ERROR_LABELS[profileJob.last_error_code] || 'The previous read-only profile refresh did not complete.'}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void refreshProfile()}
+            disabled={loading || sending || refreshingProfile || profileInProgress || state?.profile_refresh_ready === false || profileNeedsReview}
+            className="mt-3 min-h-11 w-full inline-flex items-center justify-center gap-2 border border-emerald-400/35 px-4 font-display text-xs uppercase text-emerald-100 disabled:opacity-40"
+          >
+            <RefreshCw className={`h-4 w-4 ${(refreshingProfile || profileInProgress) ? 'animate-spin' : ''}`} />
+            {profileInProgress ? 'Refreshing FitBox profile…' : 'Refresh read-only profile'}
+          </button>
+          {state?.profile_refresh_ready === false && <p className="mt-2 font-body text-xs text-amber-200">{state.profile_refresh_issue}</p>}
+          <p className="mt-2 font-body text-[11px] leading-4 text-xert-concrete/45">Reads name, email, phone and provider status only. XERT profile, membership, bookings and billing are never changed.</p>
         </div>
       ) : inProgress ? (
         <div className="mt-4 rounded-sm border border-amber-500/30 bg-amber-500/10 p-3">

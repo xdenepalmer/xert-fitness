@@ -11,6 +11,10 @@ test('web Command Centre gives member leads an explicit, privacy-clear FitBox ha
   assert.match(handoff, /not a membership, subscription or charge/i);
   assert.match(handoff, /min-h-11/);
   assert.match(data, /action: 'register_prospect'/);
+  assert.match(data, /action: 'refresh_user'/);
+  assert.match(handoff, /Refresh read-only profile/);
+  assert.match(handoff, /XERT profile, membership, bookings and billing are never changed/);
+  assert.match(handoff, /profile_synced_at/);
   assert.match(data, /api\/admin-fitbox-integration/);
   assert.match(data, /healthCheck\('fitbox-integration', 'FitBox prospect handoff'/);
 });

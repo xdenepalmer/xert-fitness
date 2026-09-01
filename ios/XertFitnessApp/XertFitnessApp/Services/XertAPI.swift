@@ -1773,6 +1773,17 @@ final class XertAPI {
         )
     }
 
+    func adminRefreshFitboxUser(
+        session auth: AuthSession,
+        leadID: AdminLeadIdentifier
+    ) async throws -> AdminFitboxMutationResponse {
+        try await vercelRequest(
+            path: "/api/admin-fitbox-integration",
+            body: AdminFitboxProspectRequest(action: "refresh_user", lead_id: leadID.value),
+            auth: auth
+        )
+    }
+
     func adminResolveStripeReview(
         session auth: AuthSession,
         eventID: String,

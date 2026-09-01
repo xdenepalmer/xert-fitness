@@ -2,7 +2,7 @@
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FITBOX_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
-const FITBOX_EVENT_TYPES = new Set([
+export const FITBOX_EVENT_TYPES = Object.freeze([
   'class_session_booked',
   'class_session_cancelled',
   'user_first_session_booked',
@@ -10,6 +10,7 @@ const FITBOX_EVENT_TYPES = new Set([
   'user_status_changed',
   'user_subscription_changed',
 ]);
+const FITBOX_EVENT_TYPE_SET = new Set(FITBOX_EVENT_TYPES);
 
 function boundedText(value, maxLength) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maxLength);
@@ -71,6 +72,25 @@ export function fitboxIntegrationEnvironment(environment = {}) {
   return Object.freeze({ ready: missing.length === 0, missing, hookUrl, appBaseUrl, gymId });
 }
 
+export function fitboxGetUserEnvironment(environment = {}) {
+  const hookUrl = boundedText(environment.ZAPIER_FITBOX_GET_USER_HOOK_URL, 2_048);
+  const appBaseUrl = boundedText(environment.APP_BASE_URL, 2_048).replace(/\/$/, '');
+  const gymId = boundedText(environment.FITBOX_GYM_ID, 128);
+  let hook;
+  let app;
+  try { hook = new URL(hookUrl); } catch { hook = null; }
+  try { app = new URL(appBaseUrl); } catch { app = null; }
+  const missing = [];
+  if (hook?.protocol !== 'https:' || hook.username || hook.password || hook.hostname !== 'hooks.zapier.com') {
+    missing.push('ZAPIER_FITBOX_GET_USER_HOOK_URL');
+  }
+  if (app?.protocol !== 'https:' || app.username || app.password || app.pathname !== '/' || app.search || app.hash) {
+    missing.push('APP_BASE_URL');
+  }
+  if (!FITBOX_ID_PATTERN.test(gymId)) missing.push('FITBOX_GYM_ID');
+  return Object.freeze({ ready: missing.length === 0, missing, hookUrl, appBaseUrl, gymId });
+}
+
 export function fitboxProspectDispatchPayload({ jobId, callbackToken, lead, environment }) {
   if (!UUID_PATTERN.test(String(jobId || ''))) throw new Error('INVALID_FITBOX_JOB_ID');
   const token = boundedText(callbackToken, 256);
@@ -87,6 +107,24 @@ export function fitboxProspectDispatchPayload({ jobId, callbackToken, lead, envi
   });
 }
 
+export function fitboxGetUserDispatchPayload({ jobId, callbackToken, fitboxUserId, environment }) {
+  if (!UUID_PATTERN.test(String(jobId || ''))) throw new Error('INVALID_FITBOX_JOB_ID');
+  const token = boundedText(callbackToken, 256);
+  const userId = boundedText(fitboxUserId, 128);
+  if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) throw new Error('INVALID_FITBOX_CALLBACK_TOKEN');
+  if (!FITBOX_ID_PATTERN.test(userId)) throw new Error('INVALID_FITBOX_USER_ID');
+  const config = fitboxGetUserEnvironment(environment);
+  if (!config.ready) throw new Error('FITBOX_GET_USER_NOT_CONFIGURED');
+  return Object.freeze({
+    event_type: 'xert_fitbox_get_user',
+    job_id: jobId,
+    callback_url: `${config.appBaseUrl}/api/fitbox-prospect-result`,
+    callback_token: token,
+    fitbox_gym_id: config.gymId,
+    fitbox_user_id: userId,
+  });
+}
+
 export function normalizeFitboxCallback(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('INVALID_FITBOX_CALLBACK');
   const jobId = boundedText(value.job_id, 64);
@@ -100,7 +138,29 @@ export function normalizeFitboxCallback(value) {
     throw new Error('INVALID_FITBOX_CALLBACK');
   }
   if (!failed && !FITBOX_ID_PATTERN.test(userId)) throw new Error('INVALID_FITBOX_CALLBACK');
-  return Object.freeze({ jobId, callbackToken, gymId, userId: userId || null, status: status || null, failed, message: message || null });
+  const profileFirstName = boundedText(value.fitbox_first_name, 80);
+  const profileLastName = boundedText(value.fitbox_last_name, 80);
+  const profileEmail = boundedText(value.fitbox_email, 320).toLowerCase();
+  const profilePhone = boundedText(value.fitbox_phone, 60);
+  if (profileEmail && !EMAIL_PATTERN.test(profileEmail)) throw new Error('INVALID_FITBOX_CALLBACK');
+  const profile = [profileFirstName, profileLastName, profileEmail, profilePhone].some(Boolean)
+    ? Object.freeze({
+      firstName: profileFirstName || null,
+      lastName: profileLastName || null,
+      email: profileEmail || null,
+      phone: profilePhone || null,
+    })
+    : null;
+  return Object.freeze({
+    jobId,
+    callbackToken,
+    gymId,
+    userId: userId || null,
+    status: status || null,
+    failed,
+    message: message || null,
+    ...(profile ? { profile } : {}),
+  });
 }
 
 function optionalFitboxID(value) {
@@ -129,7 +189,7 @@ export function normalizeFitboxEvent(value) {
   const providerEventId = optionalFitboxID(value.provider_event_id);
   const deliveryId = optionalFitboxID(value.delivery_id);
   const status = boundedText(value.status, 80).toLowerCase() || null;
-  if (!FITBOX_EVENT_TYPES.has(eventType) || !gymId || ![userId, bookingId, sessionId, subscriptionId].some(Boolean)) {
+  if (!FITBOX_EVENT_TYPE_SET.has(eventType) || !gymId || ![userId, bookingId, sessionId, subscriptionId].some(Boolean)) {
     throw new Error('INVALID_FITBOX_EVENT');
   }
   return Object.freeze({
@@ -160,6 +220,7 @@ export function publicFitboxJob(job) {
   if (!job) return null;
   return {
     id: job.id,
+    job_type: job.job_type || 'register_prospect',
     status: job.status,
     fitbox_user_id: job.fitbox_user_id || null,
     fitbox_status: job.fitbox_status || null,
