@@ -296,6 +296,7 @@ export default function SmsManager() {
         open={confirming}
         title={`Text ${selected.length} ${selected.length === 1 ? 'person' : 'people'}?`}
         description={`Each person gets ${segments.segments} SMS segment${segments.segments === 1 ? '' : 's'} from the XERT Twilio number. This cannot be recalled once sent.`}
+        warning={undefined}
         confirmLabel={sending ? 'Sending…' : 'Send SMS now'}
         busy={sending}
         onOpenChange={open => { if (!open && !sending) setConfirming(false); }}
