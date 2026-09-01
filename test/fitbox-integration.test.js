@@ -126,6 +126,8 @@ test('FitBox server endpoints remain server-only and use the durable callback co
   assert.doesNotMatch(admin, /SUPABASE_SERVICE_ROLE_KEY[^\n]*VITE_/);
   assert.match(admin, /complete_fitbox_prospect_job/);
   assert.match(admin, /fail_fitbox_prospect_job/);
+  assert.match(admin, /normalizeFitboxCallback\(zapierDataEnvelope\(body\)\)/);
+  assert.match(admin, /normalizeFitboxEvent\(zapierDataEnvelope\(body\)\)/);
   assert.match(admin, /timingSafeEqual/);
   const vercel = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
   assert.match(vercel, /fitbox-prospect-result/);

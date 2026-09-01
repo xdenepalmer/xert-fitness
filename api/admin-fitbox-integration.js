@@ -39,6 +39,11 @@ function requestService(request) {
   return request.query?.service ?? new URL(request.url || '', 'https://xert.invalid').searchParams.get('service');
 }
 
+function zapierDataEnvelope(body) {
+  if (body?.data && typeof body.data === 'object' && !Array.isArray(body.data)) return body.data;
+  return body;
+}
+
 async function handleFitboxCallback(request, admin, trace) {
   const { json } = trace;
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -46,7 +51,7 @@ async function handleFitboxCallback(request, admin, trace) {
   try {
     const body = await requestJson(request);
     if (Buffer.byteLength(JSON.stringify(body || {}), 'utf8') > 16_384) throw new Error('REQUEST_TOO_LARGE');
-    callback = normalizeFitboxCallback(body);
+    callback = normalizeFitboxCallback(zapierDataEnvelope(body));
   } catch {
     return json({ error: 'Invalid callback.' }, 400);
   }
@@ -121,7 +126,7 @@ async function handleFitboxEvent(request, admin, trace) {
   try {
     const body = await requestJson(request);
     if (Buffer.byteLength(JSON.stringify(body || {}), 'utf8') > EVENT_REQUEST_BYTES) throw new Error('REQUEST_TOO_LARGE');
-    event = normalizeFitboxEvent(body);
+    event = normalizeFitboxEvent(zapierDataEnvelope(body));
   } catch {
     return json({ error: 'Invalid FitBox event.' }, 400);
   }
