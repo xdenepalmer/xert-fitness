@@ -3959,3 +3959,28 @@ struct AdminFormSubmissionRecord: Hashable {
         return skipped
     }
 }
+
+// ─── SMS campaign results ────────────────────────────────────────────────────
+
+struct AdminSmsResult: Identifiable, Decodable, Hashable {
+    var id: String { phone }
+    let phone: String
+    let name: String
+    let ok: Bool
+    let sid: String?
+    let status: String?
+    let error: String?
+
+    var outcomeLabel: String { ok ? (status ?? "queued") : (error ?? "Failed") }
+}
+
+struct AdminSmsOutcome: Decodable, Hashable {
+    let sent: Int
+    let failed: Int
+    let total: Int
+    let results: [AdminSmsResult]
+
+    var summaryLabel: String {
+        failed == 0 ? "\(sent) sent" : "\(sent) sent, \(failed) failed"
+    }
+}

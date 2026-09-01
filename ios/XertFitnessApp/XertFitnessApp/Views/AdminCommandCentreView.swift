@@ -2914,6 +2914,8 @@ struct AdminCommandCentreView: View {
                 session: session,
                 createIntentID: $createFormIntentID
             )
+        case .sms:
+            AdminSmsView(session: session)
         case .notices:
             AdminCommunicationsView(admin: admin, session: session)
         case .events:

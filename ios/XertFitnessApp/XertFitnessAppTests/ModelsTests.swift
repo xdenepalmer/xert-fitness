@@ -110,8 +110,8 @@ final class ModelsTests: XCTestCase {
     }
 
     func testOwnerWorkspaceRoutesAreTypedBoundedAndStrictlyScoped() throws {
-        // 23 since the forms builder and workout workspace are both owner-routable.
-        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 23)
+        // 24 since the forms builder, workout and SMS workspaces are all owner-routable.
+        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 24)
         for workspace in XertOwnerWorkspace.allCases {
             let route = XertOwnerRoute(workspace: workspace)
             XCTAssertEqual(XertOwnerRoute.restore(route.restorationValue), route)
@@ -6546,5 +6546,64 @@ final class ModelsTests: XCTestCase {
             hour: hour,
             minute: minute
         ).date!
+    }
+}
+
+final class SmsCampaignTests: XCTestCase {
+    func testAustralianMobilesNormaliseAndEverythingElseIsRefused() {
+        XCTAssertEqual(SmsCampaign.normalizeAUMobile("0485 070 921"), "+61485070921")
+        XCTAssertEqual(SmsCampaign.normalizeAUMobile("+61 485 070 921"), "+61485070921")
+        XCTAssertEqual(SmsCampaign.normalizeAUMobile("61485070921"), "+61485070921")
+        XCTAssertEqual(SmsCampaign.normalizeAUMobile("(04) 8507-0921"), "+61485070921")
+        XCTAssertNil(SmsCampaign.normalizeAUMobile("07 4162 1234"), "landlines are not textable")
+        XCTAssertNil(SmsCampaign.normalizeAUMobile("+64211234567"), "other countries are refused")
+        XCTAssertNil(SmsCampaign.normalizeAUMobile(""))
+        XCTAssertNil(SmsCampaign.normalizeAUMobile("call me"))
+    }
+
+    func testSegmentCountingMatchesGSMAndUnicodeRules() {
+        XCTAssertEqual(SmsCampaign.segments(for: "").segments, 0)
+        XCTAssertEqual(SmsCampaign.segments(for: String(repeating: "a", count: 160)).segments, 1)
+        XCTAssertEqual(SmsCampaign.segments(for: String(repeating: "a", count: 161)).segments, 2)
+        XCTAssertEqual(SmsCampaign.segments(for: String(repeating: "a", count: 306)).segments, 2)
+        XCTAssertEqual(SmsCampaign.segments(for: String(repeating: "a", count: 307)).segments, 3)
+
+        let braces = SmsCampaign.segments(for: "{}")
+        XCTAssertEqual(braces.characters, 4, "GSM extension characters cost two septets")
+        XCTAssertFalse(braces.isUnicode)
+
+        let emoji = SmsCampaign.segments(for: "💪" + String(repeating: "a", count: 68))
+        XCTAssertTrue(emoji.isUnicode)
+        XCTAssertEqual(emoji.segments, 1)
+        XCTAssertEqual(SmsCampaign.segments(for: "💪" + String(repeating: "a", count: 69)).segments, 2)
+    }
+
+    func testAudienceDedupesByNumberAndCountsWhatWasSkipped() {
+        let audience = SmsCampaign.audience(from: [
+            .init(name: "Byron", phone: "0485 070 921", detail: "Member"),
+            .init(name: "Byron again", phone: "+61485070921", detail: "Member"),
+            .init(name: "No phone", phone: nil, detail: "Member"),
+            .init(name: "Landline", phone: "07 4162 1234", detail: "Member"),
+            .init(name: "Kirra", phone: "0400111222", detail: "Member"),
+        ])
+        XCTAssertEqual(audience.recipients.map(\.name), ["Byron", "Kirra"])
+        XCTAssertEqual(audience.recipients.first?.phone, "+61485070921")
+        XCTAssertEqual(audience.missingPhone, 1)
+        XCTAssertEqual(audience.invalidPhone, 1)
+        XCTAssertEqual(audience.duplicates, 1)
+        XCTAssertEqual(audience.skipped, 2)
+    }
+
+    func testValidationBlocksEmptyOversizeAndUntickedSends() {
+        let recipient = SmsCampaign.Recipient(name: "Byron", phone: "+61485070921", detail: "")
+        XCTAssertNil(SmsCampaign.validationMessage(message: "Class is on", recipients: [recipient]))
+        XCTAssertNotNil(SmsCampaign.validationMessage(message: "   ", recipients: [recipient]))
+        XCTAssertNotNil(SmsCampaign.validationMessage(message: "Hi", recipients: []))
+        XCTAssertNotNil(SmsCampaign.validationMessage(
+            message: String(repeating: "x", count: SmsCampaign.maxMessageLength + 1),
+            recipients: [recipient]
+        ))
+        let tooMany = Array(repeating: recipient, count: SmsCampaign.maxRecipients + 1)
+        XCTAssertNotNil(SmsCampaign.validationMessage(message: "Hi", recipients: tooMany))
     }
 }

@@ -74,6 +74,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
     case campaigns
     case siteContent
     case forms
+    case sms
     case notices
     case events
     case team
@@ -102,6 +103,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .campaigns: return "Campaign Attribution"
         case .siteContent: return "Site Content"
         case .forms: return "Forms & Surveys"
+        case .sms: return "Text Members"
         case .notices: return "Member Notices"
         case .events: return "Event Calendar"
         case .team: return "Team Directory"
@@ -130,6 +132,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .campaigns: return "Measure acquisition sources and campaigns"
         case .siteContent: return "Edit public copy, FAQs and hero media"
         case .forms: return "Build, publish and analyse public forms"
+        case .sms: return "SMS any group with a mobile on file"
         case .notices: return "Publish updates to web and iOS"
         case .events: return "Coordinate the annual training calendar"
         case .team: return "Manage coaches and practitioners"
@@ -158,6 +161,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .campaigns: return "chart.bar.xaxis"
         case .siteContent: return "square.and.pencil"
         case .forms: return "list.clipboard"
+        case .sms: return "message.badge"
         case .notices: return "bell.badge"
         case .events: return "trophy"
         case .team: return "person.crop.rectangle.stack"
@@ -176,7 +180,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .members, .classDesk, .workouts, .bookingRequests, .timetable, .availability, .ptRequests:
             return .operate
         case .retention, .leads, .campaigns: return .grow
-        case .siteContent, .forms, .notices, .events, .team: return .publish
+        case .siteContent, .forms, .sms, .notices, .events, .team: return .publish
         case .finance, .orders, .products: return .commerce
         case .access, .controls, .health, .audit: return .platform
         }
@@ -199,6 +203,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .campaigns: return ["campaign", "attribution", "source", "marketing"]
         case .siteContent: return ["website", "homepage", "hero", "faq", "content"]
         case .forms: return ["form", "survey", "feedback", "application", "responses", "analytics"]
+        case .sms: return ["sms", "text", "twilio", "message", "broadcast", "blast", "mobile", "phone"]
         case .notices: return ["announcement", "push", "message", "notification"]
         case .events: return ["event", "race", "competition", "calendar"]
         case .team: return ["coach", "practitioner", "trainer", "team"]

@@ -693,6 +693,30 @@ final class XertAPI {
         }
     }
 
+    /// Sends an SMS campaign through the admin communications function.
+    /// Twilio credentials stay server-side; the app only supplies recipients.
+    func adminSendSMS(
+        session auth: AuthSession,
+        message: String,
+        recipients: [SmsCampaign.Recipient]
+    ) async throws -> AdminSmsOutcome {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let problem = SmsCampaign.validationMessage(message: trimmed, recipients: recipients) {
+            throw APIError(message: problem)
+        }
+        return try await vercelRequest(
+            path: "/api/admin-publish-announcement",
+            body: AdminSmsSendRequest(
+                action: "send_sms",
+                message: trimmed,
+                recipients: recipients.map {
+                    AdminSmsRecipientPayload(name: $0.name, phone: $0.phone)
+                }
+            ),
+            auth: auth
+        )
+    }
+
     func adminBookMemberIntoClass(
         session auth: AuthSession,
         classSessionID: UUID,
@@ -3248,6 +3272,16 @@ private struct AdminCancellationNoticeRequest: Encodable {
     let action: String
     let session_id: UUID
 }
+private struct AdminSmsSendRequest: Encodable {
+    let action: String
+    let message: String
+    let recipients: [AdminSmsRecipientPayload]
+}
+private struct AdminSmsRecipientPayload: Encodable {
+    let name: String
+    let phone: String
+}
+
 private struct AdminTargetedNoticeRequest: Encodable {
     let action: String
     let announcement_id: UUID
