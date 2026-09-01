@@ -58,7 +58,7 @@ struct AdminWorkoutOfDayView: View {
             .padding(16)
             .frame(maxWidth: .infinity)
         }
-        .xertScreenBackground()
+        .xertOwnerScreen()
         .navigationTitle("Workout of the Day")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

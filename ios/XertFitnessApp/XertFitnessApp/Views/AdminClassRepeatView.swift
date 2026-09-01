@@ -61,7 +61,7 @@ struct AdminClassRepeatView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.xertNavy)
+            .xertOwnerScreen()
             .navigationTitle("Repeat Class")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -330,7 +330,10 @@ test('native owner workspace uses protected operational RPCs and real actions', 
 });
 
 test('native owner dashboard consolidates live priorities into actionable workspaces', async () => {
-  const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const [view, design] = await Promise.all([
+    read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminDesignSystem.swift'),
+  ]);
 
   assert.match(view, /private var priorityQueue: some View/);
   const dashboard = view.slice(view.indexOf('private func dashboard(session:'), view.indexOf('private var accessDenied:'));
@@ -355,7 +358,10 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   assert.match(view, /case \.ready:[\s\S]*All operational queues are clear/);
   assert.match(view, /Button \{\s*openWorkspaceWithFeedback\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
   assert.match(view, /AdminMetricTile[\s\S]*let action: \(\(\) -> Void\)\?/);
-  assert.match(view, /private func adminHeading\(_ title: String\)[\s\S]*accessibilityAddTraits\(\.isHeader\)/);
+  // adminHeading now delegates to the shared owner design system, so the
+  // accessibility trait is asserted where it is actually implemented.
+  assert.match(view, /private func adminHeading\(_ title: String\)[\s\S]*XertOwnerHeading\(title\)/);
+  assert.match(design, /struct XertOwnerHeading: View[\s\S]*accessibilityAddTraits\(\.isHeader\)/);
 });
 
 test('native owner priorities open the exact protected task when one workload is affected', async () => {

@@ -54,9 +54,9 @@ struct AdminFormResponseView: View {
                     privacyNote
                 }
             }
-            .padding(16)
+            .xertOwnerContentPadding()
         }
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(response.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { responseActions }

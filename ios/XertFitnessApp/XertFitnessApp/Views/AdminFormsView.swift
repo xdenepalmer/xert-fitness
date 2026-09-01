@@ -43,9 +43,9 @@ struct AdminFormsView: View {
                     }
                 }
             }
-            .padding(16)
+            .xertOwnerContentPadding()
         }
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Forms & Surveys")
         .searchable(text: $query, prompt: "Search forms")
         .toolbar {
@@ -657,7 +657,7 @@ private struct AdminFormDetailView: View {
                     }
                     .padding(20)
                 }
-                .background(Color.xertNavy)
+                .xertOwnerScreen()
                 .navigationTitle("Form QR code")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

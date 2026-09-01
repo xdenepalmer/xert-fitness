@@ -65,9 +65,9 @@ struct AdminSmsView: View {
                 composerSection
                 if let result = outcome { outcomeSection(result) }
             }
-            .padding(16)
+            .xertOwnerContentPadding()
         }
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Text Members")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadClasses() }
@@ -97,7 +97,7 @@ struct AdminSmsView: View {
 
     private var audiencePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            adminSmsHeading("Audience")
+            XertOwnerHeading("Audience")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(Audience.allCases) { option in
                     Button {
@@ -131,7 +131,7 @@ struct AdminSmsView: View {
 
     private var classPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
-            adminSmsHeading("Class")
+            XertOwnerHeading("Class")
             Picker("Class", selection: $selectedClassID) {
                 Text("Choose a class…").tag(UUID?.none)
                 ForEach(classes) { item in
@@ -141,7 +141,7 @@ struct AdminSmsView: View {
             .pickerStyle(.menu)
             .tint(Color.xertSteel)
             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, XertSpace.md)
             .xertCardStyle()
         }
     }
@@ -156,7 +156,7 @@ struct AdminSmsView: View {
     private var recipientsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                adminSmsHeading("Recipients")
+                XertOwnerHeading("Recipients")
                 Spacer()
                 Text("\(selected.count) of \(pool.recipients.count)")
                     .font(.caption.weight(.semibold))
@@ -188,7 +188,7 @@ struct AdminSmsView: View {
                         .tint(Color.xertSteel)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(XertSpace.lg)
                 .xertCardStyle()
             } else if audience == .classSignups && selectedClassID == nil {
                 emptyCard("Choose a class to load its sign-ups and roster.")
@@ -262,7 +262,7 @@ struct AdminSmsView: View {
             .font(.subheadline)
             .foregroundStyle(Color.xertPale.opacity(0.6))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(XertSpace.lg)
             .xertCardStyle()
     }
 
@@ -270,7 +270,7 @@ struct AdminSmsView: View {
 
     private var composerSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            adminSmsHeading("Message")
+            XertOwnerHeading("Message")
             TextEditor(text: $message)
                 .frame(minHeight: 130)
                 .scrollContentBackground(.hidden)
@@ -322,7 +322,7 @@ struct AdminSmsView: View {
 
     private func outcomeSection(_ outcome: AdminSmsOutcome) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            adminSmsHeading(outcome.summaryLabel)
+            XertOwnerHeading(outcome.summaryLabel)
             VStack(spacing: 0) {
                 ForEach(outcome.results) { result in
                     HStack(spacing: 10) {
@@ -436,12 +436,4 @@ struct AdminSmsView: View {
             XertHaptics.play(.error)
         }
     }
-}
-
-private func adminSmsHeading(_ title: String) -> some View {
-    Text(title.uppercased())
-        .font(.caption.weight(.bold))
-        .tracking(1.8)
-        .foregroundStyle(Color.xertSteel)
-        .accessibilityAddTraits(.isHeader)
 }

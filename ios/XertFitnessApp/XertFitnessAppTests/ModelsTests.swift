@@ -6607,3 +6607,70 @@ final class SmsCampaignTests: XCTestCase {
         XCTAssertNotNil(SmsCampaign.validationMessage(message: "Hi", recipients: tooMany))
     }
 }
+
+/// Guards the owner design system. These screens drifted into looking like
+/// several different apps once; the assertions below make that regress loudly
+/// instead of silently.
+final class OwnerDesignSystemTests: XCTestCase {
+    private func ownerViewSources() throws -> [(name: String, source: String)] {
+        let viewsDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()      // XertFitnessAppTests
+            .deletingLastPathComponent()      // XertFitnessApp (project root)
+            .appendingPathComponent("XertFitnessApp/Views")
+        let names = try FileManager.default.contentsOfDirectory(atPath: viewsDirectory.path)
+            .filter { $0.hasPrefix("Admin") && $0.hasSuffix(".swift") }
+            .sorted()
+        XCTAssertGreaterThanOrEqual(names.count, 6, "owner view files should be discoverable")
+        return try names.map { name in
+            (name, try String(contentsOf: viewsDirectory.appendingPathComponent(name), encoding: .utf8))
+        }
+    }
+
+    func testOwnerScreensShareOneBackdropInsteadOfFlatNavy() throws {
+        // Element fills (avatar tiles, text field backgrounds) legitimately use
+        // flat navy; whole screens must use the shared backdrop so no workspace
+        // looks like a different product.
+        let elementLevelFills = 4
+        var flatScreenFills = 0
+        for (name, source) in try ownerViewSources() {
+            let fills = source.components(separatedBy: ".background(Color.xertNavy)").count - 1
+            flatScreenFills += fills
+            if fills > 0 {
+                XCTAssertTrue(
+                    ["AdminCommandCentreView.swift", "AdminWorkoutOfDayView.swift"].contains(name),
+                    "\(name) should adopt xertOwnerScreen() rather than a flat navy fill"
+                )
+            }
+        }
+        XCTAssertEqual(
+            flatScreenFills,
+            elementLevelFills,
+            "a new screen used flat navy instead of xertOwnerScreen()"
+        )
+    }
+
+    func testOwnerCardsUseOnePaddingToken() throws {
+        for (name, source) in try ownerViewSources() {
+            let lines = source.components(separatedBy: "\n")
+            for (index, line) in lines.enumerated() where index + 1 < lines.count {
+                guard lines[index + 1].contains(".xertCardStyle()") else { continue }
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix(".padding(") else { continue }
+                XCTAssertTrue(
+                    trimmed.contains("XertSpace."),
+                    "\(name):\(index + 1) uses a raw card padding; use the XertSpace scale"
+                )
+            }
+        }
+    }
+
+    func testSpacingScaleStaysShortAndOrdered() {
+        let scale: [CGFloat] = [
+            XertSpace.hairline, XertSpace.xs, XertSpace.sm,
+            XertSpace.md, XertSpace.lg, XertSpace.xl, XertSpace.section,
+        ]
+        XCTAssertEqual(scale, scale.sorted(), "the spacing scale must ascend")
+        XCTAssertEqual(Set(scale).count, scale.count, "no duplicate steps in the scale")
+        XCTAssertEqual(XertSpace.lg, 16, "16 is the card and gutter workhorse")
+    }
+}

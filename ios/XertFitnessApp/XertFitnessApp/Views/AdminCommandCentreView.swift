@@ -954,7 +954,7 @@ struct AdminCommandCentreView: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Command Centre")
         .toolbar { closeToolbar }
     }
@@ -1945,7 +1945,7 @@ struct AdminCommandCentreView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(16)
+            .padding(XertSpace.lg)
             .xertCardStyle()
             .accessibilityElement(children: .contain)
         }
@@ -2069,7 +2069,7 @@ struct AdminCommandCentreView: View {
                     .foregroundStyle(Color.xertPale.opacity(0.82))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(XertSpace.lg)
             .xertCardStyle()
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Checking operational queues")
@@ -2365,7 +2365,7 @@ struct AdminCommandCentreView: View {
                         .foregroundStyle(Color.xertPale.opacity(0.75))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(XertSpace.lg)
                 .xertCardStyle()
             } else if let overview = admin.activationOverview {
                 if admin.refreshUnavailableSources.contains("member activation") {
@@ -2390,7 +2390,7 @@ struct AdminCommandCentreView: View {
                                 .foregroundStyle(Color.xertPale.opacity(0.58))
                         }
                         .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-                        .padding(13)
+                        .padding(XertSpace.lg)
                         .xertCardStyle()
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("\(stage.label), \(stage.count), \(percentage.map { "\($0) percent of accounts" } ?? "no cohort yet")")
@@ -2518,7 +2518,7 @@ struct AdminCommandCentreView: View {
                             : "Opens the exact class setup editor"
                     )
                 }
-                .padding(16)
+                .padding(XertSpace.lg)
                 .xertCardStyle()
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("owner.nextClassFocus")
@@ -2611,7 +2611,7 @@ struct AdminCommandCentreView: View {
                     .foregroundStyle(Color.xertPale.opacity(0.72))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(XertSpace.lg)
             .xertCardStyle()
         case .unavailable:
             AdminEmptyState(
@@ -2693,7 +2693,7 @@ struct AdminCommandCentreView: View {
                     }
                 }
             }
-            .padding(14)
+            .padding(XertSpace.lg)
             .xertCardStyle()
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("owner.todayClass.\(item.id.uuidString.lowercased())")
@@ -3112,7 +3112,7 @@ private struct AdminWorkspaceSwitcher: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.xertNavy)
+            .xertOwnerScreen()
             .navigationTitle("Manage XERT")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "Workspace, Stripe launch, class, member or record")
@@ -3509,7 +3509,7 @@ private struct AdminOwnerTaskSheet: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(task.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { closeToolbar }
@@ -3679,7 +3679,7 @@ private struct AdminAccessControlView: View {
             accessHistory
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Access Control")
         .searchable(
             text: $query,
@@ -4129,7 +4129,7 @@ private struct AdminMembersView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Members")
         .searchable(text: $query, prompt: "Name, email or phone")
         .task(id: requestKey) {
@@ -4500,7 +4500,7 @@ private struct AdminMemberDetailView: View {
             }
             .listRowBackground(Color.xertInk)
             }
-            .scrollContentBackground(.hidden).background(Color.xertNavy)
+            .xertOwnerScreen()
             .navigationTitle("Member Record").navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -5383,7 +5383,7 @@ private struct AdminMemberNoticeComposer: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.xertNavy)
+            .xertOwnerScreen()
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Private Notice")
             .navigationBarTitleDisplayMode(.inline)
@@ -5798,7 +5798,7 @@ private struct AdminClassesView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Class Desk")
         .refreshable { await admin.refresh(session: session) }
         .confirmationDialog(
@@ -6283,7 +6283,7 @@ private struct AdminClassRosterView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(operation.title)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: operation.id) { await loadRoster(preserveCurrent: false) }
@@ -6786,7 +6786,7 @@ private struct AdminRosterMemberPicker: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.xertNavy)
+            .xertOwnerScreen()
             .navigationTitle("Add member")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "Name, email or phone")
@@ -7065,7 +7065,7 @@ private struct AdminScheduleView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Class Calendar")
         .searchable(text: $query, prompt: "Search timetable")
         .toolbar {
@@ -7270,7 +7270,7 @@ private struct AdminClassCancellationFollowUpView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.xertNavy)
+            .xertOwnerScreen()
             .navigationTitle("Cancellation Follow-up")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -7591,7 +7591,7 @@ struct AdminClassEditor: View {
         }
         .disabled(isTerminal || !mutationAllowed)
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(classSession == nil ? "New Class" : "Edit Class")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -7868,7 +7868,7 @@ private struct AdminAvailabilityView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Schedule Controls")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -8094,7 +8094,7 @@ private struct AdminAvailabilityEditor: View {
             .disabled(!mutationAllowed)
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(block == nil ? "New Availability" : "Edit Availability")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -8336,7 +8336,7 @@ private struct AdminBlackoutEditor: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(period == nil ? "New Blackout" : "Edit Blackout")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -8560,7 +8560,7 @@ private struct AdminRetentionView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Retention")
         .sheet(item: $presentedMember) { member in
             NavigationStack {
@@ -8898,7 +8898,7 @@ private struct AdminFinanceView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Finance")
         .refreshable {
             await admin.refreshOperationalPulse(session: session)
@@ -9149,7 +9149,7 @@ private struct AdminOrdersView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Orders")
         .searchable(text: $query, prompt: "Email, pack or Stripe ID")
         .refreshable { await admin.refresh(session: session) }
@@ -9373,7 +9373,7 @@ private struct AdminOrderDetailView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Order detail")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(isOperating) } }
@@ -9628,7 +9628,7 @@ private struct AdminBookingRequestsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Booking Requests")
         .searchable(text: $query, prompt: "Member, contact, class or coach")
         .refreshable { await admin.loadBookingRequests(session: session, force: true) }
@@ -9845,7 +9845,7 @@ private struct AdminBookingRequestDetailView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Booking Detail")
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
@@ -10101,7 +10101,7 @@ private struct AdminSiteContentView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Site Content")
         .refreshable { await admin.loadSiteContent(session: session, force: true) }
         .task { await admin.loadSiteContent(session: session) }
@@ -10229,7 +10229,7 @@ private struct AdminSiteContentEditor: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(section.title)
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
@@ -10785,7 +10785,7 @@ private struct AdminCampaignAttributionView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Campaign Attribution")
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -11163,7 +11163,7 @@ private struct AdminLeadsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Lead Pipelines")
         .searchable(text: $query, prompt: "Name, email, phone or source")
         .refreshable { await admin.loadLeads(session: session, pipeline: pipeline, force: true) }
@@ -11405,7 +11405,7 @@ private struct AdminLeadDetailView: View {
             .disabled(!mutationAllowed)
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(lead.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
@@ -11811,7 +11811,7 @@ private struct AdminPTRequestsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("PT Requests")
         .searchable(text: $query, prompt: "Name, contact, goal or notes")
         .refreshable { await admin.refreshPTRequests(session: session) }
@@ -12633,7 +12633,7 @@ private struct AdminPlatformView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Member App Controls")
         .onAppear {
             let live = admin.settings
@@ -13078,7 +13078,7 @@ private struct AdminAnnouncementDetailView: View {
             .listRowBackground(Color.xertInk)
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Member Notice")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -13451,7 +13451,7 @@ private struct AdminCommunicationsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Member Notices")
         .refreshable { await admin.refreshAnnouncements(session: session) }
         .toolbar {
@@ -13961,7 +13961,7 @@ private struct AdminOperationsHealthView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Operations Health")
         .refreshable {
             await admin.refreshHealth(session: session)
@@ -14266,7 +14266,7 @@ private struct AdminAuditView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Admin Audit")
         .searchable(text: $query, prompt: "Search changes")
         .toolbar {
@@ -14577,7 +14577,7 @@ private struct AdminProductsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Session Packs & Pricing")
         .searchable(text: $query, prompt: "Search packs")
         .accessibilityIdentifier("owner.products.list")
@@ -14895,7 +14895,7 @@ private struct AdminProductEditor: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(isCreating ? "New Session Pack" : product?.name ?? "Session Pack")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("owner.productEditor.form")
@@ -15210,7 +15210,7 @@ private struct AdminEventsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("Event Calendar")
         .searchable(text: $query, prompt: "Search events")
         .refreshable { await admin.refreshEventCatalogue(session: session) }
@@ -15394,7 +15394,7 @@ private struct AdminEventEditor: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(event == nil ? "New Event" : "Edit Event")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
@@ -15793,7 +15793,7 @@ private struct AdminCoachesView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle("XERT Team")
         .searchable(text: $query, prompt: "Name, role or experience")
         .refreshable { await admin.refreshTeamDirectory(session: session) }
@@ -15943,7 +15943,7 @@ private struct AdminCoachEditor: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.xertNavy)
+        .xertOwnerScreen()
         .navigationTitle(coach == nil ? "New Team Member" : "Edit Profile")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
@@ -16243,7 +16243,7 @@ private struct AdminAnnouncementComposer: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.xertNavy)
+            .xertOwnerScreen()
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(announcement == nil ? "New Notice" : "Edit Notice")
             .navigationBarTitleDisplayMode(.inline)
@@ -16596,8 +16596,8 @@ private struct AdminQuickToolButton: View {
                     .foregroundStyle(isEnabled ? Color.xertSteel : Color.xertPale.opacity(0.25))
             }
             .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, XertSpace.md)
+            .padding(.vertical, XertSpace.sm)
             .xertCardStyle()
             .contentShape(Rectangle())
         }
@@ -16878,7 +16878,7 @@ private struct AdminPriorityRow: View {
                     .font(.caption.weight(.bold))
                 }
             }
-            .padding(14)
+            .padding(XertSpace.lg)
             .xertCardStyle()
             .contentShape(Rectangle())
         }
@@ -17128,7 +17128,7 @@ private struct AdminMetricTile: View {
             Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(1).foregroundStyle(Color.xertPale.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(XertSpace.lg)
         .xertCardStyle()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(accessibleValue), \(dataState.accessibilityDescription)")
@@ -17227,7 +17227,7 @@ private struct AdminMoneyTile: View {
             Text(title.uppercased()).font(.caption2.weight(.bold)).tracking(1).foregroundStyle(Color.xertPale.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(XertSpace.lg)
         .xertCardStyle()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(accessibleValue), \(dataState.accessibilityDescription)")
@@ -17279,6 +17279,8 @@ private struct FinanceSummaryRow: View {
     }
 }
 
+// Thin wrapper over the shared owner row so every call site here picks up the
+// design system without touching hundreds of usages.
 private struct AdminDestinationRow: View {
     let title: String
     let detail: String
@@ -17286,20 +17288,7 @@ private struct AdminDestinationRow: View {
     let onOpen: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: 14) {
-                Image(systemName: icon).frame(width: 26).foregroundStyle(Color.xertSteel)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.headline).foregroundStyle(Color.xertOffWhite)
-                    Text(detail).font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Color.xertSteel)
-            }
-            .padding(15)
-            .xertCardStyle()
-        }
-        .buttonStyle(.plain)
+        XertOwnerRow(title: title, detail: detail, icon: icon, onOpen: onOpen)
     }
 }
 
@@ -17308,19 +17297,10 @@ private struct AdminEmptyState: View {
     let text: String
 
     var body: some View {
-        Label(text, systemImage: icon)
-            .font(.subheadline)
-            .foregroundStyle(Color.xertPale.opacity(0.65))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .xertCardStyle()
+        XertOwnerEmptyState(icon: icon, text: text)
     }
 }
 
 private func adminHeading(_ title: String) -> some View {
-    Text(title.uppercased())
-        .font(.caption.weight(.bold))
-        .tracking(1.8)
-        .foregroundStyle(Color.xertSteel)
-        .accessibilityAddTraits(.isHeader)
+    XertOwnerHeading(title)
 }
