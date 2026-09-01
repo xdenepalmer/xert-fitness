@@ -66,6 +66,102 @@ export function summarizePreviousClassAlertPushes(rows = []) {
   };
 }
 
+// ─── SMS campaigns (action: 'send_sms') ──────────────────────────────────────
+// Twilio credentials are server-only environment variables. They are never
+// committed and never VITE_-prefixed, which would bake them into the browser.
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
+const SMS_MAX_MESSAGE_LENGTH = 1600;
+const SMS_MAX_RECIPIENTS = 500;
+const SMS_SEND_CONCURRENCY = 5;
+
+export function e164AUMobile(value) {
+  const digits = String(value || '').replace(/[^\d+]/g, '');
+  const bare = digits.startsWith('+') ? digits.slice(1) : digits;
+  if (/^614\d{8}$/.test(bare)) return `+${bare}`;
+  if (/^04\d{8}$/.test(bare)) return `+61${bare.slice(1)}`;
+  return null;
+}
+
+/** Validates an SMS send request; throws SMS_* codes mapped to 400s below. */
+export function normalizeSmsSendRequest(body) {
+  const message = String(body?.message || '').trim();
+  if (!message) throw new Error('SMS_MESSAGE_REQUIRED');
+  if (message.length > SMS_MAX_MESSAGE_LENGTH) throw new Error('SMS_MESSAGE_TOO_LONG');
+
+  const rawRecipients = Array.isArray(body?.recipients) ? body.recipients : [];
+  if (rawRecipients.length === 0) throw new Error('SMS_RECIPIENTS_REQUIRED');
+  if (rawRecipients.length > SMS_MAX_RECIPIENTS) throw new Error('SMS_TOO_MANY_RECIPIENTS');
+
+  const seen = new Set();
+  const recipients = [];
+  for (const entry of rawRecipients) {
+    const phone = e164AUMobile(entry?.phone);
+    if (!phone) throw new Error('SMS_RECIPIENT_PHONE_INVALID');
+    if (seen.has(phone)) continue; // silently collapse duplicates
+    seen.add(phone);
+    recipients.push({ phone, name: String(entry?.name || '').trim().slice(0, 120) || phone });
+  }
+  return { message, recipients };
+}
+
+async function sendOneSms(recipient, message) {
+  const params = new URLSearchParams({ To: recipient.phone, From: TWILIO_FROM_NUMBER, Body: message });
+  const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+  try {
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      },
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        phone: recipient.phone,
+        name: recipient.name,
+        ok: false,
+        error: payload.message || `Twilio rejected the message (${response.status}).`,
+      };
+    }
+    return {
+      phone: recipient.phone,
+      name: recipient.name,
+      ok: true,
+      sid: payload.sid || null,
+      status: payload.status || 'queued',
+    };
+  } catch (error) {
+    return { phone: recipient.phone, name: recipient.name, ok: false, error: error.message };
+  }
+}
+
+async function sendSmsCampaign(body) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) {
+    throw new Error('SMS_NOT_CONFIGURED');
+  }
+  const { message, recipients } = normalizeSmsSendRequest(body);
+  const results = [];
+  for (let index = 0; index < recipients.length; index += SMS_SEND_CONCURRENCY) {
+    const batch = recipients.slice(index, index + SMS_SEND_CONCURRENCY);
+    results.push(...await Promise.all(batch.map(recipient => sendOneSms(recipient, message))));
+  }
+  const sent = results.filter(result => result.ok).length;
+  return { sent, failed: results.length - sent, total: results.length, results };
+}
+
+const SMS_ERROR_STATUS = {
+  SMS_MESSAGE_REQUIRED: [400, 'Write the message to send.'],
+  SMS_MESSAGE_TOO_LONG: [400, `SMS messages are limited to ${SMS_MAX_MESSAGE_LENGTH} characters.`],
+  SMS_RECIPIENTS_REQUIRED: [400, 'Choose at least one recipient.'],
+  SMS_TOO_MANY_RECIPIENTS: [400, `Send to at most ${SMS_MAX_RECIPIENTS} people per campaign.`],
+  SMS_RECIPIENT_PHONE_INVALID: [400, 'Every recipient needs a valid Australian mobile number.'],
+  SMS_NOT_CONFIGURED: [503, 'SMS is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER in Vercel, then redeploy.'],
+};
+
 async function findAnnouncementPublishReplay(admin, requestId, ownerId) {
   const result = await admin
     .from('member_announcements')
@@ -209,6 +305,10 @@ export default async function handler(request, response) {
       }
     }
 
+    if (body?.action === 'send_sms') {
+      return json(await sendSmsCampaign(body));
+    }
+
     if (body?.action === 'notify_class_cancellation') {
       try {
         return json(await notifyClassCancellation(admin, String(body?.session_id || '').trim()));
@@ -268,6 +368,8 @@ export default async function handler(request, response) {
     }
     return json({ announcement: result.data, push });
   } catch (error) {
+    const smsError = SMS_ERROR_STATUS[error.message];
+    if (smsError) return json({ error: smsError[1] }, smsError[0]);
     if (error.message === 'CLASS_NOTICE_SESSION_INVALID') return json({ error: 'A valid class session is required.' }, 400);
     if (error.message === 'CLASS_NOTICE_NOT_FOUND') return json({ error: 'No member-account cancellation notice was created for this class.' }, 404);
     if (error.message === 'TARGETED_NOTICE_ID_INVALID') return json({ error: 'A valid private notice is required.' }, 400);

@@ -26,6 +26,7 @@ const ContentManager = lazy(() => import('@/components/admin/ContentManager'));
 const OperationsHealth = lazy(() => import('@/components/admin/OperationsHealth'));
 const AdminAuditLog = lazy(() => import('@/components/admin/AdminAuditLog'));
 const AnnouncementsManager = lazy(() => import('@/components/admin/AnnouncementsManager'));
+const SmsManager = lazy(() => import('@/components/admin/SmsManager'));
 const FormsSurveysManager = lazy(() => import('@/components/admin/FormsSurveysManager'));
 
 function SectionLoader() {
@@ -144,6 +145,7 @@ export default function AdminCommandCentre() {
       case 'availability': return <AvailabilityManager />;
       case 'forms': return <FormsSurveysManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'announcements': return <AnnouncementsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
+      case 'sms': return <SmsManager />;
       case 'settings': return <SoftLaunchSettings onDirtyChange={setHasUnsavedChanges} />;
       case 'campaigns': return <CampaignStats />;
       default: return <AdminOverview onNavigate={setSection} />;

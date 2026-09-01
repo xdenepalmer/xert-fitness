@@ -1,6 +1,6 @@
 import {
   BarChart3, BellRing, CalendarDays, CalendarRange, ClipboardList, DollarSign,
-  Dumbbell, Handshake, Inbox, LayoutDashboard, ListChecks, PenSquare, ScrollText,
+  Dumbbell, Handshake, Inbox, LayoutDashboard, ListChecks, MessageSquareText, PenSquare, ScrollText,
   Settings, ShieldCheck, Ticket, Trophy, Tv, UserCog, Users, UserSquare2,
 } from 'lucide-react';
 
@@ -43,6 +43,7 @@ export const ADMIN_WORKSPACE_GROUPS = Object.freeze([
     items: [
       { key: 'forms', label: 'Forms & Surveys', detail: 'Build, publish and analyse forms', icon: ListChecks },
       { key: 'announcements', label: 'Member Notices', detail: 'Reach web and iOS members', icon: BellRing },
+      { key: 'sms', label: 'Text Members', detail: 'SMS any group with a mobile on file', icon: MessageSquareText },
       { key: 'content', label: 'Site Content', detail: 'Public copy, FAQs and media', icon: PenSquare },
       { key: 'coaches', label: 'Team Directory', detail: 'Coaches and practitioners', icon: UserSquare2 },
       { key: 'events', label: 'Event Calendar', detail: 'Training and competition calendar', icon: Trophy },

@@ -14,6 +14,7 @@ export const ADMIN_SECTION_KEYS = Object.freeze([
   'availability',
   'forms',
   'announcements',
+  'sms',
   'content',
   'coaches',
   'events',
