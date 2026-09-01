@@ -49,7 +49,7 @@ test('FitBox production runbook fixes exact Zap names and server-only settings w
     'SUPABASE_SERVICE_ROLE_KEY',
   ];
 
-  for (const name of zapNames) assert.match(runbook, new RegExp(name));
+  for (const name of zapNames) assert.ok(runbook.includes(name), `Runbook must name ${name}`);
   for (const name of environmentNames) assert.match(runbook, new RegExp(`^${name}$`, 'm'));
   assert.doesNotMatch(runbook, /hooks\.zapier\.com\/hooks\/catch\/\d+\/\d+/);
   assert.doesNotMatch(runbook, /FITBOX_ZAPIER_INGRESS_SECRET\s*=\s*\S+/);
