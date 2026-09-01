@@ -32,12 +32,12 @@ test('FitBox production runbook fixes exact Zap names and server-only settings w
   const zapNames = [
     'XERT → FitBox — Register Approved Prospect',
     'XERT → FitBox — Get User — Read Only',
-    'FitBox → XERT — Class Session Booked — Read Only',
-    'FitBox → XERT — Class Session Cancelled — Read Only',
-    'FitBox → XERT — User First Session Booked — Read Only',
-    'FitBox → XERT — User Profile Changed — Read Only',
-    'FitBox → XERT — User Status Changed — Read Only',
-    'FitBox → XERT — User Subscription Changed — Read Only',
+    'FitBox → XERT — Class Session Booked (Review Only)',
+    'FitBox → XERT — Class Session Cancelled (Review Only)',
+    'FitBox → XERT — User First Session Booked (Review Only)',
+    'FitBox → XERT — User Profile Changed (Review Only)',
+    'FitBox → XERT — User Status Changed (Review Only)',
+    'FitBox → XERT — User Subscription Changed (Review Only)',
   ];
   const environmentNames = [
     'APP_BASE_URL',

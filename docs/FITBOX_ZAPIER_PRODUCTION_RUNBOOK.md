@@ -45,12 +45,12 @@ guesswork:
 | --- | --- | --- | --- |
 | `XERT → FitBox — Register Approved Prospect` | `Register User` | `xert_fitbox_register_prospect` | On after launch verification |
 | `XERT → FitBox — Get User — Read Only` | `Get User` | `xert_fitbox_get_user` | On after linked-user callback verification |
-| `FitBox → XERT — Class Session Booked — Read Only` | `Class Session Booked` | `class_session_booked` | On, capture only |
-| `FitBox → XERT — Class Session Cancelled — Read Only` | `Class Session Cancelled` | `class_session_cancelled` | On, capture only |
-| `FitBox → XERT — User First Session Booked — Read Only` | `User First Session Booked` | `user_first_session_booked` | On, capture only |
-| `FitBox → XERT — User Profile Changed — Read Only` | `User Profile Changed` | `user_profile_changed` | On, capture only |
-| `FitBox → XERT — User Status Changed — Read Only` | `User Status Changed` | `user_status_changed` | On, capture only |
-| `FitBox → XERT — User Subscription Changed — Read Only` | `User Subscription Changed` | `user_subscription_changed` | On, capture only |
+| `FitBox → XERT — Class Session Booked (Review Only)` | `Class Session Booked` | `class_session_booked` | On, capture only |
+| `FitBox → XERT — Class Session Cancelled (Review Only)` | `Class Session Cancelled` | `class_session_cancelled` | On, capture only |
+| `FitBox → XERT — User First Session Booked (Review Only)` | `User First Session Booked` | `user_first_session_booked` | On, capture only |
+| `FitBox → XERT — User Profile Changed (Review Only)` | `User Profile Changed` | `user_profile_changed` | On, capture only |
+| `FitBox → XERT — User Status Changed (Review Only)` | `User Status Changed` | `user_status_changed` | On, capture only |
+| `FitBox → XERT — User Subscription Changed (Review Only)` | `User Subscription Changed` | `user_subscription_changed` | On, capture only |
 
 Do not create production Zaps for `Update User` or `Get Users Next Session`.
 Keep the discovery asset named
