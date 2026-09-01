@@ -78,6 +78,18 @@ test('FitBox callback rejects missing identity and normalizes provider status', 
   }).failed, true);
 });
 
+test('FitBox callback accepts modern RFC UUIDv7 job identifiers', () => {
+  const callback = normalizeFitboxCallback({
+    job_id: '019f8650-5ee0-7ca2-892f-c83961192ef4',
+    callback_token: TOKEN,
+    fitbox_gym_id: '545',
+    fitbox_user_id: '100533',
+    fitbox_status: 'prospect',
+  });
+
+  assert.equal(callback.jobId, '019f8650-5ee0-7ca2-892f-c83961192ef4');
+});
+
 test('all verified FitBox triggers normalize into a minimal read-only envelope', () => {
   const eventTypes = [
     'class_session_booked', 'class_session_cancelled', 'user_first_session_booked',
