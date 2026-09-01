@@ -111,7 +111,7 @@ export default function ClassSessionCard({ session, bookingsEnabled, onBook, fit
         </button>
       )}
 
-      {(signup.kind === 'full' || signup.kind === 'past') && (
+      {(signup.kind === 'full' || signup.kind === 'past' || signup.kind === 'provider-unavailable') && (
         <button type="button" disabled aria-disabled="true"
           className="w-full py-3 border border-xert-deep/60 bg-xert-deep/20 text-xert-pale/40 font-display text-sm uppercase cursor-not-allowed">
           {signup.label}

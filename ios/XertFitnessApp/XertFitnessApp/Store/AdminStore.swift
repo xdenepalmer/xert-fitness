@@ -158,6 +158,13 @@ final class AdminStore: ObservableObject {
     @Published private(set) var blackoutPeriods: [AdminBlackoutPeriod] = []
     @Published private(set) var leadsByPipeline: [AdminLeadPipeline: [AdminLead]] = [:]
     @Published private(set) var leadActionCounts: AdminLeadActionCounts?
+    @Published private(set) var fitboxLeadStates: [AdminLeadIdentifier: AdminFitboxLeadState] = [:]
+    @Published private(set) var loadingFitboxLeadIDs: Set<AdminLeadIdentifier> = []
+    @Published private(set) var sendingFitboxLeadIDs: Set<AdminLeadIdentifier> = []
+    @Published private(set) var fitboxLeadErrors: [AdminLeadIdentifier: String] = [:]
+    @Published private(set) var fitboxBridgeHealth: AdminFitboxBridgeHealth?
+    @Published private(set) var fitboxBridgeHealthError: String?
+    @Published private(set) var isRefreshingFitboxBridgeHealth = false
     @Published private(set) var campaignAttributionRows: [AdminCampaignAttributionRow] = []
     @Published private(set) var siteContentRows: [AdminSiteContentRow] = []
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
@@ -1929,6 +1936,52 @@ final class AdminStore: ObservableObject {
             return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func loadFitboxLeadState(
+        session: AuthSession,
+        leadID: AdminLeadIdentifier,
+        force: Bool = false
+    ) async {
+        guard !loadingFitboxLeadIDs.contains(leadID) else { return }
+        if !force, fitboxLeadStates[leadID] != nil { return }
+        loadingFitboxLeadIDs.insert(leadID)
+        defer { loadingFitboxLeadIDs.remove(leadID) }
+        do {
+            fitboxLeadStates[leadID] = try await api.adminFitboxLeadState(session: session, leadID: leadID)
+            fitboxLeadErrors[leadID] = nil
+        } catch {
+            fitboxLeadErrors[leadID] = error.localizedDescription
+        }
+    }
+
+    func refreshFitboxBridgeHealth(session: AuthSession) async {
+        guard !isRefreshingFitboxBridgeHealth else { return }
+        isRefreshingFitboxBridgeHealth = true
+        defer { isRefreshingFitboxBridgeHealth = false }
+        do {
+            fitboxBridgeHealth = try await api.adminFitboxBridgeHealth(session: session)
+            fitboxBridgeHealthError = nil
+        } catch {
+            fitboxBridgeHealthError = error.localizedDescription
+        }
+    }
+
+    func sendLeadToFitbox(session: AuthSession, lead: AdminLead) async -> Bool {
+        guard !sendingFitboxLeadIDs.contains(lead.id) else { return false }
+        sendingFitboxLeadIDs.insert(lead.id)
+        defer { sendingFitboxLeadIDs.remove(lead.id) }
+        do {
+            _ = try await api.adminSendLeadToFitbox(session: session, leadID: lead.id)
+            fitboxLeadStates[lead.id] = nil
+            await loadFitboxLeadState(session: session, leadID: lead.id, force: true)
+            XertHaptics.play(.success)
+            return true
+        } catch {
+            fitboxLeadErrors[lead.id] = error.localizedDescription
+            XertHaptics.play(.error)
             return false
         }
     }

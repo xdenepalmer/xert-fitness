@@ -58,14 +58,18 @@ struct BookingView: View {
                     .listRowSeparator(.hidden)
 
                     noticeSections
-                    creditsSection
-                    packsSection
-                    classDiscoverySection
-                    classCalendarSection
-                    classesSection(
-                        visibleSessions: visibleSessions,
-                        activeBookings: activeBookings
-                    )
+                    if store.platformProvider.provider == .native {
+                        creditsSection
+                        packsSection
+                        classDiscoverySection
+                        classCalendarSection
+                        classesSection(
+                            visibleSessions: visibleSessions,
+                            activeBookings: activeBookings
+                        )
+                    } else {
+                        bookingProviderSection
+                    }
                     personalTrainingSection
                     XertScrollEndSpacer()
                 }
@@ -76,11 +80,10 @@ struct BookingView: View {
                 .navigationTitle("Book")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.hidden, for: .tabBar)
-                .searchable(
-                    text: $classSearch,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Class, coach or location"
-                )
+                .modifier(BookingSearchModifier(
+                    isEnabled: store.platformProvider.provider == .native,
+                    text: $classSearch
+                ))
                 .refreshable {
                     await store.refresh()
                     await store.reconcilePendingCheckout()
@@ -121,6 +124,10 @@ struct BookingView: View {
 
     private func focusRoute(using proxy: ScrollViewProxy) {
         guard routeSequence > 0, routeSequence != handledRouteSequence else { return }
+        guard store.platformProvider.provider == .native else {
+            handledRouteSequence = routeSequence
+            return
+        }
         let target: ScrollTarget
         switch route {
         case .sessionPacks: target = .packs
@@ -145,6 +152,62 @@ struct BookingView: View {
     }
 
     // MARK: Sections
+
+    @ViewBuilder
+    private var bookingProviderSection: some View {
+        if store.platformProvider.provider == .fitBox,
+           let portalURL = store.platformProvider.portalURL,
+           !store.platformProvider.isBlocked {
+            Section("Memberships & classes") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Bookings are managed in FitBox", systemImage: "arrow.up.forward.app.fill")
+                        .font(.headline)
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text("Continue securely to FitBox for memberships, session purchases and class bookings. XERT's internal checkout and booking buttons stay paused while FitBox is selected.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.xertPale.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Link(destination: portalURL) {
+                        Label("Continue to FitBox", systemImage: "arrow.up.forward.square")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.xertSteel)
+                    .foregroundStyle(Color.xertNavy)
+                    .simultaneousGesture(TapGesture().onEnded { XertHaptics.play(.lightImpact) })
+                    Text("FitBox booking history and attendance are not yet mirrored into XERT. Use FitBox as the current source of truth.")
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.58))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 6)
+            }
+        } else {
+            Section("Booking temporarily unavailable") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Provider check needs attention", systemImage: "exclamationmark.triangle.fill")
+                        .font(.headline)
+                        .foregroundStyle(Color.orange)
+                    Text(store.platformProvider.blockedReason
+                        ?? "XERT could not verify the live booking provider. No booking or payment action has been enabled.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.xertPale.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Task { await store.refresh() }
+                    } label: {
+                        Label(store.isLoading ? "Retrying…" : "Retry provider check", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orange)
+                    .disabled(store.isLoading)
+                }
+                .padding(.vertical, 6)
+            }
+        }
+    }
 
     @ViewBuilder
     private var noticeSections: some View {
@@ -1027,6 +1090,24 @@ struct BookingView: View {
     private var initialName: String { store.profile?.full_name ?? "" }
     private var initialEmail: String { store.authSession?.user?.email ?? store.profile?.email ?? "" }
     private var initialPhone: String { store.profile?.phone ?? "" }
+}
+
+private struct BookingSearchModifier: ViewModifier {
+    let isEnabled: Bool
+    @Binding var text: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.searchable(
+                text: $text,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Class, coach or location"
+            )
+        } else {
+            content
+        }
+    }
 }
 
 private enum BookingSheet: Identifiable {

@@ -14,13 +14,13 @@ test('native public pricing settings fail closed and gate checkout with all thre
   assert.match(models, /struct PublicPlatformSettings:[\s\S]*let prices_coming_soon: Bool/);
   assert.match(models, /prices_coming_soon: Bool = true/);
   assert.match(models, /prices_coming_soon = \(try\? container\.decode\(Bool\.self, forKey: \.prices_coming_soon\)\) \?\? true/);
-  assert.match(models, /bookings_enabled && payments_enabled && !prices_coming_soon/);
+  assert.match(models, /providerResolution\.provider == \.native[\s\S]*&& bookings_enabled[\s\S]*&& payments_enabled[\s\S]*&& !prices_coming_soon/);
   assert.match(models, /pricesComingSoon \? "Coming soon" : displayPrice/);
-  assert.match(api, /select", value: "bookings_enabled,payments_enabled,prices_coming_soon"/);
+  assert.match(api, /select", value: "bookings_enabled,payments_enabled,prices_coming_soon,fitbox_enabled,fitbox_booking_url"/);
 
   assert.match(store, /@Published private\(set\) var sessionPackPricesComingSoon = true/);
   assert.match(store, /sessionPackPricesComingSoon = loadedSettings\?\.prices_coming_soon \?\? true/);
-  assert.match(store, /sessionPackPaymentsEnabled = loadedSettings\?\.sessionPackCheckoutEnabled == true/);
+  assert.match(store, /sessionPackPaymentsEnabled = provider\.provider == \.native[\s\S]*loadedSettings\?\.sessionPackCheckoutEnabled == true/);
   assert.ok((store.match(/sessionPackPricesComingSoon = true/g) || []).length >= 2);
   assert.match(store, /guard !sessionPackPricesComingSoon else \{[\s\S]*Checkout stays closed/);
 });

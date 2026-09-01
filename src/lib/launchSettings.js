@@ -1,3 +1,5 @@
+import { normalizeProviderUrl, resolvePlatformProvider } from './platformProvider.js';
+
 /**
  * Fallback opening date, used only when no admin settings row supplies one.
  * The live value is `admin_settings.target_launch_date`, editable in the admin
@@ -32,31 +34,27 @@ export function pricesComingSoon(settings) {
 function normalizeFitboxUrl(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
-  let url;
-  try {
-    url = new URL(raw);
-  } catch {
+  const url = normalizeProviderUrl(raw);
+  if (!url) {
     throw new Error('Enter a valid Fitbox member portal link, starting with https://.');
   }
-  if (url.protocol !== 'https:') {
-    throw new Error('Enter a valid Fitbox member portal link, starting with https://.');
-  }
-  return url.toString();
+  return url;
 }
 
-// Bookings and payments hand off to the external Fitbox member portal only
-// when the switch is on AND a usable https link is saved. A broken or missing
-// link fails safe to the internal behaviour instead of dead public buttons.
+// Bookings and payments hand off to the external FitBox member portal only
+// when the switch is on AND a usable HTTPS link is saved. A requested FitBox
+// provider with a broken link fails closed; it never falls back to native
+// booking or checkout without Byron deliberately switching providers.
 export function fitboxHandoff(settings = {}) {
-  if (settings?.fitbox_enabled !== true) return { active: false, url: null };
-  let url = null;
-  try {
-    url = normalizeFitboxUrl(settings.fitbox_booking_url);
-  } catch {
-    return { active: false, url: null };
-  }
-  if (!url) return { active: false, url: null };
-  return { active: true, url };
+  const provider = resolvePlatformProvider(settings);
+  return {
+    active: provider.provider === 'fitbox' && provider.configured && !provider.blocked,
+    requested: settings?.fitbox_enabled === true,
+    blocked: provider.provider === 'fitbox' && provider.blocked,
+    blockedReason: provider.provider === 'fitbox' ? provider.blockedReason : null,
+    url: provider.portalUrl,
+    capabilities: provider.capabilities,
+  };
 }
 
 export function normalizeLaunchSettings(settings = {}) {

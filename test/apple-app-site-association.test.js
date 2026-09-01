@@ -37,7 +37,7 @@ test('Vercel serves AASA as JSON outside the SPA rewrite while signing stays gat
     { key: 'Content-Type', value: 'application/json' },
     { key: 'Cache-Control', value: 'public, max-age=3600' },
   ]);
-  assert.match(vercel.rewrites[0].source, /well-known/);
+  assert.match(vercel.rewrites.find(({ destination }) => destination === '/index.html').source, /well-known/);
   assert.doesNotMatch(entitlements, /com\.apple\.developer\.associated-domains/);
   assert.match(readme, /Confirm the XERT App ID belongs to that same Apple team/);
   assert.match(readme, /enable \*\*Associated Domains\*\*/);

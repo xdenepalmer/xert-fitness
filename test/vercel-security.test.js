@@ -30,7 +30,8 @@ test('Vercel never caches API responses or stale service workers', () => {
 });
 
 test('SPA routing excludes serverless APIs and platform association files', () => {
-  assert.deepEqual(config.rewrites, [
-    { source: '/((?!api/|\\.well-known/).*)', destination: '/index.html' },
-  ]);
+  assert.deepEqual(config.rewrites.at(-1),
+    { source: '/((?!api/|\\.well-known/).*)', destination: '/index.html' });
+  assert.ok(config.rewrites.slice(0, -1).every(({ source, destination }) =>
+    source.startsWith('/api/') && destination.startsWith('/api/')));
 });

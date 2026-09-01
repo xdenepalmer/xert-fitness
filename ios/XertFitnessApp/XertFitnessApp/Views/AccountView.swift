@@ -1505,39 +1505,54 @@ struct AccountView: View {
                     .accessibilityValue(addingBookingToCalendarID == booking.id ? "In progress" : "")
                 }
                 if booking.isCancellable() {
-                    let isCancelling = store.cancellingBookingID == booking.id
-                    let hasBookingMutation = store.bookingSessionID != nil || store.cancellingBookingID != nil
-                    let bookingStateUnavailable = store.isUsingStaleMemberData
-                        || store.unavailableDataSources.contains(.bookings)
-                    Button(role: .destructive) {
-                        bookingToCancel = booking
-                    } label: {
-                        HStack(spacing: 10) {
-                            Label(
-                                isCancelling
-                                    ? (booking.status == "waitlisted" ? "Leaving waitlist…" : "Cancelling booking…")
-                                    : (booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking"),
-                                systemImage: "xmark.circle"
-                            )
-                            Spacer(minLength: 8)
-                            if isCancelling {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .accessibilityHidden(true)
+                    if store.platformProvider.provider == .native,
+                       store.platformProvider.capabilities.nativeBookingMutations {
+                        let isCancelling = store.cancellingBookingID == booking.id
+                        let hasBookingMutation = store.bookingSessionID != nil || store.cancellingBookingID != nil
+                        let bookingStateUnavailable = store.isUsingStaleMemberData
+                            || store.unavailableDataSources.contains(.bookings)
+                        Button(role: .destructive) {
+                            bookingToCancel = booking
+                        } label: {
+                            HStack(spacing: 10) {
+                                Label(
+                                    isCancelling
+                                        ? (booking.status == "waitlisted" ? "Leaving waitlist…" : "Cancelling booking…")
+                                        : (booking.status == "waitlisted" ? "Leave waitlist" : "Cancel booking"),
+                                    systemImage: "xmark.circle"
+                                )
+                                Spacer(minLength: 8)
+                                if isCancelling {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .accessibilityHidden(true)
+                                }
                             }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.borderless)
+                        .disabled(hasBookingMutation || bookingStateUnavailable)
+                        .accessibilityValue(
+                            isCancelling
+                                ? "In progress"
+                                : (bookingStateUnavailable
+                                    ? "Refresh bookings before cancelling"
+                                    : (hasBookingMutation ? "Another booking update is in progress" : ""))
+                        )
+                    } else if let portalURL = store.platformProvider.portalURL {
+                        Link(destination: portalURL) {
+                            Label("Manage in FitBox", systemImage: "arrow.up.forward.square")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(Color.xertSteel)
+                    } else {
+                        Label("Booking changes paused", systemImage: "lock.shield")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                            .frame(minHeight: 44)
                     }
-                    .buttonStyle(.borderless)
-                    .disabled(hasBookingMutation || bookingStateUnavailable)
-                    .accessibilityValue(
-                        isCancelling
-                            ? "In progress"
-                            : (bookingStateUnavailable
-                                ? "Refresh bookings before cancelling"
-                                : (hasBookingMutation ? "Another booking update is in progress" : ""))
-                    )
                 }
             }
             .padding(.vertical, 4)

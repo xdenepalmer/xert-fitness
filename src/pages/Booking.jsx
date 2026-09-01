@@ -12,16 +12,29 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { useSiteContent } from '@/lib/siteContent';
 import { getSoftLaunchSettings } from '@/lib/adminData';
-import { fitboxHandoff, pricesComingSoon } from '@/lib/launchSettings';
+import { pricesComingSoon } from '@/lib/launchSettings';
+import { PLATFORM_PROVIDERS, resolvePlatformProvider } from '@/lib/platformProvider';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
 import { formatPackPrice, formatPackValidity, packCta, PRICES_COMING_SOON_LABEL } from '@/lib/products';
 import { activeBookingsBySession, bookingTimeConflict, classActionLabel } from '@/lib/bookingUi';
 import { clearPendingWebCheckout } from '@/lib/webCheckoutRecovery';
 
-const steps = [
+const nativeSteps = [
   'Purchase a session pack.',
   'Book your sessions online.',
   'Train with expert coaching in a structured semi-private environment.',
+];
+
+const fitboxSteps = [
+  'Open the secure FitBox member portal.',
+  'Choose and confirm your class in FitBox.',
+  'Return to XERT for your training tools, forms and updates.',
+];
+
+const unavailableSteps = [
+  'Retry the secure provider check.',
+  'Booking and checkout stay paused.',
+  'Contact XERT if access is not restored.',
 ];
 
 const cardStyle = { borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' };
@@ -49,8 +62,8 @@ export default function Booking() {
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   // Default to hidden: prices stay "Coming soon" until settings confirm otherwise.
   const [comingSoon, setComingSoon] = useState(true);
-  // Fails safe to the internal flow until settings confirm the Fitbox handoff.
-  const [fitbox, setFitbox] = useState({ active: false, url: null });
+  // Missing settings are not permission to expose either booking engine.
+  const [provider, setProvider] = useState(() => resolvePlatformProvider(null));
   const [paymentAvailabilityLoaded, setPaymentAvailabilityLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [buyingSlug, setBuyingSlug] = useState(null);
@@ -72,6 +85,9 @@ export default function Booking() {
 
   const refresh = useCallback(async () => {
     setLoadErrors([]);
+    // A refresh invalidates the previous provider decision until the current
+    // singleton settings row has been verified again.
+    setProvider(resolvePlatformProvider(null));
     const requests = [getProducts(), getAvailableSessions(), getSessionPackPaymentAvailability(), getSoftLaunchSettings()];
     if (session) requests.push(getMyCredits(), getMyBookings());
     const results = await Promise.allSettled(requests);
@@ -89,8 +105,8 @@ export default function Booking() {
     // On failure the fallback keeps pricing hidden rather than leaking amounts.
     apply(results[3], 'Launch settings', s => {
       setComingSoon(pricesComingSoon(s));
-      setFitbox(fitboxHandoff(s));
-    }, { prices_coming_soon: true });
+      setProvider(resolvePlatformProvider(s));
+    }, null);
     setPaymentAvailabilityLoaded(true);
     if (session) {
       apply(results[4], 'Credits', setCredits, null);
@@ -120,11 +136,27 @@ export default function Booking() {
 
   const memberBookingsBySession = useMemo(() => activeBookingsBySession(myBookings), [myBookings]);
   const timetableUnavailable = loadErrors.some(error => error.startsWith('Timetable:'));
+  const nativeOperations = provider.provider === PLATFORM_PROVIDERS.NATIVE
+    && provider.configured
+    && !provider.blocked;
+  const fitboxActive = provider.provider === PLATFORM_PROVIDERS.FITBOX
+    && provider.configured
+    && !provider.blocked;
+  const bookingSteps = fitboxActive
+    ? fitboxSteps
+    : nativeOperations
+      ? nativeSteps
+      : unavailableSteps;
 
   useEffect(() => {
     if (!requestedSession || loading || timetableUnavailable) return;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('session');
+
+    if (!nativeOperations) {
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
 
     if (!targetSessionId) {
       setSearchParams(nextParams, { replace: true });
@@ -147,6 +179,7 @@ export default function Booking() {
     setSearchParams(nextParams, { replace: true });
   }, [
     loading,
+    nativeOperations,
     requestedSession,
     searchParams,
     sessions,
@@ -157,6 +190,15 @@ export default function Booking() {
   ]);
 
   const handleBuy = async (product) => {
+    if (!nativeOperations || !provider.capabilities.canPurchaseInternalPack) {
+      toast({
+        title: fitboxActive ? 'Purchases are managed in FitBox' : 'Booking provider unavailable',
+        description: fitboxActive
+          ? 'Open the FitBox member portal to manage membership and payments.'
+          : provider.blockedReason || 'Refresh before purchasing a session pack.',
+      });
+      return;
+    }
     // Never sell a pack whose price the site is hiding: while "prices coming
     // soon" is on, checkout stays closed even if payments are switched on.
     if (comingSoon) {
@@ -182,6 +224,15 @@ export default function Booking() {
   };
 
   const handleBook = async (s) => {
+    if (!nativeOperations || !provider.capabilities.canBookInternally) {
+      toast({
+        title: fitboxActive ? 'Bookings are managed in FitBox' : 'Booking provider unavailable',
+        description: fitboxActive
+          ? 'Continue through the secure FitBox member portal to choose your class.'
+          : provider.blockedReason || 'Refresh before booking a class.',
+      });
+      return;
+    }
     if (!session) {
       toast({ title: 'Sign in to book', description: 'Create a free account, grab a pack, and book in seconds.' });
       navigate('/login');
@@ -238,7 +289,7 @@ export default function Booking() {
 
           {/* Steps */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-10">
-            {steps.map((step, i) => (
+            {bookingSteps.map((step, i) => (
               <div key={step} className="border p-5" style={cardStyle}>
                 <p className="font-display text-sm tabular-nums mb-3" style={{ color: '#7BA7BC' }}>STEP {i + 1}</p>
                 <p className="font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.72)' }}>{step}</p>
@@ -246,21 +297,33 @@ export default function Booking() {
             ))}
           </div>
 
-          {/* Fitbox handoff: memberships, billing and bookings live in the member portal */}
-          {fitbox.active && (
+          {provider.blocked && (
+            <div role="alert" className="flex items-start gap-3 border border-xert-red/40 bg-xert-steel/10 p-4 mt-8">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-xert-red" aria-hidden="true" />
+              <div>
+                <p className="font-display text-sm uppercase text-xert-offwhite">Booking provider needs attention</p>
+                <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/65">{provider.blockedReason}</p>
+              </div>
+            </div>
+          )}
+
+          {/* FitBox handoff: memberships, billing and bookings live in the provider portal. */}
+          {fitboxActive && (
             <div className="flex flex-wrap items-center gap-3 border p-4 mt-8"
               style={{ borderColor: '#7BA7BC', backgroundColor: 'rgba(123,167,188,0.08)' }}>
               <ArrowRight className="w-5 h-5 shrink-0" style={{ color: '#7BA7BC' }} aria-hidden="true" />
               <p className="min-w-[14rem] flex-1 font-body text-sm" style={{ color: '#D1DDE6' }}>
-                Memberships, payments and class bookings now run through the XERT member portal.
+                Memberships, payments and class bookings are managed securely in FitBox. XERT&rsquo;s own checkout and booking buttons are paused to prevent duplicate records.
               </p>
-              <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
+              <a href={provider.portalUrl} target="_blank" rel="noopener noreferrer"
                 className="xert-btn-primary inline-flex items-center justify-center px-5 py-2.5 font-display text-sm uppercase tracking-wide shrink-0">
-                Open member portal
+                Continue to FitBox
               </a>
             </div>
           )}
 
+          {nativeOperations && (
+            <>
           {/* Credits banner for signed-in members */}
           {session && credits && (
             <div className="flex items-center gap-3 border p-4 mt-8"
@@ -501,6 +564,8 @@ export default function Booking() {
               </div>
             )}
           </section>
+            </>
+          )}
         </div>
       </main>
 

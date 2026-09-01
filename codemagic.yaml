@@ -343,6 +343,7 @@ workflows:
               "owner_stripe_price_provisioning",
               "forms_surveys_builder",
               "form_response_snapshots",
+              "fitbox_zapier_bridge",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

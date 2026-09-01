@@ -55,7 +55,8 @@ with required (capability, migration) as (
     ('staff_assisted_booking', 'supabase/migrations/20260727010000_staff_assisted_booking.sql'),
     ('owner_stripe_price_provisioning', 'supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql'),
     ('forms_surveys_builder', 'supabase/migrations/20260811010000_xert_forms_surveys.sql'),
-    ('form_response_snapshots', 'supabase/migrations/20260813020000_require_versioned_form_submissions.sql')
+    ('form_response_snapshots', 'supabase/migrations/20260813020000_require_versioned_form_submissions.sql'),
+    ('fitbox_zapier_bridge', 'supabase/migrations/20260902010000_fitbox_zapier_bridge.sql')
 ), readiness as (
   select
     required.capability,

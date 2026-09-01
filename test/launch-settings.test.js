@@ -42,15 +42,28 @@ test('the Fitbox handoff needs a usable https portal link before it can be enabl
 });
 
 test('public surfaces hand off to Fitbox only when enabled with a valid link', () => {
-  assert.deepEqual(
-    fitboxHandoff({ fitbox_enabled: true, fitbox_booking_url: 'https://portal.fitboxcorp.com/xert' }),
-    { active: true, url: 'https://portal.fitboxcorp.com/xert' }
-  );
-  // A broken or missing link fails safe to the internal flow instead of dead buttons.
-  assert.deepEqual(fitboxHandoff({ fitbox_enabled: true, fitbox_booking_url: '' }), { active: false, url: null });
-  assert.deepEqual(fitboxHandoff({ fitbox_enabled: true, fitbox_booking_url: 'javascript:alert(1)' }), { active: false, url: null });
-  assert.deepEqual(fitboxHandoff({ fitbox_enabled: false, fitbox_booking_url: 'https://portal.fitboxcorp.com/xert' }), { active: false, url: null });
-  assert.deepEqual(fitboxHandoff(null), { active: false, url: null });
+  const active = fitboxHandoff({ fitbox_enabled: true, fitbox_booking_url: 'https://portal.fitboxcorp.com/xert' });
+  assert.equal(active.active, true);
+  assert.equal(active.blocked, false);
+  assert.equal(active.url, 'https://portal.fitboxcorp.com/xert');
+  assert.equal(active.capabilities.canBookInternally, false);
+
+  // A requested provider with a broken link fails closed instead of silently
+  // exposing the native booking engine.
+  const missing = fitboxHandoff({ fitbox_enabled: true, fitbox_booking_url: '' });
+  assert.equal(missing.active, false);
+  assert.equal(missing.requested, true);
+  assert.equal(missing.blocked, true);
+  assert.equal(missing.capabilities.canBookInternally, false);
+
+  const unsafe = fitboxHandoff({ fitbox_enabled: true, fitbox_booking_url: 'javascript:alert(1)' });
+  assert.equal(unsafe.blocked, true);
+  assert.equal(unsafe.url, null);
+
+  const native = fitboxHandoff({ fitbox_enabled: false, fitbox_booking_url: 'https://portal.fitboxcorp.com/xert' });
+  assert.equal(native.active, false);
+  assert.equal(native.requested, false);
+  assert.equal(native.blocked, false);
 });
 
 test('tracks only live launch fields against the last saved snapshot', () => {

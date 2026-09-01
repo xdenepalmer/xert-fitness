@@ -51,6 +51,8 @@ const ROUTES = {
   'commerce-config': 'products',
   'push-notifications': 'announcements',
   'platform-controls': 'settings',
+  'fitbox-integration': 'members',
+  'booking-provider': 'settings',
 };
 
 export default function OperationsHealth({ onNavigate }) {

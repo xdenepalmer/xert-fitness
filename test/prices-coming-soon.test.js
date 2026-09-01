@@ -50,7 +50,7 @@ test('hidden prices never expose a purchase path', () => {
   assert.match(booking, /Register Your Interest/);
   // …and handleBuy refuses to start checkout even if the UI drifts: the
   // comingSoon guard must appear inside the function before any await.
-  assert.match(booking, /const handleBuy = async \(product\) => \{[\s\S]{0,400}?if \(comingSoon\) \{/);
+  assert.match(booking, /const handleBuy = async \(product\) => \{[\s\S]{0,900}?if \(comingSoon\) \{/);
 });
 
 test('the admin command centre exposes a prices toggle', () => {

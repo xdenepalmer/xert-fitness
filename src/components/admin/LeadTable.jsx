@@ -5,6 +5,7 @@ import { getMemberLeads, getTrainerLeads, getPartnerLeads, updateLead, updateLea
 import { downloadCsv } from '@/lib/csv';
 import { collectLeadPages, leadExportColumns, leadExportRows, selectedLeadIds } from '@/lib/adminLeads';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import FitboxLeadHandoff from '@/components/admin/FitboxLeadHandoff';
 
 const MEMBER_STATUSES = ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'];
 const TRAINER_STATUSES = ['new', 'reviewing', 'contacted', 'interview', 'shortlisted', 'not_suitable', 'hired', 'archived'];
@@ -81,6 +82,8 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
           {lead.utm_source && <div><p className="font-body text-xs text-xert-concrete/40 uppercase">Source</p><p className="font-body text-sm text-xert-concrete/60">{lead.utm_source} / {lead.utm_medium} / {lead.utm_campaign}</p></div>}
           <div><p className="font-body text-xs text-xert-concrete/40 uppercase">Submitted</p><p className="font-body text-sm text-xert-concrete/60">{new Date(lead.created_at).toLocaleString('en-AU')}</p></div>
         </div>
+
+        {table === 'member_interest' && <FitboxLeadHandoff lead={lead} />}
 
         {/* Status update */}
         <div className="mb-4">

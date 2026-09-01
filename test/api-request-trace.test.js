@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { apiErrorMessage } from '../src/lib/apiError.js';
-import { createRequestTrace } from '../api/http.js';
+import { createRequestTrace } from '../src/lib/serverHttp.js';
 
 const REQUEST_ID = '01234567-89ab-4def-8123-456789abcdef';
 

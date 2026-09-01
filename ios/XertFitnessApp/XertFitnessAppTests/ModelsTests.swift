@@ -38,6 +38,50 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(published.sessionPackCheckoutEnabled)
     }
 
+    func testPlatformProviderDefaultsToNativeForLegacySettings() throws {
+        let settings = try JSONDecoder().decode(
+            PublicPlatformSettings.self,
+            from: Data(#"{"bookings_enabled":true,"payments_enabled":true,"prices_coming_soon":false}"#.utf8)
+        )
+
+        XCTAssertEqual(settings.providerResolution.provider, .native)
+        XCTAssertTrue(settings.providerResolution.capabilities.nativeBookingMutations)
+        XCTAssertTrue(settings.sessionPackCheckoutEnabled)
+    }
+
+    func testFitBoxProviderDisablesNativeBookingAndCheckout() throws {
+        let settings = PublicPlatformSettings(
+            bookings_enabled: true,
+            payments_enabled: true,
+            prices_coming_soon: false,
+            fitbox_enabled: true,
+            fitbox_booking_url: "https://example.fitbox.com.au/member/book"
+        )
+
+        XCTAssertEqual(settings.providerResolution.provider, .fitBox)
+        XCTAssertFalse(settings.providerResolution.isBlocked)
+        XCTAssertEqual(settings.providerResolution.portalURL?.host, "example.fitbox.com.au")
+        XCTAssertFalse(settings.providerResolution.capabilities.nativeBookingMutations)
+        XCTAssertFalse(settings.providerResolution.capabilities.nativePackCheckout)
+        XCTAssertFalse(settings.sessionPackCheckoutEnabled)
+    }
+
+    func testInvalidFitBoxLinkFailsClosedWithoutNativeFallback() {
+        for link in [nil, "", "https://", "http://fitbox.example.com", "https://user:secret@fitbox.example.com"] {
+            let settings = PublicPlatformSettings(
+                bookings_enabled: true,
+                payments_enabled: true,
+                prices_coming_soon: false,
+                fitbox_enabled: true,
+                fitbox_booking_url: link
+            )
+
+            XCTAssertEqual(settings.providerResolution.provider, .fitBox)
+            XCTAssertTrue(settings.providerResolution.isBlocked)
+            XCTAssertFalse(settings.sessionPackCheckoutEnabled)
+        }
+    }
+
     func testPublicPricingVisibilityControlsLabelsAndCheckoutTogether() {
         let product = Product(
             slug: "starter-pack",
@@ -1768,6 +1812,8 @@ final class ModelsTests: XCTestCase {
             bookings_enabled: true,
             payments_enabled: true,
             prices_coming_soon: false,
+            fitbox_enabled: false,
+            fitbox_booking_url: nil,
             announcement_banner_text: "Training as scheduled",
             announcement_banner_enabled: true,
             updated_at: "2026-07-27T08:00:00Z"
@@ -6026,6 +6072,8 @@ final class ModelsTests: XCTestCase {
             bookings_enabled: false,
             payments_enabled: false,
             prices_coming_soon: true,
+            fitbox_enabled: false,
+            fitbox_booking_url: nil,
             announcement_banner_text: "Launch training starts soon.",
             announcement_banner_enabled: true,
             updated_at: "2026-07-27T01:00:00Z"

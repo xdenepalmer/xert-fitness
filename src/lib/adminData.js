@@ -22,6 +22,7 @@ import { normalizePTRequestFilters } from './ptRequestAnalytics';
 import { collectAdminBatches, collectAdminPages } from './adminPagination.js';
 import { adminAuditRangeStart } from './adminAudit.js';
 import { apiErrorMessage } from './apiError.js';
+import { providerOperationsHealth } from './platformProvider.js';
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,33 @@ export async function updateLeadStatuses(table, ids, status) {
   if (Number(data) !== mutation.ids.length) {
     throw new Error('Bulk lead update was not fully acknowledged. Refresh and try again.');
   }
+}
+
+export async function getFitboxLeadState(leadId) {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch(`/api/admin-fitbox-integration?lead_id=${encodeURIComponent(String(leadId || ''))}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox status could not be loaded.'));
+  return body;
+}
+
+export async function sendLeadToFitbox(leadId) {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-fitbox-integration', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'register_prospect', lead_id: String(leadId || '') }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox handoff could not be started.'));
+  return body;
 }
 
 export async function updateLegacyBookingNotes(id, adminNotes) {
@@ -511,6 +539,9 @@ export async function activateSessionPackPayments(settings, baseline) {
   }
   if (settings?.payments_enabled !== true) {
     throw new Error('Payment activation requires an explicit enabled setting.');
+  }
+  if (settings?.fitbox_enabled === true) {
+    throw new Error('XERT payments cannot be enabled while FitBox is selected.');
   }
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
@@ -1582,6 +1613,17 @@ async function getPushConfigurationHealth() {
   return body;
 }
 
+async function getFitboxIntegrationHealth() {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-fitbox-integration?health=1', {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox integration health could not be loaded.'));
+  return body;
+}
+
 export async function sendOwnerPushSmokeTest() {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
@@ -1600,6 +1642,7 @@ export async function sendOwnerPushSmokeTest() {
 
 export async function getOperationsHealth() {
   const nowIso = new Date().toISOString();
+  const platformSettings = getSoftLaunchSettings();
 
   return Promise.all([
     healthCheck('supabase', 'Supabase connection', async () => {
@@ -1625,7 +1668,7 @@ export async function getOperationsHealth() {
     }),
 
     healthCheck('platform-controls', 'Member launch switches', async () => {
-      const settings = await getSoftLaunchSettings();
+      const settings = await platformSettings;
       const bookingsEnabled = settings.bookings_enabled === true;
       const paymentsEnabled = settings.payments_enabled === true;
       if (!bookingsEnabled && !paymentsEnabled) {
@@ -1707,6 +1750,41 @@ export async function getOperationsHealth() {
         count: result.active_product_count,
         detail: `${String(result.mode || 'unknown').toUpperCase()} mode: payments ${paymentState}; ${activationProof}. ${result.stripe_price_count} Stripe-linked pack${result.stripe_price_count === 1 ? '' : 's'}, webhook and payouts verified.`,
         incidents: result.webhook_delivery?.incidents || []
+      };
+    }),
+
+    healthCheck('booking-provider', 'Booking provider', async () => (
+      providerOperationsHealth(await platformSettings)
+    )),
+
+    healthCheck('fitbox-integration', 'FitBox prospect handoff', async () => {
+      const result = await getFitboxIntegrationHealth();
+      const completed = Number(result.jobs_24h?.completed || 0);
+      const failed = Number(result.jobs_24h?.failed || 0);
+      const active = Number(result.active || 0);
+      const stale = Number(result.stale || 0);
+      const events = Number(result.events_24h || 0);
+      const reconciliation = Number(result.reconciliation || 0);
+      if (!result.environment?.ready) {
+        return {
+          status: 'attention',
+          detail: `FitBox Zapier handoff is not configured${result.environment?.missing?.length ? `: ${result.environment.missing.join(', ')}` : '.'}`,
+          action: 'Complete the Zapier catch-hook configuration in Vercel, redeploy, then refresh.',
+        };
+      }
+      if (failed > 0 || stale > 0) {
+        return {
+          status: 'attention',
+          count: failed + stale,
+          detail: `${completed} completed, ${failed} failed and ${stale} stale handoff${failed + stale === 1 ? '' : 's'}; ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
+          action: 'Open Member Leads, review the affected lead and retry only after correcting its details or provider issue.',
+        };
+      }
+      return {
+        count: reconciliation || completed,
+        status: reconciliation > 0 ? 'attention' : 'ok',
+        detail: `Zapier bridge is ready; ${completed} prospect handoff${completed === 1 ? '' : 's'} completed, ${active} in progress, ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
+        action: reconciliation > 0 ? 'Review the FitBox reconciliation queue before treating provider changes as authoritative.' : null,
       };
     }),
 

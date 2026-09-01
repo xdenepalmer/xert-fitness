@@ -1,4 +1,4 @@
-import { sendJson } from './http.js';
+import { sendJson } from '../src/lib/serverHttp.js';
 import { inspectAPNsEnvironment } from './apns.js';
 
 export function inspectPushEnvironment(environment = {}) {

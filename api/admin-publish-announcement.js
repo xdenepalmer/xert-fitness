@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { requestHeader, requestJson, sendJson } from '../src/lib/serverHttp.js';
 import { sendMemberAnnouncementPushes } from './apns.js';
 
 export const config = { maxDuration: 60 };

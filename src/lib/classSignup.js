@@ -53,10 +53,21 @@ export function classSignupState({
   fitbox = null,
   now = new Date(),
 } = {}) {
+  if (fitbox?.blocked) {
+    return {
+      kind: 'provider-unavailable',
+      label: 'Booking temporarily unavailable',
+      detail: fitbox.blockedReason || 'The member portal needs attention. Please try again shortly.',
+      spotsLeft: null,
+      takesSpot: false,
+      actionable: false,
+    };
+  }
+
   if (fitbox?.active) {
     return {
       kind: 'fitbox',
-      label: 'Book on the XERT member portal',
+      label: 'Continue to FitBox booking',
       detail: null,
       spotsLeft: null,
       takesSpot: false,

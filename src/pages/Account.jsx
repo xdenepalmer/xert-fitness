@@ -20,6 +20,8 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { deleteMyAccount } from '@/lib/accountData';
 import { authPathWithNext } from '@/lib/authRedirect';
+import { getSoftLaunchSettings } from '@/lib/adminData';
+import { PLATFORM_PROVIDERS, resolvePlatformProvider } from '@/lib/platformProvider';
 
 function formatDateTime(iso) {
   if (!iso) return '';
@@ -96,6 +98,7 @@ export default function Account() {
   );
   const [cancellingId, setCancellingId] = useState(null);
   const [cancellationTarget, setCancellationTarget] = useState(null);
+  const [provider, setProvider] = useState(() => resolvePlatformProvider(null));
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
   const [savingProfile, setSavingProfile] = useState(false);
@@ -202,6 +205,9 @@ export default function Account() {
     setLoading(true);
     setLoadError('');
     setAccountSourceErrors({});
+    // Never permit a cancellation using a provider selection from an older
+    // settings snapshot while the current row is still being refreshed.
+    setProvider(resolvePlatformProvider(null));
     try {
       const results = await Promise.allSettled([
         getMyCredits(),
@@ -210,6 +216,7 @@ export default function Account() {
         getMyEventGoals(),
         getMyPrivateSessionRequests(),
         getMemberAnnouncements(),
+        getSoftLaunchSettings(),
       ]);
       if (accountRequestID !== accountRefreshRequestIDRef.current) return;
 
@@ -220,13 +227,15 @@ export default function Account() {
         { name: 'eventGoals', apply: value => setEventGoals(value) },
         { name: 'privateSessions', apply: value => setPrivateSessionRequests(value) },
         { name: 'announcements', apply: value => setAnnouncements(value) },
+        { name: 'provider', apply: value => setProvider(resolvePlatformProvider(value)), fail: () => setProvider(resolvePlatformProvider(null)) },
       ];
       const nextErrors = /** @type {Record<string, string>} */ ({});
       results.forEach((result, index) => {
-        const { name: source, apply } = sources[index];
+        const { name: source, apply, fail } = sources[index];
         if (result.status === 'fulfilled') {
           apply(result.value);
         } else {
+          fail?.();
           nextErrors[source] = result.reason?.message || `${source} could not be refreshed.`;
         }
       });
@@ -239,6 +248,7 @@ export default function Account() {
         eventGoals: 'training goals',
         privateSessions: 'PT requests',
         announcements: 'notices',
+        provider: 'booking provider',
       })[source]);
       setLoadError(failedLabels.length > 0
         ? `Some account details could not be refreshed: ${failedLabels.join(', ')}.`
@@ -389,6 +399,14 @@ export default function Account() {
   }, [purchaseRefreshKey, purchaseSuccess, searchParams, session, setSearchParams, user?.id]);
 
   const handleCancel = async booking => {
+    if (!provider.capabilities.canCancelInternally) {
+      toast({
+        title: 'Manage this booking in FitBox',
+        description: provider.blockedReason || 'XERT booking changes are paused while FitBox is selected.',
+        variant: provider.blocked ? 'destructive' : undefined,
+      });
+      return;
+    }
     setCancellingId(booking.booking_id);
     try {
       const receipt = await cancelBooking(booking.booking_id);
@@ -407,6 +425,9 @@ export default function Account() {
       setCancellingId(null);
     }
   };
+
+  const providerAllowsNativeCancellation = provider.provider === PLATFORM_PROVIDERS.NATIVE
+    && provider.capabilities.canCancelInternally;
 
   const confirmCancellation = () => {
     if (!cancellationTarget) return;
@@ -1239,18 +1260,27 @@ export default function Account() {
                         : 'Your credit is reserved while XERT reviews this request.'}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setCancellationTarget(b)}
-                    disabled={cancellingId === b.booking_id}
-                    className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
-                    style={{
-                      borderColor: 'rgba(123,167,188,0.3)',
-                      color: 'rgba(209,221,230,0.6)'
-                    }}
-                  >
-                    {cancellingId === b.booking_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                    {b.status === 'waitlisted' ? 'Leave waitlist' : 'Cancel request'}
-                  </button>
+                  {providerAllowsNativeCancellation ? (
+                    <button
+                      onClick={() => setCancellationTarget(b)}
+                      disabled={cancellingId === b.booking_id}
+                      className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
+                      style={{
+                        borderColor: 'rgba(123,167,188,0.3)',
+                        color: 'rgba(209,221,230,0.6)'
+                      }}
+                    >
+                      {cancellingId === b.booking_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                      {b.status === 'waitlisted' ? 'Leave waitlist' : 'Cancel request'}
+                    </button>
+                  ) : provider.portalUrl ? (
+                    <a href={provider.portalUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex min-h-11 items-center gap-1.5 border border-xert-steel/30 px-3 font-body text-xs uppercase tracking-wider text-xert-steel">
+                      <ExternalLink className="h-3.5 w-3.5" /> Manage in FitBox
+                    </a>
+                  ) : (
+                    <span className="font-body text-xs text-xert-concrete/50">Booking changes paused</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -1292,18 +1322,27 @@ export default function Account() {
                       {b.coach_name ? ` · Coach ${b.coach_name}` : ''}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setCancellationTarget(b)}
-                    disabled={cancellingId === b.booking_id}
-                    className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
-                    style={{
-                      borderColor: 'rgba(123,167,188,0.3)',
-                      color: 'rgba(209,221,230,0.6)'
-                    }}
-                  >
-                    {cancellingId === b.booking_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                    Cancel
-                  </button>
+                  {providerAllowsNativeCancellation ? (
+                    <button
+                      onClick={() => setCancellationTarget(b)}
+                      disabled={cancellingId === b.booking_id}
+                      className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
+                      style={{
+                        borderColor: 'rgba(123,167,188,0.3)',
+                        color: 'rgba(209,221,230,0.6)'
+                      }}
+                    >
+                      {cancellingId === b.booking_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                      Cancel
+                    </button>
+                  ) : provider.portalUrl ? (
+                    <a href={provider.portalUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex min-h-11 items-center gap-1.5 border border-xert-steel/30 px-3 font-body text-xs uppercase tracking-wider text-xert-steel">
+                      <ExternalLink className="h-3.5 w-3.5" /> Manage in FitBox
+                    </a>
+                  ) : (
+                    <span className="font-body text-xs text-xert-concrete/50">Booking changes paused</span>
+                  )}
                 </div>
               ))}
               <p className="font-body text-xs flex items-center gap-1.5" style={{ color: 'rgba(209,221,230,0.4)' }}>

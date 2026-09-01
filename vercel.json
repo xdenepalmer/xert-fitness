@@ -38,6 +38,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/fitbox-prospect-result", "destination": "/api/admin-fitbox-integration?service=callback" },
+    { "source": "/api/fitbox-events", "destination": "/api/admin-fitbox-integration?service=event" },
     { "source": "/((?!api/|\\.well-known/).*)", "destination": "/index.html" }
   ]
 }

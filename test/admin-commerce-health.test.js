@@ -55,6 +55,7 @@ const validActivationBody = {
     countdown_enabled: true,
     bookings_enabled: true,
     payments_enabled: true,
+    fitbox_enabled: false,
     announcement_banner_text: '  Packs are live  ',
     announcement_banner_enabled: true,
   },
@@ -78,11 +79,24 @@ const validProductActivationBody = {
   },
 };
 
-function paymentActivationAdmin(result) {
+function paymentActivationAdmin(result, settings = {
+  id: validActivationBody.settings_id,
+  updated_at: validActivationBody.expected_updated_at,
+  fitbox_enabled: false,
+}) {
   const calls = [];
   return {
     calls,
     admin: {
+      from(table) {
+        assert.equal(table, 'admin_settings');
+        const query = {
+          select(columns) { calls.push(['settings', columns]); return query; },
+          eq() { return query; },
+          async maybeSingle() { return { data: settings, error: null }; },
+        };
+        return query;
+      },
       async rpc(name, body) {
         calls.push(['rpc', name, body]);
         return result;
@@ -252,6 +266,13 @@ test('payment activation accepts only a confirmed bounded platform snapshot', ()
     }),
     /BOOKINGS_REQUIRED_FOR_PAYMENT_ACTIVATION/,
   );
+  assert.throws(
+    () => normalizePaymentActivationRequest({
+      ...validActivationBody,
+      settings: { ...validActivationBody.settings, fitbox_enabled: true },
+    }),
+    /FITBOX_PROVIDER_CONFLICT/,
+  );
   for (const settings of [
     { ...validActivationBody.settings, payments_enabled: false },
     { ...validActivationBody.settings, bookings_enabled: 'true' },
@@ -395,6 +416,7 @@ test('payment activation compare-and-sets the paused settings version', async ()
   const { admin, calls } = paymentActivationAdmin({ data: [updated], error: null });
   assert.deepEqual(await activateSessionPackPayments(admin, actorId, activation), updated);
   assert.deepEqual(calls, [
+    ['settings', 'id,updated_at,fitbox_enabled'],
     ['rpc', 'admin_activate_session_pack_payments', {
       p_actor_id: actorId,
       p_settings_id: activation.settingsId,
@@ -409,6 +431,20 @@ test('payment activation compare-and-sets the paused settings version', async ()
 
   const stale = paymentActivationAdmin({ data: null, error: null });
   await assert.rejects(activateSessionPackPayments(stale.admin, actorId, activation), /PAYMENT_ACTIVATION_STALE/);
+
+  const fitBox = paymentActivationAdmin(
+    { data: [updated], error: null },
+    {
+      id: activation.settingsId,
+      updated_at: activation.expectedUpdatedAt,
+      fitbox_enabled: true,
+    },
+  );
+  await assert.rejects(
+    activateSessionPackPayments(fitBox.admin, actorId, activation),
+    /FITBOX_PROVIDER_CONFLICT/,
+  );
+  assert.deepEqual(fitBox.calls, [['settings', 'id,updated_at,fitbox_enabled']]);
 });
 
 test('commerce readiness cannot pass without the guarded activation capability', async () => {
@@ -1023,7 +1059,7 @@ test('admin operations health calls the authenticated commerce endpoint', async 
 
 test('commerce health responses are explicitly private and non-cacheable', async () => {
   const source = await readFile(new URL('../api/admin-commerce-health.js', import.meta.url), 'utf8');
-  const httpSource = await readFile(new URL('../api/http.js', import.meta.url), 'utf8');
+  const httpSource = await readFile(new URL('../src/lib/serverHttp.js', import.meta.url), 'utf8');
   assert.match(httpSource, /'Cache-Control', 'private, no-store, max-age=0'/);
   assert.match(source, /profile\?\.role !== 'admin'/);
   assert.match(source, /environmentIssues\(environment\)/);

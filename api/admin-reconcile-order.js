@@ -3,7 +3,7 @@ import {
   checkoutFulfillmentForSession,
   persistCheckoutFulfillment,
 } from './stripe-webhook.js';
-import { createRequestTrace, requestHeader, requestJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from '../src/lib/serverHttp.js';
 import { inspectCommerceRuntimeEnvironment } from '../src/lib/commerceRuntime.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 

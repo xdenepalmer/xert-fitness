@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { requestHeader, requestJson, sendJson } from './http.js';
+import { requestHeader, requestJson, sendJson } from '../src/lib/serverHttp.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;

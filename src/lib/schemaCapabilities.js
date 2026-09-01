@@ -52,6 +52,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   owner_stripe_price_provisioning: 'Apply supabase/migrations/20260722010000_owner_stripe_price_provisioning.sql in Supabase.',
   forms_surveys_builder: 'Apply supabase/migrations/20260811010000_xert_forms_surveys.sql in Supabase.',
   form_response_snapshots: 'Apply the 20260813010000 and 20260813020000 form response migrations in Supabase.',
+  fitbox_zapier_bridge: 'Apply supabase/migrations/20260902010000_fitbox_zapier_bridge.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

@@ -23,6 +23,7 @@ final class XertStore: ObservableObject {
     @Published private(set) var bookingAvailabilityLoaded = false
     @Published private(set) var sessionPackPricesComingSoon = true
     @Published private(set) var sessionPackPaymentsEnabled = false
+    @Published private(set) var platformProvider = XertPlatformProviderResolution.unavailable
     @Published private(set) var paymentAvailabilityLoaded = false
     @Published var isLoading = false
     @Published var errorMessage: String?
@@ -198,6 +199,9 @@ final class XertStore: ObservableObject {
         isLoading = true
         errorMessage = nil
         unavailableDataSources = []
+        // Invalidate the old provider selection while the singleton setting is
+        // refreshed so no booking, cancellation or checkout can race a switch.
+        platformProvider = .unavailable
         defer {
             if dataRefreshVersion.isCurrent(refreshVersion) {
                 isLoading = false
@@ -246,13 +250,20 @@ final class XertStore: ObservableObject {
         do {
             let loadedSettings = try await platformSettingsRequest
             guard canApplyRefresh(refreshVersion) else { return }
-            memberBookingsEnabled = loadedSettings?.bookings_enabled == true
+            let provider = loadedSettings?.providerResolution ?? .unavailable
+            platformProvider = provider
+            memberBookingsEnabled = provider.provider == .native
+                && provider.capabilities.nativeBookingMutations
+                && loadedSettings?.bookings_enabled == true
             bookingAvailabilityLoaded = true
             sessionPackPricesComingSoon = loadedSettings?.prices_coming_soon ?? true
-            sessionPackPaymentsEnabled = loadedSettings?.sessionPackCheckoutEnabled == true
+            sessionPackPaymentsEnabled = provider.provider == .native
+                && provider.capabilities.nativePackCheckout
+                && loadedSettings?.sessionPackCheckoutEnabled == true
             paymentAvailabilityLoaded = true
         } catch {
             guard canApplyRefresh(refreshVersion) else { return }
+            platformProvider = .unavailable
             memberBookingsEnabled = false
             bookingAvailabilityLoaded = true
             sessionPackPricesComingSoon = true
@@ -644,6 +655,13 @@ final class XertStore: ObservableObject {
     }
 
     func cancel(_ booking: BookingItem) async -> MemberBookingCancellationReceipt? {
+        guard platformProvider.provider == .native,
+              platformProvider.capabilities.nativeBookingMutations else {
+            errorMessage = platformProvider.blockedReason
+                ?? "Manage this booking in FitBox while FitBox is the selected booking provider."
+            XertHaptics.play(.warning)
+            return nil
+        }
         guard !isUsingStaleMemberData, !unavailableDataSources.contains(.bookings) else {
             errorMessage = "Refresh your bookings before cancelling so XERT can verify the current class status."
             XertHaptics.play(.warning)
@@ -767,6 +785,11 @@ final class XertStore: ObservableObject {
     }
 
     private func memberBookingControlError() -> String? {
+        guard platformProvider.provider == .native,
+              platformProvider.capabilities.nativeBookingMutations else {
+            return platformProvider.blockedReason
+                ?? "Continue in FitBox to book or join a waitlist."
+        }
         guard !isUsingStaleMemberData, !unavailableDataSources.contains(.bookings) else {
             return "Refresh your bookings before requesting a place so XERT can verify duplicates and time conflicts."
         }
@@ -1073,6 +1096,13 @@ final class XertStore: ObservableObject {
         activationSessionID: UUID? = nil
     ) async -> URL? {
         let memberVersion = memberStateVersion.snapshot
+        guard platformProvider.provider == .native,
+              platformProvider.capabilities.nativePackCheckout else {
+            errorMessage = platformProvider.blockedReason
+                ?? "Session packs are managed in FitBox while FitBox is the selected booking provider."
+            XertHaptics.play(.warning)
+            return nil
+        }
         guard !sessionPackPricesComingSoon else {
             errorMessage = "Session pack pricing is coming soon. Checkout stays closed until XERT publishes the final prices."
             XertHaptics.play(.warning)

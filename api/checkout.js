@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
-import { createRequestTrace, requestHeader, requestJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from '../src/lib/serverHttp.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,

@@ -150,7 +150,7 @@ final class XertAPI {
         let settings: [PublicPlatformSettings] = try await restRequest(
             path: "/rest/v1/admin_settings",
             queryItems: [
-                URLQueryItem(name: "select", value: "bookings_enabled,payments_enabled,prices_coming_soon"),
+                URLQueryItem(name: "select", value: "bookings_enabled,payments_enabled,prices_coming_soon,fitbox_enabled,fitbox_booking_url"),
                 URLQueryItem(name: "limit", value: "2")
             ]
         )
@@ -1104,7 +1104,7 @@ final class XertAPI {
         let settings: [AdminPlatformSettings] = try await restRequest(
             path: "/rest/v1/admin_settings",
             queryItems: [
-                URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,payments_enabled,prices_coming_soon,announcement_banner_text,announcement_banner_enabled,updated_at"),
+                URLQueryItem(name: "select", value: "id,target_launch_date,countdown_enabled,bookings_enabled,payments_enabled,prices_coming_soon,fitbox_enabled,fitbox_booking_url,announcement_banner_text,announcement_banner_enabled,updated_at"),
                 URLQueryItem(name: "limit", value: "2")
             ],
             auth: auth
@@ -1741,6 +1741,36 @@ final class XertAPI {
 
     func adminCommerceHealth(session auth: AuthSession) async throws -> AdminCommerceHealth {
         try await vercelGet(path: "/api/admin-commerce-health", auth: auth)
+    }
+
+    func adminFitboxLeadState(
+        session auth: AuthSession,
+        leadID: AdminLeadIdentifier
+    ) async throws -> AdminFitboxLeadState {
+        try await vercelGet(
+            path: "/api/admin-fitbox-integration",
+            queryItems: [URLQueryItem(name: "lead_id", value: leadID.value)],
+            auth: auth
+        )
+    }
+
+    func adminFitboxBridgeHealth(session auth: AuthSession) async throws -> AdminFitboxBridgeHealth {
+        try await vercelGet(
+            path: "/api/admin-fitbox-integration",
+            queryItems: [URLQueryItem(name: "health", value: "1")],
+            auth: auth
+        )
+    }
+
+    func adminSendLeadToFitbox(
+        session auth: AuthSession,
+        leadID: AdminLeadIdentifier
+    ) async throws -> AdminFitboxMutationResponse {
+        try await vercelRequest(
+            path: "/api/admin-fitbox-integration",
+            body: AdminFitboxProspectRequest(action: "register_prospect", lead_id: leadID.value),
+            auth: auth
+        )
     }
 
     func adminResolveStripeReview(
@@ -2424,6 +2454,15 @@ final class XertAPI {
         guard settings.target_launch_date.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else {
             throw APIError(message: "Enter the launch date as YYYY-MM-DD.")
         }
+        if settings.fitbox_enabled {
+            guard settings.providerResolution.provider == .fitBox,
+                  !settings.providerResolution.isBlocked else {
+                throw APIError(message: "Add a secure HTTPS FitBox booking link before selecting FitBox.")
+            }
+            guard !settings.payments_enabled else {
+                throw APIError(message: "XERT session-pack payments must be paused while FitBox is selected.")
+            }
+        }
 
         var request = try request(
             baseURL: AppConfig.supabaseURL,
@@ -2444,6 +2483,8 @@ final class XertAPI {
             bookings_enabled: settings.bookings_enabled,
             payments_enabled: settings.payments_enabled,
             prices_coming_soon: settings.prices_coming_soon,
+            fitbox_enabled: settings.fitbox_enabled,
+            fitbox_booking_url: settings.fitbox_booking_url?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             announcement_banner_text: banner.isEmpty ? nil : banner,
             announcement_banner_enabled: settings.announcement_banner_enabled,
             updated_at: ISO8601DateFormatter.standard.string(from: Date())
@@ -2497,6 +2538,9 @@ final class XertAPI {
         guard settings.payments_enabled else {
             throw APIError(message: "Payment activation requires an enabled payment draft.")
         }
+        guard !settings.fitbox_enabled else {
+            throw APIError(message: "Stripe activation is unavailable while FitBox is the selected booking provider.")
+        }
         let banner = settings.announcementText.trimmingCharacters(in: .whitespacesAndNewlines)
         if settings.announcement_banner_enabled && banner.isEmpty {
             throw APIError(message: "Add announcement text before enabling the banner.")
@@ -2517,6 +2561,7 @@ final class XertAPI {
                     countdown_enabled: settings.countdown_enabled,
                     bookings_enabled: settings.bookings_enabled,
                     payments_enabled: true,
+                    fitbox_enabled: settings.fitbox_enabled,
                     announcement_banner_text: banner.isEmpty ? nil : banner,
                     announcement_banner_enabled: settings.announcement_banner_enabled
                 )
@@ -3096,8 +3141,12 @@ final class XertAPI {
         return try await decode(request)
     }
 
-    private func vercelGet<T: Decodable>(path: String, auth: AuthSession) async throws -> T {
-        var request = try request(baseURL: AppConfig.vercelBaseURL, path: path)
+    private func vercelGet<T: Decodable>(
+        path: String,
+        queryItems: [URLQueryItem] = [],
+        auth: AuthSession
+    ) async throws -> T {
+        var request = try request(baseURL: AppConfig.vercelBaseURL, path: path, queryItems: queryItems)
         request.setValue("Bearer \(auth.access_token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return try await decode(request)
@@ -3382,6 +3431,10 @@ private struct AdminLeadBulkUpdateRequest: Encodable {
     let p_lead_ids: [String]
     let p_status: String
 }
+private struct AdminFitboxProspectRequest: Encodable {
+    let action: String
+    let lead_id: String
+}
 private struct AdminMemberNoteRequest: Encodable {
     let p_user_id: UUID
     let p_category: String
@@ -3393,6 +3446,8 @@ private struct AdminSettingsUpdate: Encodable {
     let bookings_enabled: Bool
     let payments_enabled: Bool
     let prices_coming_soon: Bool
+    let fitbox_enabled: Bool
+    let fitbox_booking_url: String?
     let announcement_banner_text: String?
     let announcement_banner_enabled: Bool
     let updated_at: String
@@ -3407,6 +3462,7 @@ private struct AdminPaymentActivationSettings: Encodable {
     let countdown_enabled: Bool
     let bookings_enabled: Bool
     let payments_enabled: Bool
+    let fitbox_enabled: Bool
     let announcement_banner_text: String?
     let announcement_banner_enabled: Bool
 }

@@ -3386,6 +3386,7 @@ private struct AdminOwnerTaskSheet: View {
     let session: AuthSession
     let task: XertOwnerTask
     @State private var confirmingDiscard = false
+    @State private var confirmingFitboxSend = false
 
     var body: some View {
         NavigationStack {
@@ -11396,6 +11397,10 @@ private struct AdminLeadDetailView: View {
                 }
             }
 
+            if pipeline == .members {
+                fitboxSection
+            }
+
             Section("Application") {
                 optionalRow("Business", lead.business_name)
                 optionalRow("Suburb", lead.suburb_town)
@@ -11480,6 +11485,68 @@ private struct AdminLeadDetailView: View {
         } message: {
             Text("The unsaved status or notes for \(lead.displayName) will be lost.")
         }
+        .confirmationDialog(
+            "Create FitBox prospect?",
+            isPresented: $confirmingFitboxSend,
+            titleVisibility: .visible
+        ) {
+            Button("Send contact details to FitBox") {
+                Task { _ = await admin.sendLeadToFitbox(session: session, lead: lead) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("XERT will send \(lead.displayName), \(lead.email ?? "missing email") and \(lead.phone ?? "missing phone") through Zapier to FitBox. This creates a prospect only—not a membership, subscription or charge.")
+        }
+    }
+
+    @ViewBuilder
+    private var fitboxSection: some View {
+        let state = admin.fitboxLeadStates[lead.id]
+        let job = state?.current_job
+        let isLoading = admin.loadingFitboxLeadIDs.contains(lead.id)
+        let isSending = admin.sendingFitboxLeadIDs.contains(lead.id)
+        Section("FitBox") {
+            if isLoading && state == nil {
+                HStack { ProgressView(); Text("Checking FitBox link…") }
+            } else if let link = state?.link {
+                Label("Linked to FitBox user \(link.fitbox_user_id)", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(Color.green)
+                detailRow("Provider status", link.fitbox_status ?? "prospect")
+                detailRow("Last verified", link.last_verified_at.formatted(date: .abbreviated, time: .shortened))
+            } else if job?.needsProviderReview == true {
+                Label("Review in FitBox before retrying", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.orange)
+                Text("Zapier may already have created this prospect. Search FitBox for the email and reconcile it before sending again.")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.7))
+            } else if ["queued", "dispatched"].contains(job?.status ?? "") {
+                HStack { ProgressView(); Text("Prospect handoff in progress") }
+            } else if state?.ready == false {
+                Label(state?.configuration_issue ?? "FitBox is not configured.", systemImage: "wrench.and.screwdriver.fill")
+                    .foregroundStyle(Color.orange)
+            } else {
+                Button {
+                    confirmingFitboxSend = true
+                } label: {
+                    Label(job?.last_error_code == "ZAPIER_DISPATCH_FAILED" ? "Retry FitBox handoff" : "Send to FitBox", systemImage: "paperplane.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.xertSteel)
+                .foregroundStyle(Color.xertNavy)
+                .disabled(isSending || !mutationAllowed)
+            }
+            if let error = admin.fitboxLeadErrors[lead.id] {
+                Text(error).font(.caption).foregroundStyle(Color.red)
+            }
+            Button {
+                Task { await admin.loadFitboxLeadState(session: session, leadID: lead.id, force: true) }
+            } label: {
+                Label(isLoading ? "Refreshing…" : "Refresh FitBox status", systemImage: "arrow.clockwise")
+            }
+            .disabled(isLoading || isSending)
+        }
+        .task { await admin.loadFitboxLeadState(session: session, leadID: lead.id) }
     }
 
     private var leadSaveBar: some View {
@@ -12533,6 +12600,39 @@ private struct AdminPlatformView: View {
                                 .foregroundStyle(Color.xertSteel)
                         }
                     }
+                    Section("Booking provider") {
+                        Toggle("Use FitBox for memberships & bookings", isOn: fitBoxEnabledBinding)
+                            .disabled(!platformMutationAvailable)
+                        Text("When FitBox is selected, website and iOS booking, membership and purchase actions hand off to FitBox. XERT's internal booking and Stripe checkout stay dormant.")
+                            .font(.caption)
+                            .foregroundStyle(Color.xertPale.opacity(0.62))
+                            .fixedSize(horizontal: false, vertical: true)
+                        if draft?.fitbox_enabled == true {
+                            TextField("https://secure-fitbox-booking-link", text: fitBoxURLBinding)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .keyboardType(.URL)
+                                .disabled(!platformMutationAvailable)
+                                .accessibilityLabel("FitBox secure booking link")
+                            if draft?.providerResolution.isBlocked == true {
+                                Label(
+                                    "Add a credential-free HTTPS FitBox link before saving. Native booking and checkout will not be used as a fallback.",
+                                    systemImage: "exclamationmark.triangle.fill"
+                                )
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Label("FitBox handoff ready", systemImage: "checkmark.shield.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color.green)
+                            }
+                        } else {
+                            Label("XERT native booking selected", systemImage: "checkmark.shield")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.xertSteel)
+                        }
+                    }
                     Section("Member app experience") {
                         VStack(alignment: .leading, spacing: 8) {
                             Label("XERT member companion", systemImage: "iphone.gen3")
@@ -12547,21 +12647,33 @@ private struct AdminPlatformView: View {
 
                         memberCapabilityRow(
                             title: "Class booking",
-                            value: draft?.bookings_enabled == true ? "Book & waitlist" : "Interest only",
+                            value: draft?.fitbox_enabled == true
+                                ? (draft?.providerResolution.isBlocked == true ? "FitBox needs attention" : "Continue to FitBox")
+                                : (draft?.bookings_enabled == true ? "Book & waitlist" : "Interest only"),
                             icon: "calendar.badge.plus",
-                            color: draft?.bookings_enabled == true ? .green : Color.xertSteel
+                            color: draft?.providerResolution.isBlocked == true
+                                ? .orange
+                                : (draft?.bookings_enabled == true || draft?.fitbox_enabled == true ? .green : Color.xertSteel)
                         )
                         memberCapabilityRow(
                             title: "Booking protection",
-                            value: bookingGuardReady.map { $0 ? "Verified" : "Migration required" } ?? "Unavailable",
+                            value: draft?.fitbox_enabled == true
+                                ? "FitBox handoff"
+                                : (bookingGuardReady.map { $0 ? "Verified" : "Migration required" } ?? "Unavailable"),
                             icon: "checkmark.shield",
-                            color: bookingGuardReady == true ? .green : .orange
+                            color: draft?.fitbox_enabled == true
+                                ? Color.xertSteel
+                                : (bookingGuardReady == true ? .green : .orange)
                         )
                         memberCapabilityRow(
                             title: "Session packs",
-                            value: draft?.payments_enabled == true ? "Checkout live" : "Browse only",
+                            value: draft?.fitbox_enabled == true
+                                ? "Managed in FitBox"
+                                : (draft?.payments_enabled == true ? "Checkout live" : "Browse only"),
                             icon: "ticket",
-                            color: draft?.payments_enabled == true ? .green : Color.xertSteel
+                            color: draft?.fitbox_enabled == true
+                                ? .green
+                                : (draft?.payments_enabled == true ? .green : Color.xertSteel)
                         )
                         memberCapabilityRow(
                             title: "Member notices",
@@ -12579,7 +12691,7 @@ private struct AdminPlatformView: View {
                     }
                     Section("Pack sales") {
                         Toggle("Show 'Coming soon' instead of prices", isOn: settingBinding(\.prices_coming_soon))
-                            .disabled(!platformMutationAvailable)
+                            .disabled(!platformMutationAvailable || draft?.fitbox_enabled == true)
                         Text("Turn this off when Byron is ready for members to see the live pack prices on web and iOS.")
                             .font(.caption)
                             .foregroundStyle(Color.xertPale.opacity(0.6))
@@ -12608,20 +12720,29 @@ private struct AdminPlatformView: View {
                     }
                     Section("Member booking & purchases") {
                         Toggle("Bookings enabled", isOn: bookingsEnabledBinding)
+                            .disabled(!platformMutationAvailable || draft?.fitbox_enabled == true)
                         Text("Controls both website and iOS class actions. Turning bookings off also pauses checkout.")
                             .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
                         Toggle("Session pack payments", isOn: settingBinding(\.payments_enabled))
-                            .disabled(draft?.bookings_enabled != true && draft?.payments_enabled != true)
+                            .disabled(
+                                !platformMutationAvailable
+                                    || draft?.fitbox_enabled == true
+                                    || (draft?.bookings_enabled != true && draft?.payments_enabled != true)
+                            )
                         Text("Master checkout switch for pack purchases on the website and iOS app. Keep off until Stripe launch checks pass.")
                             .font(.caption).foregroundStyle(Color.xertPale.opacity(0.55))
-                        if draft?.bookings_enabled != true && draft?.payments_enabled != true {
+                        if draft?.fitbox_enabled == true {
+                            Label("These native controls are dormant while FitBox is selected.", systemImage: "arrow.up.forward.app")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.xertSteel)
+                        } else if draft?.bookings_enabled != true && draft?.payments_enabled != true {
                             Label("Open bookings and complete the booking smoke test before enabling payments.", systemImage: "lock.shield")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Color.xertSteel)
                         }
                         Toggle("Launch countdown", isOn: settingBinding(\.countdown_enabled))
+                            .disabled(!platformMutationAvailable)
                     }
-                    .disabled(!platformMutationAvailable)
                     Section("Public announcement") {
                         Toggle("Show announcement banner", isOn: settingBinding(\.announcement_banner_enabled))
                         TextField("Announcement text", text: announcementBinding, axis: .vertical)
@@ -12760,6 +12881,7 @@ private struct AdminPlatformView: View {
             && platformMutationAvailable
             && draft != nil
             && draft != admin.settings
+            && draft?.providerResolution.isBlocked != true
     }
 
     private func requestPricingNavigation() {
@@ -12860,6 +12982,31 @@ private struct AdminPlatformView: View {
                 if !isEnabled {
                     value.payments_enabled = false
                 }
+                draft = value
+            }
+        )
+    }
+
+    private var fitBoxEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { draft?.fitbox_enabled == true },
+            set: { isEnabled in
+                guard var value = draft else { return }
+                value.fitbox_enabled = isEnabled
+                if isEnabled {
+                    value.payments_enabled = false
+                }
+                draft = value
+            }
+        )
+    }
+
+    private var fitBoxURLBinding: Binding<String> {
+        Binding(
+            get: { draft?.fitbox_booking_url ?? "" },
+            set: { url in
+                guard var value = draft else { return }
+                value.fitbox_booking_url = url
                 draft = value
             }
         )
@@ -13745,6 +13892,29 @@ private struct AdminOperationsHealthView: View {
         return push.isOwnerLaunchReady()
     }
 
+    private var bookingProviderReady: Bool? {
+        guard sourceIsCurrent("platform controls"), let settings = admin.settings else { return nil }
+        let provider = settings.providerResolution
+        if provider.isBlocked { return false }
+        // FitBox handoff is usable, but it remains an attention state until
+        // booking mirroring and attendance are supported and verified.
+        return provider.provider == .native
+    }
+
+    private var bookingProviderDetail: String {
+        guard sourceIsCurrent("platform controls"), let settings = admin.settings else {
+            return "Live booking-provider settings could not be verified. Booking mutations remain closed."
+        }
+        let provider = settings.providerResolution
+        if provider.isBlocked {
+            return provider.blockedReason ?? "The selected booking provider needs attention."
+        }
+        if provider.provider == .fitBox {
+            return "FitBox handoff is configured. XERT-native booking and Stripe packs are paused; booking mirroring and attendance are not yet available."
+        }
+        return "XERT-native booking, credits and Stripe session packs are selected."
+    }
+
     private var databaseDetail: String {
         guard let databaseReady else {
             return admin.loadedSources.contains("schema health")
@@ -13895,6 +14065,16 @@ private struct AdminOperationsHealthView: View {
 
             Section("Release readiness") {
                 HealthStatusRow(
+                    title: "Booking provider",
+                    ready: bookingProviderReady,
+                    detail: bookingProviderDetail
+                )
+                HealthStatusRow(
+                    title: "FitBox Zapier bridge",
+                    ready: admin.fitboxBridgeHealth?.ready,
+                    detail: fitboxBridgeDetail
+                )
+                HealthStatusRow(
                     title: "Database contract",
                     ready: databaseReady,
                     detail: databaseDetail
@@ -13912,6 +14092,22 @@ private struct AdminOperationsHealthView: View {
                         Label(capability.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "exclamationmark.triangle")
                             .font(.subheadline).foregroundStyle(.orange)
                             .listRowBackground(Color.xertInk)
+                    }
+                }
+            }
+            if let bridge = admin.fitboxBridgeHealth {
+                Section("FitBox activity (24 hours)") {
+                    HealthCountRow(label: "Prospects completed", value: bridge.jobs_24h.completed)
+                    HealthCountRow(label: "Handoffs in progress", value: bridge.active)
+                    HealthCountRow(label: "Provider events received", value: bridge.events_24h)
+                    HealthCountRow(label: "Awaiting reconciliation", value: bridge.reconciliation)
+                    if bridge.stale > 0 || bridge.jobs_24h.failed > 0 {
+                        Label(
+                            "\(bridge.jobs_24h.failed) failed and \(bridge.stale) stale handoffs need owner review.",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
                     }
                 }
             }
@@ -13997,7 +14193,9 @@ private struct AdminOperationsHealthView: View {
         .navigationTitle("Operations Health")
         .refreshable {
             await admin.refreshHealth(session: session)
+            await admin.refreshFitboxBridgeHealth(session: session)
         }
+        .task { await admin.refreshFitboxBridgeHealth(session: session) }
         .confirmationDialog(
             "Send a production push test?",
             isPresented: $confirmingOwnerPushTest,
@@ -14042,6 +14240,19 @@ private struct AdminOperationsHealthView: View {
         }
         let smoke = productionPushReady == true ? "owner smoke test current" : "owner smoke test required"
         return "\(health.subscriptions.production) production device\(health.subscriptions.production == 1 ? "" : "s") registered; \(smoke)."
+    }
+
+    private var fitboxBridgeDetail: String {
+        if let error = admin.fitboxBridgeHealthError {
+            return "Live FitBox bridge health could not be verified: \(error)"
+        }
+        guard let bridge = admin.fitboxBridgeHealth else {
+            return "Checking prospect handoff, inbound events and reconciliation health."
+        }
+        if !bridge.environment.ready {
+            return "Missing server configuration: \(bridge.environment.missing.joined(separator: ", "))."
+        }
+        return "\(bridge.jobs_24h.completed) prospect handoff\(bridge.jobs_24h.completed == 1 ? "" : "s") completed; \(bridge.events_24h) provider event\(bridge.events_24h == 1 ? "" : "s") received; \(bridge.reconciliation) awaiting review."
     }
 
     private func visiblePushReason(_ reason: String?) -> String? {

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createRequestTrace, requestHeader, requestText } from './http.js';
+import { createRequestTrace, requestHeader, requestText } from '../src/lib/serverHttp.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,

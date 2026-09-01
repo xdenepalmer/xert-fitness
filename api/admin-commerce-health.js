@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { assertCheckoutProduct, assertStripePriceMatchesProduct, paymentFulfillmentIsReady } from './checkout.js';
-import { createRequestTrace, requestHeader, requestJson } from './http.js';
+import { createRequestTrace, requestHeader, requestJson } from '../src/lib/serverHttp.js';
 import {
   inspectCommerceRuntimeEnvironment,
   stripeModeForSecret,
@@ -82,9 +82,10 @@ export function normalizePaymentActivationRequest(body) {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
     throw new Error('INVALID_PAYMENT_ACTIVATION');
   }
-  for (const field of ['countdown_enabled', 'bookings_enabled', 'payments_enabled', 'announcement_banner_enabled']) {
+  for (const field of ['countdown_enabled', 'bookings_enabled', 'payments_enabled', 'fitbox_enabled', 'announcement_banner_enabled']) {
     if (typeof settings[field] !== 'boolean') throw new Error('INVALID_PAYMENT_ACTIVATION');
   }
+  if (settings.fitbox_enabled) throw new Error('FITBOX_PROVIDER_CONFLICT');
   if (settings.payments_enabled !== true) throw new Error('INVALID_PAYMENT_ACTIVATION');
   if (settings.bookings_enabled !== true) throw new Error('BOOKINGS_REQUIRED_FOR_PAYMENT_ACTIVATION');
   const announcement = settings.announcement_banner_text == null
@@ -665,6 +666,19 @@ export async function inspectCommerceHealth({ admin, products, environment: runt
 }
 
 export async function activateSessionPackPayments(serverClient, actorId, activation) {
+  const { data: currentSettings, error: settingsError } = await serverClient
+    .from('admin_settings')
+    .select('id,updated_at,fitbox_enabled')
+    .eq('id', activation.settingsId)
+    .maybeSingle();
+  if (settingsError) throw new Error('PAYMENT_ACTIVATION_UPDATE_FAILED');
+  if (!currentSettings || currentSettings.updated_at !== activation.expectedUpdatedAt) {
+    throw new Error('PAYMENT_ACTIVATION_STALE');
+  }
+  if (currentSettings.fitbox_enabled !== false) {
+    throw new Error('FITBOX_PROVIDER_CONFLICT');
+  }
+
   const { data, error } = await serverClient.rpc('admin_activate_session_pack_payments', {
     p_actor_id: actorId,
     p_settings_id: activation.settingsId,
@@ -799,6 +813,9 @@ export default async function handler(request, response) {
       }
       if (error.message === 'BOOKINGS_REQUIRED_FOR_PAYMENT_ACTIVATION') {
         return json({ error: 'Open member bookings and complete the booking smoke test before enabling payments.' }, 409);
+      }
+      if (error.message === 'FITBOX_PROVIDER_CONFLICT') {
+        return json({ error: 'XERT payments cannot be enabled while FitBox is the selected booking provider.' }, 409);
       }
       return json({ error: 'Payment activation request is invalid.' }, 400);
     }
@@ -963,6 +980,9 @@ export default async function handler(request, response) {
   } catch (error) {
     if (error.message === 'PAYMENT_ACTIVATION_STALE') {
       return json({ error: 'Platform settings changed during activation. Refresh and review them before retrying.' }, 409);
+    }
+    if (error.message === 'FITBOX_PROVIDER_CONFLICT') {
+      return json({ error: 'FitBox is the selected booking provider. XERT payments remain paused.' }, 409);
     }
     return json({ error: 'Payment activation could not be confirmed. Payments remain paused.' }, 500);
   }

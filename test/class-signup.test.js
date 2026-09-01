@@ -80,6 +80,15 @@ test('site-wide pause, Fitbox handoff and past classes take precedence', () => {
   });
   assert.equal(handed.kind, 'fitbox');
 
+  const blockedProvider = classSignupState({
+    session: session({ booking_mode: 'instant_book' }),
+    fitbox: { blocked: true, blockedReason: 'FitBox configuration is incomplete.' },
+    now: NOW,
+  });
+  assert.equal(blockedProvider.kind, 'provider-unavailable');
+  assert.equal(blockedProvider.actionable, false);
+  assert.equal(blockedProvider.takesSpot, false);
+
   const past = classSignupState({
     session: session({ booking_mode: 'instant_book', start_time: '2026-08-19T06:00:00Z' }),
     now: NOW,

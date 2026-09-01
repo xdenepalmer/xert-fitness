@@ -27,19 +27,25 @@ struct PublicPlatformSettings: Codable, Hashable {
     let bookings_enabled: Bool
     let payments_enabled: Bool
     let prices_coming_soon: Bool
+    let fitbox_enabled: Bool
+    let fitbox_booking_url: String?
 
     enum CodingKeys: String, CodingKey {
-        case bookings_enabled, payments_enabled, prices_coming_soon
+        case bookings_enabled, payments_enabled, prices_coming_soon, fitbox_enabled, fitbox_booking_url
     }
 
     init(
         bookings_enabled: Bool,
         payments_enabled: Bool,
-        prices_coming_soon: Bool = true
+        prices_coming_soon: Bool = true,
+        fitbox_enabled: Bool = false,
+        fitbox_booking_url: String? = nil
     ) {
         self.bookings_enabled = bookings_enabled
         self.payments_enabled = payments_enabled
         self.prices_coming_soon = prices_coming_soon
+        self.fitbox_enabled = fitbox_enabled
+        self.fitbox_booking_url = fitbox_booking_url
     }
 
     init(from decoder: Decoder) throws {
@@ -49,10 +55,116 @@ struct PublicPlatformSettings: Codable, Hashable {
         // Older schemas, nulls and malformed visibility values must never
         // reveal prices or unlock checkout by accident.
         prices_coming_soon = (try? container.decode(Bool.self, forKey: .prices_coming_soon)) ?? true
+        fitbox_enabled = (try? container.decode(Bool.self, forKey: .fitbox_enabled)) ?? false
+        fitbox_booking_url = try? container.decodeIfPresent(String.self, forKey: .fitbox_booking_url)
     }
 
     var sessionPackCheckoutEnabled: Bool {
-        bookings_enabled && payments_enabled && !prices_coming_soon
+        providerResolution.provider == .native
+            && bookings_enabled
+            && payments_enabled
+            && !prices_coming_soon
+    }
+
+    var providerResolution: XertPlatformProviderResolution {
+        if !fitbox_enabled { return .native }
+        guard let portalURL = XertPlatformProviderResolution.securePortalURL(from: fitbox_booking_url) else {
+            return .blockedFitBox
+        }
+        return .fitBox(portalURL: portalURL)
+    }
+}
+
+enum XertPlatformProvider: String, Equatable {
+    case native
+    case fitBox
+    case unavailable
+}
+
+struct XertPlatformProviderCapabilities: Equatable {
+    let nativeBookingMutations: Bool
+    let nativePackCheckout: Bool
+    let externalPortal: Bool
+    let mirroredBookings: Bool
+    let attendanceSync: Bool
+}
+
+struct XertPlatformProviderResolution: Equatable {
+    let provider: XertPlatformProvider
+    let portalURL: URL?
+    let isBlocked: Bool
+    let blockedReason: String?
+    let capabilities: XertPlatformProviderCapabilities
+
+    static let unavailable = XertPlatformProviderResolution(
+        provider: .unavailable,
+        portalURL: nil,
+        isBlocked: true,
+        blockedReason: "XERT could not verify the live booking provider.",
+        capabilities: .init(
+            nativeBookingMutations: false,
+            nativePackCheckout: false,
+            externalPortal: false,
+            mirroredBookings: false,
+            attendanceSync: false
+        )
+    )
+
+    static let native = XertPlatformProviderResolution(
+        provider: .native,
+        portalURL: nil,
+        isBlocked: false,
+        blockedReason: nil,
+        capabilities: .init(
+            nativeBookingMutations: true,
+            nativePackCheckout: true,
+            externalPortal: false,
+            mirroredBookings: true,
+            attendanceSync: true
+        )
+    )
+
+    static let blockedFitBox = XertPlatformProviderResolution(
+        provider: .fitBox,
+        portalURL: nil,
+        isBlocked: true,
+        blockedReason: "FitBox is selected, but its secure booking link needs attention.",
+        capabilities: .init(
+            nativeBookingMutations: false,
+            nativePackCheckout: false,
+            externalPortal: false,
+            mirroredBookings: false,
+            attendanceSync: false
+        )
+    )
+
+    static func fitBox(portalURL: URL) -> XertPlatformProviderResolution {
+        XertPlatformProviderResolution(
+            provider: .fitBox,
+            portalURL: portalURL,
+            isBlocked: false,
+            blockedReason: nil,
+            capabilities: .init(
+                nativeBookingMutations: false,
+                nativePackCheckout: false,
+                externalPortal: true,
+                mirroredBookings: false,
+                attendanceSync: false
+            )
+        )
+    }
+
+    static func securePortalURL(from rawValue: String?) -> URL? {
+        let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !value.isEmpty,
+              var components = URLComponents(string: value),
+              components.scheme?.lowercased() == "https",
+              let host = components.host,
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil else { return nil }
+        components.fragment = nil
+        return components.url
     }
 }
 

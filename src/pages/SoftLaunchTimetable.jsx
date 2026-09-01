@@ -92,10 +92,14 @@ export default function SoftLaunchTimetable() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
               <h2 className="font-display text-2xl text-xert-offwhite uppercase">What&rsquo;s On</h2>
               <div className="flex flex-wrap items-center gap-3">
-                {fitbox.active ? (
+                {fitbox.blocked ? (
+                  <span role="status" className="font-body text-xs text-xert-red border border-xert-red/40 px-3 py-1 uppercase">
+                    FitBox booking link needs attention
+                  </span>
+                ) : fitbox.active ? (
                   <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
                     className="font-body text-xs text-xert-steel border border-xert-steel/40 px-3 py-1 uppercase hover:border-xert-steel transition-colors">
-                    Book via the XERT member portal
+                    Continue to FitBox booking
                   </a>
                 ) : !settings.bookings_enabled && (
                   <span className="font-body text-xs text-xert-concrete/40 border border-xert-steel/30 px-3 py-1 uppercase">

@@ -16,7 +16,7 @@ test('owner booking controls govern the native member experience and fail closed
   ]);
 
   assert.match(models, /struct PublicPlatformSettings:[\s\S]*let bookings_enabled: Bool[\s\S]*let payments_enabled: Bool/);
-  assert.match(api, /select", value: "bookings_enabled,payments_enabled,prices_coming_soon"/);
+  assert.match(api, /select", value: "bookings_enabled,payments_enabled,prices_coming_soon,fitbox_enabled,fitbox_booking_url"/);
   assert.match(store, /@Published private\(set\) var memberBookingsEnabled = false/);
   assert.match(store, /@Published private\(set\) var creditBalanceLoaded = false/);
   assert.ok((store.match(/creditBalanceLoaded = true/g) || []).length >= 3);
@@ -27,7 +27,7 @@ test('owner booking controls govern the native member experience and fail closed
     store.indexOf('async let productRequest'),
   );
   assert.doesNotMatch(refreshSetup, /(?:booking|payment)AvailabilityLoaded = false/);
-  assert.match(store, /memberBookingsEnabled = loadedSettings\?\.bookings_enabled == true/);
+  assert.match(store, /memberBookingsEnabled = provider\.provider == \.native[\s\S]*loadedSettings\?\.bookings_enabled == true/);
   assert.match(store, /private func memberBookingControlError\(\) -> String\?/);
   assert.ok((store.match(/if let message = memberBookingControlError\(\)/g) || []).length >= 2);
   assert.match(adminStore, /if draft\.bookings_enabled \{[\s\S]*member_booking_switch_guard[\s\S]*Bookings stay paused until Operations Health verifies/);

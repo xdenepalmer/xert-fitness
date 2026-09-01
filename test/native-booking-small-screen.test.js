@@ -12,6 +12,7 @@ test('native Book keeps search and final actions usable on short iPhones', async
   );
 
   assert.match(mainList, /List \{[\s\S]*XertScrollEndSpacer\(\)/);
-  assert.match(mainList, /\.scrollDismissesKeyboard\(\.interactively\)[\s\S]*\.searchable\(/);
+  assert.match(mainList, /\.scrollDismissesKeyboard\(\.interactively\)[\s\S]*\.modifier\(BookingSearchModifier/);
+  assert.match(booking, /private struct BookingSearchModifier:[\s\S]*if isEnabled[\s\S]*content\.searchable\(/);
   assert.match(booking, /ViewThatFits\(in: \.horizontal\)[\s\S]*Request PT Session/);
 });

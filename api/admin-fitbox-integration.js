@@ -1,0 +1,353 @@
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
+import { createRequestTrace, requestHeader, requestJson } from '../src/lib/serverHttp.js';
+import {
+  fitboxIntegrationEnvironment,
+  fitboxEventEnvironment,
+  fitboxProspectDispatchPayload,
+  normalizeFitboxCallback,
+  normalizeFitboxEvent,
+  normalizeFitboxLeadID,
+  prospectForFitbox,
+  publicFitboxJob,
+} from '../src/lib/fitboxIntegration.js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const MAX_REQUEST_BYTES = 8_192;
+const DISPATCH_TIMEOUT_MS = 12_000;
+const EVENT_REQUEST_BYTES = 16_384;
+
+function callbackTokenHash(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function safeHashMatch(receivedHash, expectedHash) {
+  const received = Buffer.from(String(receivedHash || ''), 'utf8');
+  const expected = Buffer.from(String(expectedHash || ''), 'utf8');
+  return received.length === expected.length && timingSafeEqual(received, expected);
+}
+
+function callbackErrorCode(message) {
+  const normalized = String(message || '').toUpperCase();
+  if (/DUPLICATE/.test(normalized)) return 'FITBOX_DUPLICATE_REVIEW';
+  if (/INVALID|REQUIRED|MISSING/.test(normalized)) return 'FITBOX_PROSPECT_INVALID';
+  return 'FITBOX_PROVIDER_REJECTED';
+}
+
+function requestService(request) {
+  return request.query?.service ?? new URL(request.url || '', 'https://xert.invalid').searchParams.get('service');
+}
+
+async function handleFitboxCallback(request, admin, trace) {
+  const { json } = trace;
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  let callback;
+  try {
+    const body = await requestJson(request);
+    if (Buffer.byteLength(JSON.stringify(body || {}), 'utf8') > 16_384) throw new Error('REQUEST_TOO_LARGE');
+    callback = normalizeFitboxCallback(body);
+  } catch {
+    return json({ error: 'Invalid callback.' }, 400);
+  }
+
+  try {
+    const { data: job, error: jobError } = await admin.from('fitbox_integration_jobs')
+      .select('id, callback_token_hash, fitbox_gym_id, status, expires_at')
+      .eq('id', callback.jobId).maybeSingle();
+    if (jobError) throw jobError;
+    const receivedHash = callbackTokenHash(callback.callbackToken);
+    if (!job || !safeHashMatch(receivedHash, job.callback_token_hash) || job.fitbox_gym_id !== callback.gymId) {
+      return json({ error: 'Callback was not accepted.' }, 401);
+    }
+    if (new Date(job.expires_at).getTime() <= Date.now() && job.status !== 'completed') {
+      await admin.rpc('fail_fitbox_prospect_job', {
+        p_job_id: callback.jobId,
+        p_callback_token_hash: receivedHash,
+        p_error_code: 'FITBOX_CALLBACK_EXPIRED',
+      });
+      return json({ error: 'Callback expired.' }, 410);
+    }
+    if (callback.failed) {
+      const { data, error } = await admin.rpc('fail_fitbox_prospect_job', {
+        p_job_id: callback.jobId,
+        p_callback_token_hash: receivedHash,
+        p_error_code: callbackErrorCode(callback.message),
+      });
+      if (error) throw error;
+      console.warn('FitBox rejected a prospect handoff.', { requestId: trace.requestId, jobId: callback.jobId, errorCode: data?.last_error_code });
+      return json({ received: true, status: 'failed' });
+    }
+    const { data, error } = await admin.rpc('complete_fitbox_prospect_job', {
+      p_job_id: callback.jobId,
+      p_callback_token_hash: receivedHash,
+      p_fitbox_gym_id: callback.gymId,
+      p_fitbox_user_id: callback.userId,
+      p_fitbox_status: callback.status,
+    });
+    if (error) {
+      if (/FITBOX_IDENTITY_CONFLICT/.test(error.message || '')) {
+        await admin.rpc('fail_fitbox_prospect_job', {
+          p_job_id: callback.jobId,
+          p_callback_token_hash: receivedHash,
+          p_error_code: 'FITBOX_IDENTITY_CONFLICT',
+        });
+        return json({ error: 'FitBox identity requires operator review.' }, 409);
+      }
+      throw error;
+    }
+    console.info('FitBox prospect handoff completed.', { requestId: trace.requestId, jobId: callback.jobId });
+    return json({ received: true, status: data?.status || 'completed' });
+  } catch (error) {
+    if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox callback storage is unavailable.' }, 503);
+    if (/FITBOX_CALLBACK_(?:REJECTED|CONFLICT)|FITBOX_JOB_NOT_ACTIVE|FITBOX_GYM_MISMATCH/.test(error.message || '')) {
+      return json({ error: 'Callback was not accepted.' }, 409);
+    }
+    return json({ error: 'Callback could not be processed.' }, 500);
+  }
+}
+
+async function handleFitboxEvent(request, admin, trace) {
+  const { json } = trace;
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  const config = fitboxEventEnvironment(process.env);
+  if (!config.ready) return json({ error: 'FitBox event ingress is unavailable.' }, 503);
+  const receivedSecret = requestHeader(request, 'x-xert-fitbox-secret');
+  if (!safeHashMatch(callbackTokenHash(receivedSecret), callbackTokenHash(config.secret))) {
+    return json({ error: 'Event was not accepted.' }, 401);
+  }
+
+  let event;
+  try {
+    const body = await requestJson(request);
+    if (Buffer.byteLength(JSON.stringify(body || {}), 'utf8') > EVENT_REQUEST_BYTES) throw new Error('REQUEST_TOO_LARGE');
+    event = normalizeFitboxEvent(body);
+  } catch {
+    return json({ error: 'Invalid FitBox event.' }, 400);
+  }
+  if (event.gymId !== config.gymId) return json({ error: 'Event was not accepted.' }, 401);
+
+  try {
+    const { data, error } = await admin.from('fitbox_integration_events').insert({
+      event_type: event.eventType,
+      fitbox_gym_id: event.gymId,
+      fitbox_user_id: event.userId,
+      fitbox_booking_id: event.bookingId,
+      fitbox_session_id: event.sessionId,
+      fitbox_subscription_id: event.subscriptionId,
+      provider_event_id: event.providerEventId,
+      delivery_id: event.deliveryId,
+      provider_status: event.status,
+      provider_occurred_at: event.providerOccurredAt,
+      provider_updated_at: event.providerUpdatedAt,
+      processing_state: 'needs_review',
+      review_reason: event.providerEventId && (event.providerOccurredAt || event.providerUpdatedAt)
+        ? 'PROVIDER_CONTRACT_UNVERIFIED'
+        : 'MISSING_STABLE_EVENT_IDENTITY',
+    }).select('id, processing_state, received_at').single();
+    if (error?.code === '23505' && event.deliveryId) return json({ received: true, duplicate: true }, 200);
+    if (error) throw error;
+    console.info('FitBox event stored for read-only reconciliation.', {
+      requestId: trace.requestId,
+      eventId: data.id,
+      eventType: event.eventType,
+    });
+    return json({ received: true, event_id: data.id, processing_state: data.processing_state }, 202);
+  } catch (error) {
+    if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox event storage is unavailable.' }, 503);
+    return json({ error: 'FitBox event could not be stored.' }, 500);
+  }
+}
+
+async function requireAdmin(request, admin) {
+  const authHeader = requestHeader(request, 'authorization');
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return { error: 'Not authenticated.', status: 401 };
+  const { data: { user }, error: userError } = await admin.auth.getUser(token);
+  if (userError || !user) return { error: 'Invalid or expired session.', status: 401 };
+  const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  if (profileError) return { error: 'Could not verify admin access.', status: 500 };
+  if (profile?.role !== 'admin') return { error: 'Admin access required.', status: 403 };
+  return { user };
+}
+
+function requestLeadID(request) {
+  const value = request.query?.lead_id ?? new URL(request.url, 'https://xert.invalid').searchParams.get('lead_id');
+  return normalizeFitboxLeadID(value);
+}
+
+async function leadIntegrationState(admin, leadId) {
+  const [linkResult, jobsResult] = await Promise.all([
+    admin.from('fitbox_member_links')
+      .select('id, fitbox_gym_id, fitbox_user_id, fitbox_status, linked_at, last_verified_at')
+      .eq('lead_type', 'member_interest').eq('lead_id', leadId).maybeSingle(),
+    admin.from('fitbox_integration_jobs')
+      .select('id, status, fitbox_user_id, fitbox_status, last_error_code, dispatched_at, completed_at, created_at')
+      .eq('lead_type', 'member_interest').eq('lead_id', leadId)
+      .order('created_at', { ascending: false }).limit(5),
+  ]);
+  if (linkResult.error) throw linkResult.error;
+  if (jobsResult.error) throw jobsResult.error;
+  return {
+    link: linkResult.data || null,
+    current_job: publicFitboxJob(jobsResult.data?.[0]),
+    recent_jobs: (jobsResult.data || []).map(publicFitboxJob),
+  };
+}
+
+async function integrationHealth(admin) {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString();
+  const staleBefore = new Date(Date.now() - 15 * 60 * 1_000).toISOString();
+  const [completed, failed, active, stale, latest, events, reviews, lastEvent] = await Promise.all([
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'completed').gte('updated_at', since),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('updated_at', since),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'dispatched', 'dispatch_unknown']),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'dispatched', 'dispatch_unknown']).lt('updated_at', staleBefore),
+    admin.from('fitbox_integration_jobs').select('status, fitbox_user_id, last_error_code, updated_at').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
+    admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true }).gte('received_at', since),
+    admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true }).eq('processing_state', 'needs_review'),
+    admin.from('fitbox_integration_events').select('event_type, processing_state, review_reason, received_at').order('received_at', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  for (const result of [completed, failed, active, stale, latest, events, reviews, lastEvent]) if (result.error) throw result.error;
+  const environment = fitboxIntegrationEnvironment(process.env);
+  const eventEnvironment = fitboxEventEnvironment(process.env);
+  return {
+    ready: environment.ready && eventEnvironment.ready && Number(failed.count || 0) === 0 && Number(stale.count || 0) === 0,
+    environment: {
+      ready: environment.ready && eventEnvironment.ready,
+      missing: [...environment.missing, ...eventEnvironment.missing],
+    },
+    jobs_24h: { completed: Number(completed.count || 0), failed: Number(failed.count || 0) },
+    active: Number(active.count || 0),
+    stale: Number(stale.count || 0),
+    last_job: latest.data || null,
+    events_24h: Number(events.count || 0),
+    reconciliation: Number(reviews.count || 0),
+    last_event: lastEvent.data || null,
+  };
+}
+
+async function dispatchProspect(config, payload, fetchImpl = fetch) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DISPATCH_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(config.hookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'XERT-FitBox-Bridge/1.0' },
+      body: JSON.stringify(payload),
+      redirect: 'error',
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error('ZAPIER_DISPATCH_REJECTED');
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export default async function handler(request, response) {
+  const trace = createRequestTrace(response);
+  const { json } = trace;
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'FitBox integration service is unavailable.' }, 503);
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  if (requestService(request) === 'callback') return handleFitboxCallback(request, admin, trace);
+  if (requestService(request) === 'event') return handleFitboxEvent(request, admin, trace);
+  if (!['GET', 'POST'].includes(request.method)) return json({ error: 'Method not allowed' }, 405);
+  const access = await requireAdmin(request, admin);
+  if (access.error) return json({ error: access.error }, access.status);
+
+  if (request.method === 'GET') {
+    try {
+      const wantsHealth = request.query?.health === '1'
+        || new URL(request.url, 'https://xert.invalid').searchParams.get('health') === '1';
+      if (wantsHealth) return json(await integrationHealth(admin));
+      const leadId = requestLeadID(request);
+      const state = await leadIntegrationState(admin, leadId);
+      const environment = fitboxIntegrationEnvironment(process.env);
+      return json({ ...state, ready: environment.ready, configuration_issue: environment.ready ? null : 'FitBox Zapier handoff is not configured.' });
+    } catch (error) {
+      if (error.message === 'INVALID_FITBOX_LEAD_ID') return json({ error: 'Lead selection is invalid.' }, 400);
+      if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox integration storage is not installed.' }, 503);
+      return json({ error: 'FitBox status could not be loaded.' }, 500);
+    }
+  }
+
+  let body;
+  try {
+    body = await requestJson(request);
+    if (Buffer.byteLength(JSON.stringify(body || {}), 'utf8') > MAX_REQUEST_BYTES) throw new Error('REQUEST_TOO_LARGE');
+  } catch {
+    return json({ error: 'FitBox request is invalid.' }, 400);
+  }
+  if (body?.action !== 'register_prospect') return json({ error: 'FitBox request is invalid.' }, 400);
+
+  const config = fitboxIntegrationEnvironment(process.env);
+  if (!config.ready) return json({ error: 'FitBox Zapier handoff is not configured.' }, 503);
+
+  let leadId;
+  try {
+    leadId = normalizeFitboxLeadID(body.lead_id);
+  } catch {
+    return json({ error: 'Lead selection is invalid.' }, 400);
+  }
+
+  try {
+    const existing = await leadIntegrationState(admin, leadId);
+    if (existing.link) return json({ error: 'This lead is already linked to FitBox.', ...existing }, 409);
+    if (['queued', 'dispatched', 'dispatch_unknown'].includes(existing.current_job?.status)) {
+      return json({ error: 'This lead already has a FitBox handoff in progress.', ...existing }, 409);
+    }
+
+    const { data: lead, error: leadError } = await admin.from('member_interest')
+      .select('id, full_name, email, phone, suburb_town')
+      .eq('id', leadId).maybeSingle();
+    if (leadError) throw leadError;
+    if (!lead) return json({ error: 'This lead no longer exists. Refresh the list.' }, 404);
+    prospectForFitbox(lead);
+
+    const callbackToken = randomBytes(32).toString('base64url');
+    const { data: job, error: jobError } = await admin.from('fitbox_integration_jobs').insert({
+      job_type: 'register_prospect',
+      lead_type: 'member_interest',
+      lead_id: leadId,
+      status: 'queued',
+      callback_token_hash: callbackTokenHash(callbackToken),
+      fitbox_gym_id: config.gymId,
+      created_by: access.user.id,
+    }).select('id, status, fitbox_user_id, fitbox_status, last_error_code, dispatched_at, completed_at, created_at').single();
+    if (jobError) {
+      if (jobError.code === '23505') return json({ error: 'This lead already has a FitBox handoff in progress.' }, 409);
+      throw jobError;
+    }
+
+    const payload = fitboxProspectDispatchPayload({ jobId: job.id, callbackToken, lead, environment: process.env });
+    try {
+      await dispatchProspect(config, payload);
+    } catch {
+      // A network timeout cannot prove Zapier rejected the request: FitBox may
+      // already have created the prospect. Block blind retries until the
+      // operator reconciles this job or the authenticated callback arrives.
+      await admin.from('fitbox_integration_jobs').update({
+        status: 'dispatch_unknown', last_error_code: 'ZAPIER_DISPATCH_OUTCOME_UNKNOWN', attempt_count: 1, updated_at: new Date().toISOString(),
+      }).eq('id', job.id).eq('status', 'queued');
+      return json({ error: 'Zapier did not confirm the handoff outcome. Do not retry yet—check FitBox for this email and reconcile the lead first.' }, 502);
+    }
+
+    const { data: dispatched, error: dispatchError } = await admin.from('fitbox_integration_jobs').update({
+      status: 'dispatched', dispatched_at: new Date().toISOString(), attempt_count: 1, updated_at: new Date().toISOString(),
+    }).eq('id', job.id).eq('status', 'queued')
+      .select('id, status, fitbox_user_id, fitbox_status, last_error_code, dispatched_at, completed_at, created_at').maybeSingle();
+    if (dispatchError) throw dispatchError;
+
+    console.info('FitBox prospect handoff accepted by Zapier.', { requestId: trace.requestId, jobId: job.id, actorId: access.user.id });
+    if (dispatched) return json({ job: publicFitboxJob(dispatched), link: null }, 202);
+    const completedState = await leadIntegrationState(admin, leadId);
+    return json(completedState, completedState.link ? 200 : 202);
+  } catch (error) {
+    if (error.message === 'FITBOX_FULL_NAME_REQUIRED') return json({ error: 'Add the lead’s first and last name before sending them to FitBox.' }, 400);
+    if (error.message === 'FITBOX_EMAIL_REQUIRED') return json({ error: 'Add a valid lead email before sending them to FitBox.' }, 400);
+    if (error.message === 'FITBOX_PHONE_REQUIRED') return json({ error: 'Add the lead’s phone number before sending them to FitBox.' }, 400);
+    if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox integration storage is not installed.' }, 503);
+    return json({ error: 'The FitBox handoff could not be started.' }, 500);
+  }
+}

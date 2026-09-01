@@ -1611,6 +1611,8 @@ struct AdminPlatformSettings: Identifiable, Codable, Hashable {
     var bookings_enabled: Bool
     var payments_enabled: Bool
     var prices_coming_soon: Bool
+    var fitbox_enabled: Bool
+    var fitbox_booking_url: String?
     var announcement_banner_text: String?
     var announcement_banner_enabled: Bool
     let updated_at: String
@@ -1618,6 +1620,16 @@ struct AdminPlatformSettings: Identifiable, Codable, Hashable {
     var announcementText: String {
         get { announcement_banner_text ?? "" }
         set { announcement_banner_text = newValue }
+    }
+
+    var providerResolution: XertPlatformProviderResolution {
+        PublicPlatformSettings(
+            bookings_enabled: bookings_enabled,
+            payments_enabled: payments_enabled,
+            prices_coming_soon: prices_coming_soon,
+            fitbox_enabled: fitbox_enabled,
+            fitbox_booking_url: fitbox_booking_url
+        ).providerResolution
     }
 }
 
@@ -1909,6 +1921,63 @@ struct AdminLead: Identifiable, Codable, Hashable {
         [full_name, email, phone, business_name, qualifications, profession, utm_source]
             .compactMap { $0 }.joined(separator: " ").lowercased()
     }
+}
+
+struct AdminFitboxJob: Identifiable, Codable, Hashable {
+    let id: UUID
+    let status: String
+    let fitbox_user_id: String?
+    let fitbox_status: String?
+    let last_error_code: String?
+    let dispatched_at: Date?
+    let completed_at: Date?
+    let created_at: Date
+
+    var needsProviderReview: Bool {
+        status == "dispatch_unknown"
+            || (status == "failed" && last_error_code != "ZAPIER_DISPATCH_FAILED")
+    }
+}
+
+struct AdminFitboxMemberLink: Codable, Hashable {
+    let id: UUID
+    let fitbox_gym_id: String
+    let fitbox_user_id: String
+    let fitbox_status: String?
+    let linked_at: Date
+    let last_verified_at: Date
+}
+
+struct AdminFitboxLeadState: Codable, Hashable {
+    let link: AdminFitboxMemberLink?
+    let current_job: AdminFitboxJob?
+    let recent_jobs: [AdminFitboxJob]
+    let ready: Bool
+    let configuration_issue: String?
+}
+
+struct AdminFitboxMutationResponse: Codable, Hashable {
+    let job: AdminFitboxJob?
+    let link: AdminFitboxMemberLink?
+}
+
+struct AdminFitboxBridgeHealth: Codable, Hashable {
+    struct Environment: Codable, Hashable {
+        let ready: Bool
+        let missing: [String]
+    }
+    struct Jobs: Codable, Hashable {
+        let completed: Int
+        let failed: Int
+    }
+
+    let ready: Bool
+    let environment: Environment
+    let jobs_24h: Jobs
+    let active: Int
+    let stale: Int
+    let events_24h: Int
+    let reconciliation: Int
 }
 
 struct AdminLeadReport {
