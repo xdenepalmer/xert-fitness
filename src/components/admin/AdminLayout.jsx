@@ -337,7 +337,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
         {/* Thumb-reachable owner jobs. The full catalogue remains in More. */}
         <nav aria-label="Owner shortcuts" data-admin-mobile-dock
           className="relative z-30 shrink-0 border-t border-white/[0.06] bg-[#0b1218]/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur lg:hidden">
-          <div className="grid grid-cols-5">
+          <div className="grid grid-cols-6">
             {ADMIN_MOBILE_WORKSPACES.map(item => {
               const active = currentHub.key === item.hub;
               const Icon = item.icon;
@@ -354,7 +354,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                   }}
                   aria-current={active ? 'page' : undefined}
                   aria-label={`Open ${item.label}`}
-                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 px-1 font-body text-[11px] font-semibold transition-colors ${active ? 'text-xert-offwhite' : 'text-xert-pale/45'}`}>
+                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 font-body text-[10px] font-semibold transition-colors ${active ? 'text-xert-offwhite' : 'text-xert-pale/45'}`}>
                   <span className={`relative grid h-8 w-12 place-items-center rounded-full transition-colors ${active ? 'bg-xert-steel/20' : ''}`}>
                     <Icon className={`h-5 w-5 ${active ? 'text-xert-steel' : ''}`} />
                     {count > 0 && (

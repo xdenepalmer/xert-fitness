@@ -20,7 +20,7 @@ test('mobile command centre has a safe-area owner dock and thumb-reachable works
   assert.match(workspaces, /ADMIN_MOBILE_WORKSPACES/);
   assert.match(layout, /data-admin-mobile-dock/);
   assert.match(layout, /aria-label="Owner shortcuts"/);
-  assert.match(layout, /grid grid-cols-5/);
+  assert.match(layout, /grid grid-cols-6/);
   assert.match(layout, /pb-\[max\(0\.35rem,env\(safe-area-inset-bottom\)\)\]/);
   assert.match(layout, /pt-\[max\(0\.625rem,env\(safe-area-inset-top\)\)\]/);
   assert.match(layout, /translate-y-full/);

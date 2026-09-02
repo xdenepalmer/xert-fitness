@@ -1108,7 +1108,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   ]);
 
   assert.match(ownerNavigation, /enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable/);
-  for (const section of ['classes', 'people', 'messages', 'business']) {
+  for (const section of ['classes', 'people', 'communications', 'website', 'business']) {
     assert.match(ownerNavigation, new RegExp(`case ${section}`));
   }
   assert.match(ownerNavigation, /enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable/);

@@ -5,14 +5,15 @@ import {
 } from 'lucide-react';
 
 // ─── Owner information architecture ─────────────────────────────────────────
-// Five hubs in the words a gym owner uses. Every screen keeps its existing
+// Six hubs in the words a gym owner uses. Every screen keeps its existing
 // route key, so nothing deep-links or bookmarks differently; only the way the
 // owner reaches it changes. The native app mirrors these hubs one-for-one.
 //
 //   Today     what's on and what needs you
 //   Classes   the timetable and everything attached to a class
 //   People    members, enquiries and applicants
-//   Messages  every way XERT talks to people
+//   Communications  every way XERT talks to people
+//   Website & forms public pages, waivers and feedback
 //   Business  money, settings and the system itself
 
 export const ADMIN_HUBS = Object.freeze([
@@ -52,13 +53,21 @@ export const ADMIN_HUBS = Object.freeze([
     ],
   },
   {
-    key: 'messages',
-    label: 'Messages',
+    key: 'communications',
+    label: 'Communications',
     icon: MessageSquareText,
-    detail: 'Texts, notices and website',
+    detail: 'Texts and app notices',
     items: [
       { key: 'sms', label: 'Text members', detail: 'SMS any group with a mobile', icon: MessageSquareText },
       { key: 'announcements', label: 'App notices', detail: 'Push a notice to the member app', icon: BellRing },
+    ],
+  },
+  {
+    key: 'website',
+    label: 'Website & forms',
+    icon: PenSquare,
+    detail: 'Forms, pages, coaches and events',
+    items: [
       { key: 'forms', label: 'Forms & surveys', detail: 'Waivers, sign-ups and feedback', icon: ListChecks },
       { key: 'content', label: 'Website content', detail: 'Homepage, FAQs and terms', icon: PenSquare },
       { key: 'coaches', label: 'Coaches page', detail: 'Who appears on the website', icon: UserSquare2 },
@@ -92,9 +101,16 @@ export function hubForSection(sectionKey) {
   return ADMIN_HUBS.find(hub => hub.items.some(item => item.key === sectionKey)) || ADMIN_HUBS[0];
 }
 
-/** The phone dock is the five hubs; tapping one opens its first screen. */
+/** The phone dock is the six primary hubs; tapping one opens its first screen. */
 export const ADMIN_MOBILE_WORKSPACES = Object.freeze(
-  ADMIN_HUBS.map(hub => ({ key: hub.items[0].key, hub: hub.key, label: hub.label, mobileLabel: hub.label, icon: hub.icon, detail: hub.detail })),
+  ADMIN_HUBS.map(hub => ({
+    key: hub.items[0].key,
+    hub: hub.key,
+    label: hub.label,
+    mobileLabel: ({ communications: 'Comms', website: 'Website' })[hub.key] || hub.label,
+    icon: hub.icon,
+    detail: hub.detail,
+  })),
 );
 
 /** The four things an owner does most, as one-tap buttons on Today. */

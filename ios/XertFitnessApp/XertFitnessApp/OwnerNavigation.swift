@@ -51,11 +51,12 @@ final class XertOwnerEditorExitCoordinator: ObservableObject {
 
 // The owner hubs, in the words a gym owner uses. They mirror the web Command
 // Centre one-for-one: Today (the overview) sits outside the hubs, then
-// Classes, People, Messages and Business.
+// Classes, People, Communications, Website & Forms and Business.
 enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable {
     case classes = "Classes"
     case people = "People"
-    case messages = "Messages"
+    case communications = "Communications"
+    case website = "Website & forms"
     case business = "Business"
 
     var id: String { rawValue }
@@ -64,7 +65,8 @@ enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable {
         switch self {
         case .classes: return "Timetable, requests and roll call"
         case .people: return "Members and enquiries"
-        case .messages: return "Texts, notices and website"
+        case .communications: return "Texts and app notices"
+        case .website: return "Forms, pages, coaches and events"
         case .business: return "Money, settings, status"
         }
     }
@@ -73,7 +75,8 @@ enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable {
         switch self {
         case .classes: return "calendar"
         case .people: return "person.2"
-        case .messages: return "message"
+        case .communications: return "message"
+        case .website: return "square.and.pencil"
         case .business: return "briefcase"
         }
     }
@@ -200,7 +203,8 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .classDesk, .timetable, .workouts, .bookingRequests, .availability, .ptRequests:
             return .classes
         case .members, .retention, .leads, .campaigns: return .people
-        case .sms, .notices, .forms, .siteContent, .team, .events: return .messages
+        case .sms, .notices: return .communications
+        case .forms, .siteContent, .team, .events: return .website
         case .finance, .orders, .products, .controls, .health, .access, .audit: return .business
         }
     }
