@@ -187,7 +187,8 @@ test('FitBox server endpoints remain server-only and use the durable callback co
   assert.match(admin, /action === 'refresh_user'/);
   assert.match(admin, /fail_fitbox_prospect_job/);
   assert.match(admin, /normalizeFitboxCallback\(zapierDataEnvelope\(body\)\)/);
-  assert.match(admin, /normalizeFitboxEvent\(zapierDataEnvelope\(body\)\)/);
+  assert.match(admin, /envelope = zapierDataEnvelope\(body\);\s*event = normalizeFitboxEvent\(envelope\)/);
+  assert.match(admin, /normalizeFitboxPush\(event\.eventType, envelope, config\.gymId\)/);
   assert.match(admin, /error\?\.code === '23505' && event\.deliveryId/);
   assert.match(admin, /\{ received: true, duplicate: true \}/);
   assert.match(admin, /event_types: eventTypes/);

@@ -417,3 +417,70 @@ export function summarizeFitboxMirror({ users = [], subscriptions = [], attendan
     },
   });
 }
+
+/**
+ * A push Zap (FitBox → XERT) may carry the same bounded fields the gateway
+ * mirrors. Map the envelope into a mirror row; return null when the identity
+ * needed for an upsert is missing, so the review event is still the record.
+ */
+export function normalizeFitboxPush(eventType, envelope, gymId) {
+  const body = envelope && typeof envelope === 'object' ? envelope : {};
+  const type = boundedText(eventType, 80).toLowerCase();
+  try {
+    if (type === 'user_profile_changed' || type === 'user_status_changed') {
+      const row = normalizeFitboxUser({
+        id: body.fitbox_user_id,
+        firstname: body.fitbox_first_name,
+        lastname: body.fitbox_last_name,
+        email: body.fitbox_email,
+        contact_phone: body.fitbox_phone,
+        city: body.fitbox_city,
+        state: body.fitbox_state,
+        postcode: body.fitbox_postcode,
+        country: body.fitbox_country,
+        status: body.status,
+        role: body.fitbox_role,
+      }, gymId);
+      const providerUpdatedAt = optionalTimestamp(body.provider_updated_at);
+      return Object.freeze({ feed: 'users', row: Object.freeze({ ...row, ...(providerUpdatedAt ? { provider_updated_at: providerUpdatedAt } : {}) }) });
+    }
+    if (type === 'user_subscription_changed') {
+      if (!boundedText(body.fitbox_subscription_id, 128) || !boundedText(body.fitbox_user_id, 128)) return null;
+      const row = normalizeFitboxSubscription({
+        id: body.fitbox_subscription_id,
+        customer_id: body.fitbox_user_id,
+        email: body.fitbox_email,
+        product_id: body.product_id,
+        product_name: body.product_name,
+        status: body.status,
+        payment_gateway: body.payment_gateway,
+        price_in_cents: body.price_in_cents,
+        set_up_price_in_cents: body.set_up_price_in_cents,
+        discount_percentage: body.discount_percentage,
+        start_date: body.start_date,
+        expiration_date: body.expiration_date,
+        sessions_count: body.sessions_count,
+        sessions_count_last_reset: body.sessions_count_last_reset,
+        updated_at: body.provider_updated_at,
+      }, gymId);
+      return Object.freeze({ feed: 'subscriptions', row });
+    }
+    const attendanceFeeds = { class_session_booked: 'booked', class_session_cancelled: 'cancelled', user_first_session_booked: 'first_session' };
+    const feed = attendanceFeeds[type];
+    if (!feed) return null;
+    if (!boundedText(body.fitbox_booking_id, 128) || !boundedText(body.fitbox_user_id, 128)) return null;
+    const row = normalizeFitboxAttendance({
+      attendanceId: body.fitbox_booking_id,
+      eventId: body.fitbox_session_id,
+      classId: body.fitbox_class_id,
+      className: body.class_name,
+      sessionStartTime: body.session_start_time,
+      status: body.status || (feed === 'cancelled' ? 'cancelled' : 'booked'),
+      userId: body.fitbox_user_id,
+      gymId,
+    }, gymId, feed);
+    return Object.freeze({ feed: feed === 'cancelled' ? 'cancellations' : feed === 'first_session' ? 'first_sessions' : 'bookings', row });
+  } catch {
+    return null;
+  }
+}

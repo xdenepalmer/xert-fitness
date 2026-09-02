@@ -210,6 +210,30 @@ emergency contacts, custom fields or card data.
 - Every gateway call is recorded in `fitbox_sync_runs` with counts and a
   bounded error code, never a payload.
 
+### Push Zaps can now fill the mirror
+
+Each inbound Zap may map the following extra fields alongside the envelope
+above. When they are present XERT also upserts the FitBox mirror; when they
+are absent the event is still stored for review exactly as before. Nothing
+here touches an XERT member, booking, credit or billing record.
+
+- `User Profile Changed` / `User Status Changed`: `fitbox_user_id` (required),
+  `fitbox_first_name`, `fitbox_last_name`, `fitbox_email`, `fitbox_phone`,
+  `fitbox_city`, `fitbox_state`, `fitbox_postcode`, `fitbox_country`,
+  `status`, `fitbox_role`, `provider_updated_at`
+- `User Subscription Changed`: `fitbox_subscription_id` and `fitbox_user_id`
+  (required), `fitbox_email`, `product_id`, `product_name`, `status`,
+  `payment_gateway`, `price_in_cents`, `set_up_price_in_cents`,
+  `discount_percentage`, `start_date`, `expiration_date`, `sessions_count`,
+  `sessions_count_last_reset`, `provider_updated_at`
+- `Class Session Booked` / `Class Session Cancelled` / `User First Session
+  Booked`: `fitbox_booking_id` (the connector's `attendanceId`, required),
+  `fitbox_user_id` (required), `fitbox_session_id` (`eventId`),
+  `fitbox_class_id`, `class_name`, `session_start_time`, `status`
+
+Still never map DOB, gender, weight, height, street address, emergency
+contacts, custom fields or card data.
+
 ### Gateway setup
 
 1. Apply `supabase/migrations/20260903000000_fitbox_live_mirror.sql` and

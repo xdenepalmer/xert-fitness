@@ -31,6 +31,7 @@ import {
   normalizeFitboxAttendance,
   normalizeFitboxClasses,
   normalizeFitboxFeed,
+  normalizeFitboxPush,
   normalizeFitboxUser,
   parseMcpResponseText,
   summarizeFitboxMirror,
@@ -194,10 +195,12 @@ async function handleFitboxEvent(request, admin, trace) {
   }
 
   let event;
+  let envelope;
   try {
     const body = await requestJson(request);
     if (Buffer.byteLength(JSON.stringify(body || {}), 'utf8') > EVENT_REQUEST_BYTES) throw new Error('REQUEST_TOO_LARGE');
-    event = normalizeFitboxEvent(zapierDataEnvelope(body));
+    envelope = zapierDataEnvelope(body);
+    event = normalizeFitboxEvent(envelope);
   } catch {
     return json({ error: 'Invalid FitBox event.' }, 400);
   }
@@ -223,12 +226,25 @@ async function handleFitboxEvent(request, admin, trace) {
     }).select('id, processing_state, received_at').single();
     if (error?.code === '23505' && event.deliveryId) return json({ received: true, duplicate: true }, 200);
     if (error) throw error;
+    // When the Zap also maps the bounded mirror fields, keep the mirror fresh.
+    // This only ever touches the FitBox mirror, never an XERT record.
+    let mirrored = false;
+    const push = normalizeFitboxPush(event.eventType, envelope, config.gymId);
+    if (push) {
+      try {
+        await storeFitboxFeed(admin, push.feed, [push.row]);
+        mirrored = true;
+      } catch (mirrorError) {
+        if (!MIRROR_MISSING_CODES.has(mirrorError?.code)) console.warn('FitBox push could not update the mirror.', { requestId: trace.requestId, feed: push.feed });
+      }
+    }
     console.info('FitBox event stored for read-only reconciliation.', {
       requestId: trace.requestId,
       eventId: data.id,
       eventType: event.eventType,
+      mirrored,
     });
-    return json({ received: true, event_id: data.id, processing_state: data.processing_state }, 202);
+    return json({ received: true, event_id: data.id, processing_state: data.processing_state, mirrored }, 202);
   } catch (error) {
     if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox event storage is unavailable.' }, 503);
     return json({ error: 'FitBox event could not be stored.' }, 500);

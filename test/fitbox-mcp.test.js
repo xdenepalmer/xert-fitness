@@ -15,6 +15,7 @@ import {
   normalizeFitboxAttendance,
   normalizeFitboxClasses,
   normalizeFitboxFeed,
+  normalizeFitboxPush,
   normalizeFitboxSubscription,
   normalizeFitboxUser,
   parseMcpResponseText,
@@ -206,4 +207,25 @@ test('the gateway tells a dynamic Zapier server from an actions-only one', () =>
   assert.equal(withFeeds.classes_available, true);
   assert.deepEqual(fixed.actions, { get_user: true, next_session: true, register_user: true });
   assert.equal(gatewayCapabilities(['get_configuration_url']).mode, 'empty');
+});
+
+test('push Zaps can carry bounded mirror fields and fall back to review-only when identity is missing', () => {
+  const user = normalizeFitboxPush('user_profile_changed', { fitbox_user_id: '100999', fitbox_first_name: 'Test', fitbox_last_name: 'Member', fitbox_email: 'TEST@example.com', fitbox_phone: '0400', status: 'Active', fitbox_role: 'member', provider_updated_at: '2026-09-02T00:00:00Z', dob: '1990-01-01' }, '545');
+  assert.equal(user.feed, 'users');
+  assert.equal(user.row.email, 'test@example.com');
+  assert.equal(user.row.status, 'active');
+  assert.equal(user.row.provider_updated_at, '2026-09-02T00:00:00.000Z');
+  assert.equal(Object.hasOwn(user.row, 'dob'), false);
+  const subscription = normalizeFitboxPush('user_subscription_changed', { fitbox_subscription_id: '193470', fitbox_user_id: '100999', product_name: 'Foundation', status: 'active', price_in_cents: '3590', start_date: '2026-09-01' }, '545');
+  assert.equal(subscription.feed, 'subscriptions');
+  assert.equal(subscription.row.price_in_cents, 3590);
+  const booked = normalizeFitboxPush('class_session_booked', { fitbox_booking_id: '6695543', fitbox_session_id: '3055210', fitbox_class_id: '8363', class_name: 'Xert functional fitness training', fitbox_user_id: '100999', session_start_time: '2026-09-04T22:00:00.000Z' }, '545');
+  assert.equal(booked.feed, 'bookings');
+  assert.equal(booked.row.status, 'booked');
+  const cancelled = normalizeFitboxPush('class_session_cancelled', { fitbox_booking_id: '1', fitbox_user_id: '100999' }, '545');
+  assert.equal(cancelled.feed, 'cancellations');
+  assert.equal(cancelled.row.status, 'cancelled');
+  assert.equal(normalizeFitboxPush('class_session_booked', { fitbox_user_id: '100999' }, '545'), null, 'no attendance id means review only');
+  assert.equal(normalizeFitboxPush('user_status_changed', { status: 'active' }, '545'), null);
+  assert.equal(normalizeFitboxPush('unknown_event', { fitbox_user_id: '1' }, '545'), null);
 });
