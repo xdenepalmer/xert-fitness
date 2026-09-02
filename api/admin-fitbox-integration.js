@@ -23,6 +23,7 @@ const EVENT_REQUEST_BYTES = 16_384;
 const EVENT_PAGE_LIMIT = 50;
 const FITBOX_EVENT_STATES = new Set(['needs_review', 'reviewed', 'ignored']);
 const FITBOX_EVENT_SELECT = 'id, event_type, fitbox_gym_id, fitbox_user_id, fitbox_booking_id, fitbox_session_id, fitbox_subscription_id, provider_event_id, delivery_id, provider_status, provider_occurred_at, provider_updated_at, processing_state, review_reason, reviewed_at, received_at';
+const XERT_LEAD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function callbackTokenHash(token) {
   return createHash('sha256').update(token).digest('hex');
@@ -335,10 +336,16 @@ async function fitboxLinkIntegrity(admin) {
   if (linkError) throw linkError;
   const leadIds = [...new Set((links || []).map(link => link.lead_id).filter(Boolean))];
   if (!leadIds.length) return { checked: 0, orphaned: 0 };
-  const { data: leads, error: leadError } = await admin.from('member_interest').select('id').in('id', leadIds);
+  // Historical FitBox links were not guaranteed to use XERT UUIDs. Treat
+  // those references as orphaned evidence rather than sending invalid IDs to
+  // PostgreSQL and taking the owner review screen down.
+  const validLeadIds = leadIds.filter(leadId => XERT_LEAD_ID_PATTERN.test(leadId));
+  const invalidLeadIds = leadIds.filter(leadId => !XERT_LEAD_ID_PATTERN.test(leadId));
+  if (!validLeadIds.length) return { checked: leadIds.length, orphaned: invalidLeadIds.length };
+  const { data: leads, error: leadError } = await admin.from('member_interest').select('id').in('id', validLeadIds);
   if (leadError) throw leadError;
   const found = new Set((leads || []).map(lead => lead.id));
-  return { checked: leadIds.length, orphaned: leadIds.filter(id => !found.has(id)).length };
+  return { checked: leadIds.length, orphaned: invalidLeadIds.length + validLeadIds.filter(id => !found.has(id)).length };
 }
 
 async function integrationHealth(admin) {
