@@ -40,7 +40,7 @@ test('native Stripe incident actions preserve verified receipts across health re
   assert.match(incidentStore, /Do not retry it again; refresh this screen/);
   assert.match(incidentStore, /lastUpdatedAt = Date\(\)[\s\S]*return true/);
 
-  // Payments and memberships are handled in Fitbox: Operations Health no
+  // Payments and memberships are handled in Fitbox: System status no
   // longer drives Stripe incident actions. The guarded receipts machinery
   // above remains in the store and API for the Stripe wind-down.
   const health = view.slice(

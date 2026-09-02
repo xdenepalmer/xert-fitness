@@ -29,7 +29,7 @@ test('native PT updates retain audit receipts across single, bulk, and stale rea
   assert.match(single, /receipt = try await api\.adminUpdatePTRequest/);
   assert.match(single, /let queueRefreshed = await refreshPTRequestsAfterMutation/);
   assert.match(single, /Audit receipt \\\(receiptText\)/);
-  assert.match(single, /Do not repeat this change; refresh PT Requests/);
+  assert.match(single, /Do not repeat this change; refresh Personal training/);
   assert.match(single, /lastUpdatedAt = Date\(\)[\s\S]*return true/);
 
   const bulk = store.slice(
@@ -39,8 +39,8 @@ test('native PT updates retain audit receipts across single, bulk, and stale rea
   assert.match(bulk, /var auditReceipts: \[UUID\] = \[\]/);
   assert.match(bulk, /auditReceipts\.append\(receipt\)/);
   assert.match(bulk, /auditReceipts\.prefix\(3\)/);
-  assert.match(bulk, /\+ \\\(remainingReceiptCount\) more in Admin Audit/);
-  assert.match(bulk, /Do not repeat successful changes; refresh PT Requests/);
+  assert.match(bulk, /\+ \\\(remainingReceiptCount\) more in Activity log/);
+  assert.match(bulk, /Do not repeat successful changes; refresh Personal training/);
 
   const desk = view.slice(
     view.indexOf('private struct AdminPTRequestsView'),

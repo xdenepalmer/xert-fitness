@@ -39,7 +39,7 @@ test('native class saves preserve confirmed mutation truth across failed readbac
   assert.match(saveClass, /markScheduleSourceUnavailable\("full timetable"\)/);
   assert.match(saveClass, /markScheduleSourceUnavailable\("today's classes"\)/);
   assert.match(saveClass, /Receipt \\\(receipt\)/);
-  assert.match(saveClass, /Do not save or create it again; refresh Class Desk/);
+  assert.match(saveClass, /Do not save or create it again; refresh Today's classes/);
   assert.match(saveClass, /lastUpdatedAt = Date\(\)[\s\S]*return true/);
 
   const schedule = view.slice(

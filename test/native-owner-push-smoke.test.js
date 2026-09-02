@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('native Operations Health runs a confirmed owner-only production push smoke test', async () => {
+test('native System status runs a confirmed owner-only production push smoke test', async () => {
   const [models, api, store, view] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),

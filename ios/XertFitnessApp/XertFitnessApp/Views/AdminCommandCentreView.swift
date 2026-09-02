@@ -221,7 +221,7 @@ struct AdminCommandCentreView: View {
             }
         }
         .confirmationDialog(
-            "Unsaved Member App Controls",
+            "Unsaved Settings",
             isPresented: $showingPlatformExitConfirmation,
             titleVisibility: .visible,
             presenting: pendingOwnerExitRequest
@@ -472,7 +472,7 @@ struct AdminCommandCentreView: View {
             isSavingPlatformExit = false
             pendingOwnerExitRequest = nil
             pendingCreateFormNavigation = false
-            admin.errorMessage = "Member App Controls could not be saved. Keep editing and try again."
+            admin.errorMessage = "Settings could not be saved. Keep editing and try again."
             XertHaptics.play(.error)
             return
         }
@@ -1444,7 +1444,7 @@ struct AdminCommandCentreView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(Color.red)
-            .accessibilityHint("Opens Member Notices to remove the contradictory pause update")
+            .accessibilityHint("Opens App notices to remove the contradictory pause update")
         case .recoveryUpdateNeeded:
             Button {
                 presentNoticeQuickAction(draft: .memberOperationsRestored(
@@ -1590,7 +1590,7 @@ struct AdminCommandCentreView: View {
                 icon: "4.circle.fill",
                 color: Color.xertSteel,
                 title: "Reopen deliberately",
-                detail: "Use Member App Controls only after live checks pass."
+                detail: "Use Settings only after live checks pass."
             )
         }
         .padding(.top, 2)
@@ -2435,7 +2435,7 @@ struct AdminCommandCentreView: View {
             } else {
                 AdminEmptyState(
                     icon: "chart.bar.xaxis",
-                    text: "Activation reporting is unavailable until Operations Health verifies the member activation upgrade."
+                    text: "Activation reporting is unavailable until System status verifies the member activation upgrade."
                 )
             }
         }
@@ -2808,8 +2808,13 @@ struct AdminCommandCentreView: View {
 
             if showingAllWorkspaces {
                 ForEach(XertOwnerWorkspaceSection.allCases) { section in
-                    adminHeading(section.rawValue)
-                        .padding(.top, section == .operate ? 0 : 8)
+                    VStack(alignment: .leading, spacing: 2) {
+                        adminHeading(section.rawValue)
+                        Text(section.detail)
+                            .font(.caption)
+                            .foregroundStyle(Color.xertSteel.opacity(0.7))
+                    }
+                    .padding(.top, section == .classes ? 0 : 8)
                     ForEach(XertOwnerWorkspace.workspaces(in: section)) { workspace in
                         AdminDestinationRow(
                             title: workspace.title,
@@ -2899,7 +2904,7 @@ struct AdminCommandCentreView: View {
     private func workspaceDestination(_ workspace: XertOwnerWorkspace, session: AuthSession) -> some View {
         switch workspace {
         case .overview:
-            dashboard(session: session).navigationTitle("Overview")
+            dashboard(session: session).navigationTitle("Today")
         case .members:
             AdminMembersView(
                 admin: admin,
@@ -3712,7 +3717,7 @@ private struct AdminAccessControlView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Access Control")
+        .navigationTitle("Admin access")
         .searchable(
             text: $query,
             prompt: mode == .administrators
@@ -3972,7 +3977,7 @@ private struct AdminAccessControlView: View {
             }
             if admin.auditIsCurrent {
                 Button(action: onOpenAudit) {
-                    Label("Open full Admin Audit", systemImage: "clock.arrow.circlepath")
+                    Label("Open full Activity log", systemImage: "clock.arrow.circlepath")
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.bordered)
@@ -5831,7 +5836,7 @@ private struct AdminClassesView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Class Desk")
+        .navigationTitle("Today's classes")
         .refreshable { await admin.refresh(session: session) }
         .confirmationDialog(
             "Promote \(promotion?.nextMemberName ?? "next member")?",
@@ -7364,7 +7369,7 @@ private struct AdminClassCancellationFollowUpView: View {
         Section("Contact fallback") {
             if followUp.contactLookupIncomplete {
                 Label(
-                    "One booking source could not be checked. Review Booking Requests before considering follow-up complete.",
+                    "One booking source could not be checked. Review Class requests before considering follow-up complete.",
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.caption.weight(.semibold))
@@ -8593,7 +8598,7 @@ private struct AdminRetentionView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Retention")
+        .navigationTitle("Follow-ups")
         .sheet(item: $presentedMember) { member in
             NavigationStack {
                 AdminMemberDetailView(admin: admin, session: session, member: member)
@@ -9661,7 +9666,7 @@ private struct AdminBookingRequestsView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Booking Requests")
+        .navigationTitle("Class requests")
         .searchable(text: $query, prompt: "Member, contact, class or coach")
         .refreshable { await admin.loadBookingRequests(session: session, force: true) }
         .toolbar {
@@ -10082,7 +10087,7 @@ private struct AdminSiteContentView: View {
                     Label(
                         admin.hasLoadedSiteContent
                             ? "Showing the last website snapshot. Publishing and media uploads are paused until refresh succeeds."
-                            : "Live Site Content could not be loaded. Built-in defaults are not being treated as the server state.",
+                            : "Live Website content could not be loaded. Built-in defaults are not being treated as the server state.",
                         systemImage: "wifi.exclamationmark"
                     )
                     .font(.caption.weight(.semibold))
@@ -10134,7 +10139,7 @@ private struct AdminSiteContentView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Site Content")
+        .navigationTitle("Website content")
         .refreshable { await admin.loadSiteContent(session: session, force: true) }
         .task { await admin.loadSiteContent(session: session) }
     }
@@ -10203,7 +10208,7 @@ private struct AdminSiteContentEditor: View {
             if !mutationAllowed {
                 Section {
                     Label(
-                        "This website snapshot is not current. Your local draft is preserved, but publishing and uploads require a refresh from the Site Content desk.",
+                        "This website snapshot is not current. Your local draft is preserved, but publishing and uploads require a refresh from the Website content desk.",
                         systemImage: "lock.trianglebadge.exclamationmark"
                     )
                     .font(.caption.weight(.semibold))
@@ -10749,7 +10754,7 @@ private struct AdminCampaignAttributionView: View {
                     } else {
                         reportingUnavailablePanel(
                             message: admin.campaignAttributionStatusMessage
-                                ?? "Campaign Attribution has not loaded. Retry before relying on acquisition totals."
+                                ?? "Where members come from has not loaded. Retry before relying on acquisition totals."
                         )
                     }
                 }
@@ -10818,7 +10823,7 @@ private struct AdminCampaignAttributionView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Campaign Attribution")
+        .navigationTitle("Where members come from")
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
@@ -11196,7 +11201,7 @@ private struct AdminLeadsView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Lead Pipelines")
+        .navigationTitle("New enquiries")
         .searchable(text: $query, prompt: "Name, email, phone or source")
         .refreshable { await admin.loadLeads(session: session, pipeline: pipeline, force: true) }
         .toolbar {
@@ -11865,7 +11870,7 @@ private struct AdminPTRequestsView: View {
                     Label(
                         admin.loadedSources.contains("PT requests")
                             ? "Showing the last PT request snapshot. Updates are paused until refresh succeeds."
-                            : "PT Requests could not be loaded. No empty queue assumption is being made.",
+                            : "Personal training could not be loaded. No empty queue assumption is being made.",
                         systemImage: "wifi.exclamationmark"
                     )
                     .font(.caption.weight(.semibold))
@@ -11982,7 +11987,7 @@ private struct AdminPTRequestsView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("PT Requests")
+        .navigationTitle("Personal training")
         .searchable(text: $query, prompt: "Name, contact, goal or notes")
         .refreshable { await admin.refreshPTRequests(session: session) }
         .toolbar {
@@ -12858,7 +12863,7 @@ private struct AdminPlatformView: View {
             }
         }
         .xertOwnerScreen()
-        .navigationTitle("Member App Controls")
+        .navigationTitle("Settings")
         .onAppear {
             let live = admin.settings
             let recovered: AdminCatalogueDraftSnapshot<AdminPlatformSettings>? =
@@ -13590,7 +13595,7 @@ private struct AdminCommunicationsView: View {
                     Image(systemName: "bell.slash")
                         .font(.title2)
                         .foregroundStyle(Color.xertSteel)
-                    Text("No Member Notices")
+                    Text("No app notices")
                         .font(.headline)
                         .foregroundStyle(Color.xertOffWhite)
                     Text(noticesAreCurrent
@@ -13702,7 +13707,7 @@ private struct AdminCommunicationsView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Member Notices")
+        .navigationTitle("App notices")
         .refreshable { await admin.refreshAnnouncements(session: session) }
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -14348,7 +14353,7 @@ private struct AdminOperationsHealthView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Operations Health")
+        .navigationTitle("System status")
         .refreshable {
             await admin.refreshHealth(session: session)
             await admin.refreshFitboxBridgeHealth(session: session)
@@ -14632,7 +14637,7 @@ private struct AdminAuditView: View {
                     } else {
                         auditUnavailablePanel(
                             message: admin.auditStatusMessage
-                                ?? "Admin Audit has not loaded. Retry before relying on change history."
+                                ?? "Activity log has not loaded. Retry before relying on change history."
                         )
                     }
                 }
@@ -14721,7 +14726,7 @@ private struct AdminAuditView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Admin Audit")
+        .navigationTitle("Activity log")
         .searchable(text: $query, prompt: "Search changes")
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -14735,7 +14740,7 @@ private struct AdminAuditView: View {
                 }
                 .disabled(!reportIsCurrent || rows.isEmpty)
                 .accessibilityLabel("Export filtered admin audit CSV")
-                .accessibilityHint(reportIsCurrent ? "Exports the visible live history" : "Refresh Admin Audit before exporting")
+                .accessibilityHint(reportIsCurrent ? "Exports the visible live history" : "Refresh Activity log before exporting")
                 Button {
                     Task { await admin.loadAudit(session: session, force: true) }
                 } label: {
@@ -14848,7 +14853,7 @@ private struct AdminAuditView: View {
             Button {
                 Task { await admin.loadAudit(session: session, force: true) }
             } label: {
-                Label(admin.isLoadingAudit ? "Retrying..." : "Retry Admin Audit", systemImage: "arrow.clockwise")
+                Label(admin.isLoadingAudit ? "Retrying..." : "Retry Activity log", systemImage: "arrow.clockwise")
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.borderedProminent)
@@ -14973,7 +14978,7 @@ private struct AdminProductsView: View {
                             Text("Stripe has verified all \(activeProducts.count) active packs and the checkout service is ready.")
                         } else if liveBlockedProducts.isEmpty {
                             Text("All active packs have Price IDs, but Stripe launch checks still need attention.")
-                            Text("Review Operations Health before enabling checkout.")
+                            Text("Review System status before enabling checkout.")
                                 .foregroundStyle(Color.xertPale.opacity(0.5))
                         } else {
                             Text("\(liveBlockedProducts.count) of \(activeProducts.count) active packs block live checkout: \(liveBlockedProducts.map(\.slug).joined(separator: ", ")).")
@@ -15025,14 +15030,14 @@ private struct AdminProductsView: View {
                 .accessibilityHint(
                     pricingMutationAvailable
                         ? "Opens this session pack to review pricing and sale state"
-                        : "Refresh Session Packs & Pricing before editing this pack"
+                        : "Refresh Pricing before editing this pack"
                 )
                 .listRowBackground(Color.xertInk)
             }
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Session Packs & Pricing")
+        .navigationTitle("Pricing")
         .searchable(text: $query, prompt: "Search packs")
         .accessibilityIdentifier("owner.products.list")
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -15538,7 +15543,7 @@ private struct AdminEventsView: View {
                     Label(
                         admin.loadedSources.contains("event calendar")
                             ? "Showing the last event snapshot. Catalogue changes are paused until required sources refresh."
-                            : "The Event Calendar could not be loaded. No empty calendar assumption is being made.",
+                            : "The Events page could not be loaded. No empty calendar assumption is being made.",
                         systemImage: "wifi.exclamationmark"
                     )
                     .font(.caption.weight(.semibold))
@@ -15665,7 +15670,7 @@ private struct AdminEventsView: View {
         }
         .scrollContentBackground(.hidden)
         .xertOwnerScreen()
-        .navigationTitle("Event Calendar")
+        .navigationTitle("Events page")
         .searchable(text: $query, prompt: "Search events")
         .refreshable { await admin.refreshEventCatalogue(session: session) }
         .toolbar {
@@ -16165,7 +16170,7 @@ private struct AdminCoachesView: View {
                     Label(
                         admin.loadedSources.contains("team directory")
                             ? "Showing the last team snapshot. Profile changes are paused until refresh succeeds."
-                            : "The Team Directory could not be loaded. No empty-directory assumption is being made.",
+                            : "The Coaches page could not be loaded. No empty-directory assumption is being made.",
                         systemImage: "wifi.exclamationmark"
                     )
                     .font(.caption.weight(.semibold))

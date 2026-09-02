@@ -552,7 +552,7 @@ final class AdminStore: ObservableObject {
             auditPartialSources = snapshot.unavailableSources
             auditStatusMessage = snapshot.isComplete
                 ? nil
-                : "Admin Audit is partial. Unavailable: \(snapshot.unavailableSources.joined(separator: ", "))."
+                : "Activity log is partial. Unavailable: \(snapshot.unavailableSources.joined(separator: ", "))."
             auditUpdatedAt = Date()
             loadedSources.insert("admin audit")
             if snapshot.isComplete {
@@ -564,8 +564,8 @@ final class AdminStore: ObservableObject {
         } catch {
             auditUnavailable = true
             auditStatusMessage = hasLoadedAudit
-                ? "Admin Audit could not refresh. The last loaded history is labelled as stale."
-                : "Admin Audit could not load. Retry before relying on change history."
+                ? "Activity log could not refresh. The last loaded history is labelled as stale."
+                : "Activity log could not load. Retry before relying on change history."
             failures.append("admin audit")
         }
         do { products = try await productRequest; successfulSources.insert("session packs"); loadedSource = true }
@@ -763,7 +763,7 @@ final class AdminStore: ObservableObject {
         return true
     }
 
-    /// Refreshes the bounded release-health and launch-gate contracts used by Operations Health.
+    /// Refreshes the bounded release-health and launch-gate contracts used by System status.
     /// Failed requests preserve their last successful payload. The source is
     /// marked unavailable so stale snapshots cannot be presented as current.
     /// Partial availability stays inline and never raises a global modal alert.
@@ -1695,8 +1695,8 @@ final class AdminStore: ObservableObject {
         } catch {
             campaignAttributionUnavailable = true
             campaignAttributionStatusMessage = hasLoadedCampaignAttribution
-                ? "Campaign Attribution could not refresh. The last loaded report remains visible but is stale."
-                : "Campaign Attribution could not load. Retry before relying on acquisition totals."
+                ? "Where members come from could not refresh. The last loaded report remains visible but is stale."
+                : "Where members come from could not load. Retry before relying on acquisition totals."
         }
     }
 
@@ -1725,7 +1725,7 @@ final class AdminStore: ObservableObject {
             auditPartialSources = snapshot.unavailableSources
             auditStatusMessage = snapshot.isComplete
                 ? nil
-                : "Admin Audit is partial. Unavailable: \(snapshot.unavailableSources.joined(separator: ", "))."
+                : "Activity log is partial. Unavailable: \(snapshot.unavailableSources.joined(separator: ", "))."
             auditUpdatedAt = Date()
             loadedSources.insert("admin audit")
             if snapshot.isComplete {
@@ -1740,8 +1740,8 @@ final class AdminStore: ObservableObject {
                 refreshUnavailableSources.append("admin audit")
             }
             auditStatusMessage = hasLoadedAudit
-                ? "Admin Audit could not refresh. The last loaded history remains visible but is stale."
-                : "Admin Audit could not load. Retry before relying on change history."
+                ? "Activity log could not refresh. The last loaded history remains visible but is stale."
+                : "Activity log could not load. Retry before relying on change history."
         }
     }
 
@@ -1766,7 +1766,7 @@ final class AdminStore: ObservableObject {
             lastUpdatedAt = Date()
         } catch {
             siteContentUnavailable = true
-            siteContentStatusMessage = "Site Content could not refresh. Last loaded sections remain read-only."
+            siteContentStatusMessage = "Website content could not refresh. Last loaded sections remain read-only."
         }
     }
 
@@ -1780,7 +1780,7 @@ final class AdminStore: ObservableObject {
               !isLoadingSiteContent,
               !isUploadingSiteImage else { return nil }
         guard siteContentIsCurrent else {
-            errorMessage = "Refresh Site Content before publishing website changes."
+            errorMessage = "Refresh Website content before publishing website changes."
             return nil
         }
         savingSiteContentSection = section
@@ -1802,7 +1802,7 @@ final class AdminStore: ObservableObject {
             return saved
         } catch {
             siteContentUnavailable = true
-            siteContentStatusMessage = "Site Content changed or could not be verified. Refresh and review the latest live section before publishing again."
+            siteContentStatusMessage = "Website content changed or could not be verified. Refresh and review the latest live section before publishing again."
             errorMessage = error.localizedDescription
             return nil
         }
@@ -1818,7 +1818,7 @@ final class AdminStore: ObservableObject {
               savingSiteContentSection == nil,
               !isLoadingSiteContent else { return nil }
         guard siteContentIsCurrent else {
-            errorMessage = "Refresh Site Content before uploading public media."
+            errorMessage = "Refresh Website content before uploading public media."
             return nil
         }
         isUploadingSiteImage = true
@@ -2065,7 +2065,7 @@ final class AdminStore: ObservableObject {
     ) async -> Bool {
         guard updatingBookingRequestIDs.isEmpty else { return false }
         guard bookingRequestsAreCurrent else {
-            errorMessage = "Refresh Booking Requests before changing a booking."
+            errorMessage = "Refresh Class requests before changing a booking."
             return false
         }
         updatingBookingRequestIDs = [booking.id]
@@ -2094,7 +2094,7 @@ final class AdminStore: ObservableObject {
     ) async -> Set<String> {
         guard updatingBookingRequestIDs.isEmpty else { return Set(bookings.map(\.id)) }
         guard bookingRequestsAreCurrent else {
-            errorMessage = "Refresh Booking Requests before updating selected bookings."
+            errorMessage = "Refresh Class requests before updating selected bookings."
             return Set(bookings.map(\.id))
         }
         updatingBookingRequestIDs = Set(bookings.map(\.id))
@@ -2170,7 +2170,7 @@ final class AdminStore: ObservableObject {
     ) async -> Bool {
         guard updatingBookingRequestIDs.isEmpty else { return false }
         guard bookingRequestsAreCurrent else {
-            errorMessage = "Refresh Booking Requests before changing staff notes."
+            errorMessage = "Refresh Class requests before changing staff notes."
             return false
         }
         updatingBookingRequestIDs = [booking.id]
@@ -2245,7 +2245,7 @@ final class AdminStore: ObservableObject {
             promotionStatusMessage = "Member promoted. Booking receipt \(bookingReceipt)."
         } else {
             promotionStatusIsWarning = true
-            promotionStatusMessage = "Member promoted, but \(unavailableReadbacks.joined(separator: " and ")) could not reload. Booking receipt \(bookingReceipt). Do not promote another member; refresh Class Desk."
+            promotionStatusMessage = "Member promoted, but \(unavailableReadbacks.joined(separator: " and ")) could not reload. Booking receipt \(bookingReceipt). Do not promote another member; refresh Today's classes."
         }
         lastUpdatedAt = Date()
         return true
@@ -2464,7 +2464,7 @@ final class AdminStore: ObservableObject {
             } else if message.localizedCaseInsensitiveContains("MEMBER_NOT_BOOKABLE") {
                 errorMessage = "Choose an active member account. Staff and administrator accounts cannot be booked into classes."
             } else if message.localizedCaseInsensitiveContains("admin_book_member_into_class") {
-                errorMessage = "Apply the staff-assisted booking migration before adding members from Class Desk."
+                errorMessage = "Apply the staff-assisted booking migration before adding members from Today's classes."
             } else {
                 errorMessage = message
             }
@@ -2580,7 +2580,7 @@ final class AdminStore: ObservableObject {
             guard loadedSources.contains("schema health"),
                   !refreshUnavailableSources.contains("schema health"),
                   schemaCapabilities.contains(where: { $0.capability == "member_booking_switch_guard" }) else {
-                errorMessage = "Bookings stay paused until Operations Health verifies the member booking-switch guard."
+                errorMessage = "Bookings stay paused until System status verifies the member booking-switch guard."
                 return false
             }
         }
@@ -2693,7 +2693,7 @@ final class AdminStore: ObservableObject {
     ) async -> Bool {
         guard resolvingStripeIncidentID == nil, let errorCode = incident.error_code else { return false }
         guard healthSourceIsCurrent("Stripe health") else {
-            errorMessage = "Refresh Operations Health before marking this Stripe incident handled."
+            errorMessage = "Refresh System status before marking this Stripe incident handled."
             return false
         }
         healthRefreshGeneration &+= 1
@@ -2723,7 +2723,7 @@ final class AdminStore: ObservableObject {
             stripeIncidentStatusIsWarning = true
         }
         stripeIncidentStatusMessage = stripeIncidentStatusIsWarning
-            ? "Stripe incident \(receipt.event_id) was marked handled, but Operations Health could not reload. Do not mark it again; refresh this screen."
+            ? "Stripe incident \(receipt.event_id) was marked handled, but System status could not reload. Do not mark it again; refresh this screen."
             : "Stripe incident \(receipt.event_id) was marked handled."
         lastUpdatedAt = Date()
         return true
@@ -2735,7 +2735,7 @@ final class AdminStore: ObservableObject {
     ) async -> Bool {
         guard retryingStripeIncidentID == nil, incident.resolution == nil else { return false }
         guard healthSourceIsCurrent("Stripe health") else {
-            errorMessage = "Refresh Operations Health before retrying this Stripe incident."
+            errorMessage = "Refresh System status before retrying this Stripe incident."
             return false
         }
         healthRefreshGeneration &+= 1
@@ -2766,7 +2766,7 @@ final class AdminStore: ObservableObject {
         } catch {
             markCatalogueSourceUnavailable("Stripe health")
             stripeIncidentStatusIsWarning = true
-            details += " Operations Health could not reload. Do not retry it again; refresh this screen."
+            details += " System status could not reload. Do not retry it again; refresh this screen."
         }
         stripeIncidentStatusMessage = details
         lastUpdatedAt = Date()
@@ -2782,7 +2782,7 @@ final class AdminStore: ObservableObject {
     ) async -> Bool {
         guard updatingPTRequestID == nil, bulkUpdatingPTRequestIDs.isEmpty else { return false }
         guard ptRequestsAreCurrent else {
-            errorMessage = "Refresh PT Requests before changing this request."
+            errorMessage = "Refresh Personal training before changing this request."
             return false
         }
         guard updateNotes || request.allowedNextStatuses.contains(status) else {
@@ -2814,7 +2814,7 @@ final class AdminStore: ObservableObject {
         ptRequestStatusIsWarning = !queueRefreshed
         ptRequestStatusMessage = queueRefreshed
             ? "\(action). Audit receipt \(receiptText)."
-            : "\(action), but the latest queue could not reload. Audit receipt \(receiptText). Do not repeat this change; refresh PT Requests."
+            : "\(action), but the latest queue could not reload. Audit receipt \(receiptText). Do not repeat this change; refresh Personal training."
         lastUpdatedAt = Date()
         return true
     }
@@ -2825,7 +2825,7 @@ final class AdminStore: ObservableObject {
               !isSendingOwnerPushTest,
               healthSourceIsCurrent("push health"),
               pushHealth?.ready == true else {
-            ownerPushTestStatusMessage = "Refresh Operations Health and resolve APNs setup before sending a production test."
+            ownerPushTestStatusMessage = "Refresh System status and resolve APNs setup before sending a production test."
             ownerPushTestStatusIsWarning = true
             return false
         }
@@ -2890,7 +2890,7 @@ final class AdminStore: ObservableObject {
             return Set(requests.map(\.id))
         }
         guard ptRequestsAreCurrent else {
-            errorMessage = "Refresh PT Requests before changing selected requests."
+            errorMessage = "Refresh Personal training before changing selected requests."
             return Set(requests.map(\.id))
         }
 
@@ -2929,11 +2929,11 @@ final class AdminStore: ObservableObject {
             let visibleReceipts = auditReceipts.prefix(3).map { $0.uuidString.lowercased() }
             let remainingReceiptCount = max(0, auditReceipts.count - visibleReceipts.count)
             let receiptSummary = visibleReceipts.joined(separator: ", ")
-                + (remainingReceiptCount > 0 ? " + \(remainingReceiptCount) more in Admin Audit" : "")
+                + (remainingReceiptCount > 0 ? " + \(remainingReceiptCount) more in Activity log" : "")
             ptRequestStatusIsWarning = !queueRefreshed || !failures.isEmpty
             ptRequestStatusMessage = queueRefreshed
                 ? "\(succeededCount) PT request\(succeededCount == 1 ? " was" : "s were") updated. Audit receipts: \(receiptSummary)."
-                : "\(succeededCount) PT request\(succeededCount == 1 ? " was" : "s were") updated, but the queue could not reload. Audit receipts: \(receiptSummary). Do not repeat successful changes; refresh PT Requests."
+                : "\(succeededCount) PT request\(succeededCount == 1 ? " was" : "s were") updated, but the queue could not reload. Audit receipts: \(receiptSummary). Do not repeat successful changes; refresh Personal training."
             lastUpdatedAt = Date()
         }
         if !failures.isEmpty {
@@ -2963,7 +2963,7 @@ final class AdminStore: ObservableObject {
             if !refreshUnavailableSources.contains("PT requests") {
                 refreshUnavailableSources.append("PT requests")
             }
-            ptRequestStatusMessage = "PT Requests could not refresh. Last loaded requests remain read-only."
+            ptRequestStatusMessage = "Personal training could not refresh. Last loaded requests remain read-only."
             ptRequestStatusIsWarning = true
         }
     }
@@ -3137,7 +3137,7 @@ final class AdminStore: ObservableObject {
               !refreshUnavailableSources.contains("member notices"),
               !isLoading else {
             if !isMutatingAnnouncements {
-                errorMessage = "Refresh Member Notices before changing communications."
+                errorMessage = "Refresh App notices before changing communications."
             }
             return false
         }
@@ -3194,7 +3194,7 @@ final class AdminStore: ObservableObject {
         guard loadedSources.contains("session packs"),
               !refreshUnavailableSources.contains("session packs"),
               !isLoading else {
-            errorMessage = "Refresh Session Packs & Pricing before saving catalogue changes."
+            errorMessage = "Refresh Pricing before saving catalogue changes."
             return false
         }
         healthRefreshGeneration &+= 1
@@ -3318,7 +3318,7 @@ final class AdminStore: ObservableObject {
               !isRefreshingEventCatalogue,
               !isSeedingEventCalendar else { return false }
         guard eventCalendarIsCurrent else {
-            errorMessage = "Refresh Event Calendar before saving catalogue changes."
+            errorMessage = "Refresh Events page before saving catalogue changes."
             return false
         }
         savingEventID = event?.id ?? UUID()
@@ -3350,7 +3350,7 @@ final class AdminStore: ObservableObject {
               !isRefreshingEventCatalogue,
               !isSeedingEventCalendar else { return false }
         guard eventCalendarIsCurrent, eventTrainingGroupsAreCurrent else {
-            errorMessage = "Refresh Event Calendar and training groups before deleting an event."
+            errorMessage = "Refresh Events page and training groups before deleting an event."
             return false
         }
         deletingEventID = event.id
@@ -3401,7 +3401,7 @@ final class AdminStore: ObservableObject {
               !isLoading,
               !isRefreshingEventCatalogue else { return nil }
         guard eventCalendarIsCurrent else {
-            errorMessage = "Refresh Event Calendar before adding the XERT 2026 calendar."
+            errorMessage = "Refresh Events page before adding the XERT 2026 calendar."
             return nil
         }
 
@@ -3465,7 +3465,7 @@ final class AdminStore: ObservableObject {
             lastUpdatedAt = Date()
         } catch {
             markCatalogueSourceUnavailable("team directory")
-            teamDirectoryStatusMessage = "Team Directory could not refresh. Last loaded profiles remain read-only."
+            teamDirectoryStatusMessage = "Coaches page could not refresh. Last loaded profiles remain read-only."
         }
     }
 
@@ -3475,7 +3475,7 @@ final class AdminStore: ObservableObject {
               !isLoading,
               !isRefreshingTeamDirectory else { return false }
         guard teamDirectoryIsCurrent else {
-            errorMessage = "Refresh Team Directory before saving profile changes."
+            errorMessage = "Refresh Coaches page before saving profile changes."
             return false
         }
         savingCoachID = coach?.id ?? UUID()
@@ -3506,7 +3506,7 @@ final class AdminStore: ObservableObject {
               !isLoading,
               !isRefreshingTeamDirectory else { return false }
         guard teamDirectoryIsCurrent else {
-            errorMessage = "Refresh Team Directory before deleting a profile."
+            errorMessage = "Refresh Coaches page before deleting a profile."
             return false
         }
         deletingCoachID = coach.id
@@ -3618,7 +3618,7 @@ final class AdminStore: ObservableObject {
             classMutationStatusMessage = "\(action). Receipt \(receipt)."
         } else {
             classMutationStatusIsWarning = true
-            classMutationStatusMessage = "\(action), but \(unavailableReadbacks.joined(separator: " and ")) could not reload. Receipt \(receipt). Do not save or create it again; refresh Class Desk."
+            classMutationStatusMessage = "\(action), but \(unavailableReadbacks.joined(separator: " and ")) could not reload. Receipt \(receipt). Do not save or create it again; refresh Today's classes."
         }
         lastUpdatedAt = Date()
         return true

@@ -59,7 +59,7 @@ struct AdminWorkoutOfDayView: View {
             .frame(maxWidth: .infinity)
         }
         .xertOwnerScreen()
-        .navigationTitle("Workout of the Day")
+        .navigationTitle("Club TV workout")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -109,7 +109,7 @@ struct AdminWorkoutOfDayView: View {
             Text("Changes to \(dayLabel(selectedDate)) have not been saved.")
         }
         .alert(
-            "Workout of the Day",
+            "Club TV workout",
             isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
@@ -127,7 +127,7 @@ struct AdminWorkoutOfDayView: View {
                 .font(.caption.weight(.bold))
                 .tracking(1.8)
                 .foregroundStyle(Color.xertSteel)
-            Text("Workout of the Day")
+            Text("Club TV workout")
                 .font(XertTheme.displayFont(size: 36, relativeTo: .largeTitle))
                 .textCase(.uppercase)
                 .foregroundStyle(Color.xertOffWhite)

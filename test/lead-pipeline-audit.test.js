@@ -44,7 +44,7 @@ test('admin lead saves and bulk moves use the audited RPC contract', () => {
   assert.doesNotMatch(mutations, /supabase\.from\(mutation\.table\)\.update/);
 });
 
-test('lead pipeline events are available in the permanent Admin Audit ledger', () => {
+test('lead pipeline events are available in the permanent Activity log ledger', () => {
   const data = read('../src/lib/adminData.js');
   const audit = read('../src/lib/adminAudit.js');
   const view = read('../src/components/admin/AdminAuditLog.jsx');

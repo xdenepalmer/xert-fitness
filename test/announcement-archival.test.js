@@ -48,7 +48,7 @@ test('admin clients archive published notices and reserve permanent deletion for
   assert.match(publisher, /last_changed_by: user\.id/);
 });
 
-test('announcement lifecycle events appear in the immutable Admin Audit ledger', () => {
+test('announcement lifecycle events appear in the immutable Activity log ledger', () => {
   const data = read('../src/lib/adminData.js');
   const audit = read('../src/lib/adminAudit.js');
   const view = read('../src/components/admin/AdminAuditLog.jsx');

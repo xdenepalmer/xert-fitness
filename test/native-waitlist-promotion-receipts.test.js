@@ -22,7 +22,7 @@ test('native waitlist promotion preserves its durable receipt across failed queu
   assert.match(promote, /markScheduleSourceUnavailable\("waitlists"\)/);
   assert.match(promote, /markScheduleSourceUnavailable\("today's classes"\)/);
   assert.match(promote, /outcome\.promotion\.booking_id\.uuidString\.lowercased\(\)/);
-  assert.match(promote, /Do not promote another member; refresh Class Desk/);
+  assert.match(promote, /Do not promote another member; refresh Today's classes/);
   assert.match(promote, /lastUpdatedAt = Date\(\)[\s\S]*return true/);
 
   const classDesk = view.slice(

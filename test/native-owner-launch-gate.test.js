@@ -17,7 +17,7 @@ test('native owner launch gate distinguishes paused preflight from live launch',
   assert.doesNotMatch(model, /stripeReady|activeLinkedPacksReady|paymentsEnabled|bookingsOpen|Stripe/);
 });
 
-test('native Operations Health requires real booking and member-notification evidence', async () => {
+test('native System status requires real booking and member-notification evidence', async () => {
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
   assert.match(view, /private var bookableClassesReady: Bool\?/);
   assert.match(view, /\["instant_book", "request_to_book"\]\.contains/);

@@ -1683,7 +1683,7 @@ struct AdminEmergencyPausePlan: Equatable {
         case .liveCommerce:
             return "New bookings, waitlist joins and session-pack checkout are accepting member activity."
         case .inconsistent:
-            return "Checkout reports live while bookings are paused. Pause both switches now, then review Operations Health."
+            return "Checkout reports live while bookings are paused. Pause both switches now, then review System status."
         }
     }
 

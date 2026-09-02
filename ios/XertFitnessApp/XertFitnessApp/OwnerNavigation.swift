@@ -49,14 +49,34 @@ final class XertOwnerEditorExitCoordinator: ObservableObject {
     }
 }
 
+// The owner hubs, in the words a gym owner uses. They mirror the web Command
+// Centre one-for-one: Today (the overview) sits outside the hubs, then
+// Classes, People, Messages and Business.
 enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable {
-    case operate = "Operate"
-    case grow = "Grow"
-    case publish = "Publish"
-    case commerce = "Commerce"
-    case platform = "Platform"
+    case classes = "Classes"
+    case people = "People"
+    case messages = "Messages"
+    case business = "Business"
 
     var id: String { rawValue }
+
+    var detail: String {
+        switch self {
+        case .classes: return "Timetable, requests and roll call"
+        case .people: return "Members and enquiries"
+        case .messages: return "Texts, notices and website"
+        case .business: return "Money, settings, status"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .classes: return "calendar"
+        case .people: return "person.2"
+        case .messages: return "message"
+        case .business: return "briefcase"
+        }
+    }
 }
 
 enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
@@ -89,59 +109,59 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
 
     var title: String {
         switch self {
-        case .overview: return "Overview"
+        case .overview: return "Today"
         case .members: return "Members"
-        case .access: return "Access Control"
-        case .classDesk: return "Class Desk"
-        case .workouts: return "Workout of the Day"
-        case .bookingRequests: return "Booking Requests"
-        case .timetable: return "Class Calendar"
-        case .availability: return "Availability"
-        case .ptRequests: return "PT Requests"
-        case .retention: return "Retention"
-        case .leads: return "Lead Pipelines"
-        case .campaigns: return "Campaign Attribution"
-        case .siteContent: return "Site Content"
-        case .forms: return "Forms & Surveys"
-        case .sms: return "Text Members"
-        case .notices: return "Member Notices"
-        case .events: return "Event Calendar"
-        case .team: return "Team Directory"
-        case .finance: return "Finance"
+        case .access: return "Admin access"
+        case .classDesk: return "Today's classes"
+        case .workouts: return "Club TV workout"
+        case .bookingRequests: return "Class requests"
+        case .timetable: return "Class calendar"
+        case .availability: return "Opening hours"
+        case .ptRequests: return "Personal training"
+        case .retention: return "Follow-ups"
+        case .leads: return "New enquiries"
+        case .campaigns: return "Where members come from"
+        case .siteContent: return "Website content"
+        case .forms: return "Forms & surveys"
+        case .sms: return "Text members"
+        case .notices: return "App notices"
+        case .events: return "Events page"
+        case .team: return "Coaches page"
+        case .finance: return "Revenue"
         case .orders: return "Orders"
-        case .products: return "Session Packs & Pricing"
-        case .controls: return "Member App Controls"
-        case .health: return "Operations Health"
-        case .audit: return "Admin Audit"
+        case .products: return "Pricing"
+        case .controls: return "Settings"
+        case .health: return "System status"
+        case .audit: return "Activity log"
         }
     }
 
     var detail: String {
         switch self {
-        case .overview: return "Business pulse and today's priorities"
-        case .members: return "Search accounts and review member value"
-        case .access: return "Review administrators and govern owner access"
-        case .classDesk: return "Run today's schedule and waitlists"
-        case .workouts: return "Program the in-club TV display"
-        case .bookingRequests: return "Resolve member and public requests"
-        case .timetable: return "Month calendar, class bank and publishing"
-        case .availability: return "Control bookable windows and blackouts"
-        case .ptRequests: return "Approve and complete private training"
-        case .retention: return "Contact members before they disengage"
-        case .leads: return "Manage member, trainer and partner opportunities"
-        case .campaigns: return "Measure acquisition sources and campaigns"
-        case .siteContent: return "Edit public copy, FAQs and hero media"
-        case .forms: return "Build, publish and analyse public forms"
-        case .sms: return "SMS any group with a mobile on file"
-        case .notices: return "Publish updates to web and iOS"
-        case .events: return "Coordinate the annual training calendar"
-        case .team: return "Manage coaches and practitioners"
-        case .finance: return "Review revenue and sales performance"
-        case .orders: return "Recover payments, fulfil sales and issue refunds"
-        case .products: return "Control pricing, credits and Stripe links"
-        case .controls: return "Control member booking, purchases, launch and messaging"
-        case .health: return "Verify Stripe, schema and APNs readiness"
-        case .audit: return "Review protected operational changes"
+        case .overview: return "Next class, what needs you, quick actions"
+        case .members: return "Accounts, credits and notes"
+        case .access: return "Who can sign in to the Command Centre"
+        case .classDesk: return "Run today's classes and roll call"
+        case .workouts: return "What the in-club screen shows"
+        case .bookingRequests: return "People asking for a spot"
+        case .timetable: return "Add, publish and run classes"
+        case .availability: return "Bookable times and closures"
+        case .ptRequests: return "PT enquiries to approve"
+        case .retention: return "Members going quiet"
+        case .leads: return "People interested in joining, coaching or partnering"
+        case .campaigns: return "Which channels bring people in"
+        case .siteContent: return "Homepage, FAQs and terms"
+        case .forms: return "Waivers, sign-ups and feedback"
+        case .sms: return "SMS any group with a mobile"
+        case .notices: return "Push a notice to the member app"
+        case .events: return "The public events calendar"
+        case .team: return "Who appears on the website"
+        case .finance: return "Sales and revenue over time"
+        case .orders: return "Payments, refunds and totals"
+        case .products: return "Session packs and prices"
+        case .controls: return "Launch date, bookings and payments"
+        case .health: return "Is everything connected and working"
+        case .audit: return "Who changed what, and when"
         }
     }
 
@@ -177,12 +197,11 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
     var section: XertOwnerWorkspaceSection? {
         switch self {
         case .overview: return nil
-        case .members, .classDesk, .workouts, .bookingRequests, .timetable, .availability, .ptRequests:
-            return .operate
-        case .retention, .leads, .campaigns: return .grow
-        case .siteContent, .forms, .sms, .notices, .events, .team: return .publish
-        case .finance, .orders, .products: return .commerce
-        case .access, .controls, .health, .audit: return .platform
+        case .classDesk, .timetable, .workouts, .bookingRequests, .availability, .ptRequests:
+            return .classes
+        case .members, .retention, .leads, .campaigns: return .people
+        case .sms, .notices, .forms, .siteContent, .team, .events: return .messages
+        case .finance, .orders, .products, .controls, .health, .access, .audit: return .business
         }
     }
 
@@ -190,29 +209,29 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         switch self {
         case .overview: return ["owner", "dashboard", "today", "business", "operations"]
         case .members: return ["member", "account", "credit", "notes", "contact"]
-        case .access: return ["admin", "administrator", "owner", "staff", "role", "permission", "security"]
-        case .classDesk: return ["today", "class", "attendance", "roll call", "waitlist"]
-        case .workouts: return ["workout", "wod", "program", "tv", "display", "training"]
-        case .bookingRequests: return ["booking", "request", "approve", "decline"]
+        case .access: return ["access control", "admin", "administrator", "owner", "staff", "role", "permission", "security"]
+        case .classDesk: return ["class desk", "today", "class", "attendance", "roll call", "waitlist"]
+        case .workouts: return ["workout of the day", "club tv", "workout", "wod", "program", "tv", "display", "training"]
+        case .bookingRequests: return ["booking requests", "booking", "request", "approve", "decline"]
         // "timetable" stays a keyword so the old name still finds this workspace.
         case .timetable: return ["schedule", "class", "publish", "cancel", "calendar", "month", "timetable", "bank", "template"]
-        case .availability: return ["availability", "blackout", "booking window"]
-        case .ptRequests: return ["personal training", "pt", "request"]
-        case .retention: return ["retention", "follow up", "inactive", "contact"]
-        case .leads: return ["lead", "pipeline", "member", "trainer", "partner"]
-        case .campaigns: return ["campaign", "attribution", "source", "marketing"]
-        case .siteContent: return ["website", "homepage", "hero", "faq", "content"]
+        case .availability: return ["opening hours", "availability", "blackout", "booking window"]
+        case .ptRequests: return ["pt requests", "personal training", "pt", "request"]
+        case .retention: return ["follow-ups", "retention", "follow up", "inactive", "contact"]
+        case .leads: return ["lead pipelines", "enquiries", "lead", "pipeline", "member", "trainer", "partner"]
+        case .campaigns: return ["campaign attribution", "campaign", "attribution", "source", "marketing"]
+        case .siteContent: return ["site content", "website", "homepage", "hero", "faq", "content"]
         case .forms: return ["form", "survey", "feedback", "application", "responses", "analytics"]
         case .sms: return ["sms", "text", "twilio", "message", "broadcast", "blast", "mobile", "phone"]
-        case .notices: return ["announcement", "push", "message", "notification"]
-        case .events: return ["event", "race", "competition", "calendar"]
-        case .team: return ["coach", "practitioner", "trainer", "team"]
-        case .finance: return ["revenue", "sales", "performance", "income", "Stripe"]
+        case .notices: return ["member notices", "notice", "announcement", "push", "message", "notification"]
+        case .events: return ["event calendar", "event", "race", "competition", "calendar"]
+        case .team: return ["team directory", "coaches page", "coach", "practitioner", "trainer", "team"]
+        case .finance: return ["finance", "revenue", "sales", "performance", "income", "Stripe"]
         case .orders: return ["payment", "order", "checkout", "recovery", "refund", "fulfilment", "Stripe"]
-        case .products: return ["session pack", "pack", "price", "credit", "Stripe", "product"]
-        case .controls: return ["member app", "client access", "launch", "payment", "booking", "platform", "settings"]
-        case .health: return ["Stripe", "APNs", "schema", "release", "webhook", "readiness"]
-        case .audit: return ["audit", "history", "change", "operator"]
+        case .products: return ["session packs", "pricing", "session pack", "pack", "price", "credit", "Stripe", "product"]
+        case .controls: return ["member app controls", "controls", "member app", "client access", "launch", "payment", "booking", "platform", "settings"]
+        case .health: return ["operations health", "status", "health", "Stripe", "APNs", "schema", "release", "webhook", "readiness"]
+        case .audit: return ["admin audit", "activity log", "audit", "history", "change", "operator"]
         }
     }
 

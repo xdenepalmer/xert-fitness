@@ -1909,7 +1909,7 @@ final class XertAPI {
         )
         let refundRows = resolvedAuditRows(results.9, source: "Refunds", unavailable: &unavailableSources)
         guard unavailableSources.count < 10 else {
-            throw APIError(message: "Every protected Admin Audit source is unavailable.")
+            throw APIError(message: "Every protected Activity log source is unavailable.")
         }
         let all = [
             roleRows.map { $0.entry }, creditRows.map { $0.entry }, requestRows.map { $0.entry },

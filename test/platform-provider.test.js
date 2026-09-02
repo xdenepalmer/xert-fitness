@@ -58,7 +58,7 @@ test('provider URLs must be credential-free HTTPS destinations', () => {
   assert.equal(normalizeProviderUrl('not-a-url'), null);
 });
 
-test('Operations Health describes FitBox honestly', () => {
+test('System status describes FitBox honestly', () => {
   const native = providerOperationsHealth({ fitbox_enabled: false });
   assert.equal(native.status, 'ok');
 

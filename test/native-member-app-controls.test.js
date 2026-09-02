@@ -30,7 +30,7 @@ test('owner booking controls govern the native member experience and fail closed
   assert.match(store, /memberBookingsEnabled = provider\.provider == \.native[\s\S]*loadedSettings\?\.bookings_enabled == true/);
   assert.match(store, /private func memberBookingControlError\(\) -> String\?/);
   assert.ok((store.match(/if let message = memberBookingControlError\(\)/g) || []).length >= 2);
-  assert.match(adminStore, /if draft\.bookings_enabled \{[\s\S]*member_booking_switch_guard[\s\S]*Bookings stay paused until Operations Health verifies/);
+  assert.match(adminStore, /if draft\.bookings_enabled \{[\s\S]*member_booking_switch_guard[\s\S]*Bookings stay paused until System status verifies/);
 
   assert.match(booking, /Online bookings are paused/);
   assert.match(booking, /!store\.memberBookingsEnabled \|\| session\.booking_mode == "interest_only"/);
@@ -48,7 +48,7 @@ test('owner booking controls govern the native member experience and fail closed
   assert.match(sessionAction, /memberBookingContextUnavailable[\s\S]*await store\.refresh\(\)[\s\S]*Retry booking status/);
   assert.match(booking, /DataAvailabilityNotice\(sources: \[\.products, \.sessions, \.platformSettings, \.credits, \.bookings\]\)/);
 
-  assert.match(ownerNavigation, /case \.controls: return "Member App Controls"/);
+  assert.match(ownerNavigation, /case \.controls: return "Settings"/);
   assert.match(commandCentre, /Section\("Member app experience"\)/);
   assert.match(commandCentre, /private var bookingGuardReady: Bool\?/);
   assert.match(commandCentre, /title: "Booking protection"[\s\S]*Migration required/);

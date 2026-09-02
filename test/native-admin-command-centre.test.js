@@ -169,7 +169,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(api, /\/api\/admin-push-health/);
   assert.match(api, /xert_schema_capabilities/);
   assert.match(view, /AdminOperationsHealthView/);
-  // Payments and memberships are handled in Fitbox: Operations Health no
+  // Payments and memberships are handled in Fitbox: System status no
   // longer renders the Stripe checklist, incidents desk or launch checks.
   assert.doesNotMatch(view, /Stripe launch checklist|Unresolved Stripe incidents|Latest Stripe operation|Stripe — last snapshot/);
   assert.doesNotMatch(view, /Copy Stripe Event ID|Retry safely|Opens the exact session pack blocking Stripe launch/);
@@ -188,8 +188,8 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(view, /AdminProductEditor/);
   assert.match(view, /LIVE STRIPE READINESS/);
   assert.match(view, /liveBlockedProducts/);
-  assert.match(view, /Session Packs & Pricing/);
-  assert.match(ownerNavigation, /Session Packs & Pricing/);
+  assert.match(view, /Pricing/);
+  assert.match(ownerNavigation, /Pricing/);
   assert.doesNotMatch(view, /Memberships & Pricing|Membership sales/);
   assert.match(view, /Create session pack/);
   assert.match(view, /AdminProductRow/);
@@ -269,7 +269,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func grantCredits/);
   assert.match(adminStore, /func setMemberRole/);
   assert.match(view, /AdminOrderDetailView/);
-  // The Stripe launch checklist is gone from Operations Health (Fitbox owns
+  // The Stripe launch checklist is gone from System status (Fitbox owns
   // payments); the guarded payment switch itself still lives in Controls.
   assert.match(view, /Toggle\("Session pack payments", isOn: settingBinding\(\\\.payments_enabled\)\)/);
   assert.match(adminModels, /struct ActivationReceipt: Codable, Hashable/);
@@ -286,7 +286,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func refundOrder/);
   assert.match(view, /AdminLeadsView/);
   assert.match(view, /AdminLeadDetailView/);
-  assert.match(ownerNavigation, /Lead Pipelines/);
+  assert.match(ownerNavigation, /New enquiries/);
   assert.match(api, /func adminLeads/);
   assert.match(api, /path: "admin_update_lead"/);
   assert.match(api, /path: "admin_update_lead_statuses"/);
@@ -294,7 +294,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func saveLead/);
   assert.match(adminStore, /func bulkUpdateLeads/);
   assert.match(view, /AdminCampaignAttributionView/);
-  assert.match(ownerNavigation, /Campaign Attribution/);
+  assert.match(ownerNavigation, /Where members come from/);
   assert.match(view, /fileExporter/);
   assert.match(api, /func adminCampaignAttribution/);
   assert.match(api, /id,utm_source,utm_medium,utm_campaign,source,created_at/);
@@ -302,7 +302,7 @@ test('native owner workspace uses protected operational RPCs and real actions', 
   assert.match(adminStore, /func loadCampaignAttribution/);
   assert.match(view, /AdminSiteContentView/);
   assert.match(view, /AdminSiteContentEditor/);
-  assert.match(ownerNavigation, /Site Content/);
+  assert.match(ownerNavigation, /Website content/);
   assert.match(view, /PhotosPicker/);
   assert.match(api, /func adminSiteContent/);
   assert.match(api, /func adminSaveSiteContent/);
@@ -514,7 +514,7 @@ test('native member communications supports a safe complete notice lifecycle', a
   assert.ok(api.includes('URLQueryItem(name: "updated_at", value: "eq.\\(announcement.updated_at)")'));
   assert.match(api, /guard !announcement\.wasPublished/);
   assert.match(store, /private var announcementMutationAvailable: Bool/);
-  assert.match(store, /Refresh Member Notices before changing communications/);
+  assert.match(store, /Refresh App notices before changing communications/);
   assert.match(store, /mergeAnnouncement\(outcome\.announcement\)/);
   assert.match(store, /No enabled iOS devices were registered/);
   assert.match(store, /@Published private\(set\) var announcementDeliveryMetrics: \[UUID: AdminAnnouncementDeliveryMetrics\]/);
@@ -919,7 +919,7 @@ test('native emergency pause becomes a guarded communication and recovery runboo
   assert.match(models, /case \.liveCommerce:[\s\S]*memberCommerceRestoredTitle/);
 });
 
-test('native Admin Audit attributes operators and includes protected commerce recovery', async () => {
+test('native Activity log attributes operators and includes protected commerce recovery', async () => {
   const [view, models, api, schema] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
@@ -1045,7 +1045,7 @@ test('native session-pack tools require a current catalogue before exposing muta
   assert.match(editor, /private var pricingMutationAvailable: Bool/);
   assert.match(editor, /Session-pack data is unavailable\. Retry before changing prices or sale state/);
   assert.match(editor, /isDirty && validationMessage == nil && !isProductMutationInFlight && pricingMutationAvailable/);
-  assert.match(store, /guard loadedSources\.contains\("session packs"\),[\s\S]*Refresh Session Packs & Pricing before saving/);
+  assert.match(store, /guard loadedSources\.contains\("session packs"\),[\s\S]*Refresh Pricing before saving/);
 });
 
 test('native owner cross-workspace actions preserve compact workflow context', async () => {
@@ -1060,7 +1060,7 @@ test('native owner cross-workspace actions preserve compact workflow context', a
   const platform = view.slice(view.indexOf('private struct AdminPlatformView'), view.indexOf('private struct AdminCommunicationsView'));
   assert.match(view, /@State private var platformDraftSnapshot: AdminPlatformSettings\?/);
   assert.match(view, /private enum OwnerExitRequest: Equatable/);
-  assert.match(view, /"Unsaved Member App Controls"/);
+  assert.match(view, /"Unsaved Settings"/);
   assert.match(view, /"Discard changes and continue"/);
   assert.match(view, /"Keep editing"/);
   assert.match(view, /private func requestOwnerExit\(_ request: OwnerExitRequest\)/);
@@ -1108,7 +1108,7 @@ test('native owner navigation adapts into a categorized scene-restored iPad work
   ]);
 
   assert.match(ownerNavigation, /enum XertOwnerWorkspaceSection: String, CaseIterable, Identifiable/);
-  for (const section of ['operate', 'grow', 'publish', 'commerce', 'platform']) {
+  for (const section of ['classes', 'people', 'messages', 'business']) {
     assert.match(ownerNavigation, new RegExp(`case ${section}`));
   }
   assert.match(ownerNavigation, /enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable/);
@@ -1179,10 +1179,10 @@ test('native owner access control governs launch-day administrator coverage', as
   );
 
   assert.match(navigation, /case access/);
-  assert.match(navigation, /case \.access: return "Access Control"/);
-  assert.match(navigation, /case \.access: return "Review administrators and govern owner access"/);
+  assert.match(navigation, /case \.access: return "Admin access"/);
+  assert.match(navigation, /case \.access: return "Who can sign in to the Command Centre"/);
   assert.match(navigation, /case \.access: return "person\.badge\.key"/);
-  assert.match(navigation, /case \.access, \.controls, \.health, \.audit: return \.platform/);
+  assert.match(navigation, /case \.finance, \.orders, \.products, \.controls, \.health, \.access, \.audit: return \.business/);
   assert.match(view, /case \.access:\s+AdminAccessControlView\(/);
   assert.match(view, /ForEach\(XertOwnerWorkspaceSection\.allCases\)[\s\S]*XertOwnerWorkspace\.workspaces\(in: section\)/);
 
@@ -1203,7 +1203,7 @@ test('native owner access control governs launch-day administrator coverage', as
   assert.match(access, /Find a backup administrator/);
   assert.match(access, /mode = \.candidates/);
   assert.match(access, /filter \{ \$0\.category == "Access" \}/);
-  assert.match(access, /Open full Admin Audit/);
+  assert.match(access, /Open full Activity log/);
   assert.match(access, /Every administrator role change is recorded in the protected audit ledger\./);
   assert.match(access, /\.refreshable \{/);
   assert.match(access, /admin\.loadAudit\(session: session, force: true\)/);
@@ -1733,7 +1733,7 @@ test('native reporting desks never present unavailable evidence as zero activity
   assert.match(audit, /if !admin\.hasLoadedAudit/);
   assert.match(audit, /LIVE HISTORY[\s\S]*CACHED HISTORY[\s\S]*PARTIAL HISTORY/);
   assert.match(audit, /\.disabled\(!reportIsCurrent \|\| rows\.isEmpty\)/);
-  assert.match(audit, /Retry Admin Audit/);
+  assert.match(audit, /Retry Activity log/);
   assert.match(audit, /ViewThatFits\(in: \.horizontal\)/);
   assert.match(audit, /\.refreshable \{ await admin\.loadAudit\(session: session, force: true\) \}/);
   assert.match(models, /struct AdminAuditExport[\s\S]*prefix\(300\)[\s\S]*replacingOccurrences\(of: "\\\"", with: "\\\"\\\""\)/);
@@ -2211,9 +2211,9 @@ test('native site CMS cannot publish defaults over an unavailable live snapshot'
   assert.match(store, /@Published private\(set\) var siteContentUnavailable = false/);
   assert.match(store, /var siteContentIsCurrent: Bool/);
   assert.match(store, /if !force, siteContentIsCurrent \{ return \}/);
-  assert.match(store, /Site Content could not refresh\. Last loaded sections remain read-only/);
-  assert.match(store, /guard siteContentIsCurrent else \{[\s\S]*Refresh Site Content before publishing/);
-  assert.match(store, /guard siteContentIsCurrent else \{[\s\S]*Refresh Site Content before uploading public media/);
+  assert.match(store, /Website content could not refresh\. Last loaded sections remain read-only/);
+  assert.match(store, /guard siteContentIsCurrent else \{[\s\S]*Refresh Website content before publishing/);
+  assert.match(store, /guard siteContentIsCurrent else \{[\s\S]*Refresh Website content before uploading public media/);
   assert.match(store, /siteContentRows\.append\(saved\)[\s\S]*siteContentUnavailable = false/);
   assert.match(api, /rows\.count == 1, saved\.key == section\.rawValue/);
 

@@ -31,7 +31,7 @@ for (const path of [
   });
 }
 
-test('booking lifecycle events appear in the permanent Admin Audit ledger', () => {
+test('booking lifecycle events appear in the permanent Activity log ledger', () => {
   const data = read('../src/lib/adminData.js');
   const audit = read('../src/lib/adminAudit.js');
   const view = read('../src/components/admin/AdminAuditLog.jsx');

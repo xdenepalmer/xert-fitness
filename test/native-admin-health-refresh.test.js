@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('native Operations Health retry is scoped to required launch-health sources', async () => {
+test('native System status retry is scoped to required launch-health sources', async () => {
   const [store, view] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/Store/AdminStore.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),

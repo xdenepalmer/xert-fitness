@@ -39,7 +39,7 @@ test('staff-assisted booking is atomic, FIFO-safe, retry-safe and private', asyn
   }
 });
 
-test('native Class Desk can safely add and notify an existing member', async () => {
+test("native Today's classes can safely add and notify an existing member", async () => {
   const [models, api, store, view, publisher, readiness] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Services/XertAPI.swift'),

@@ -4,16 +4,16 @@ import test from 'node:test';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('native owner navigation exposes Workout of the Day as a real workspace', async () => {
+test('native owner navigation exposes Club TV workout as a real workspace', async () => {
   const [navigation, commandCentre] = await Promise.all([
     read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift'),
     read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift'),
   ]);
 
   assert.match(navigation, /case workouts/);
-  assert.match(navigation, /case \.workouts: return "Workout of the Day"/);
+  assert.match(navigation, /case \.workouts: return "Club TV workout"/);
   assert.match(navigation, /case \.workouts: return "tv"/);
-  assert.match(navigation, /\.members, \.classDesk, \.workouts, \.bookingRequests/);
+  assert.match(navigation, /\.classDesk, \.timetable, \.workouts, \.bookingRequests/);
   assert.match(commandCentre, /case \.workouts:\s+AdminWorkoutOfDayView\(session: session\)/);
 });
 
