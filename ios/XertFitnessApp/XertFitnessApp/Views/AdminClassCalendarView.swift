@@ -22,6 +22,7 @@ struct AdminClassCalendarSections: View {
     @ObservedObject var admin: AdminStore
     let session: AuthSession
     let timetableIsCurrent: Bool
+    let includeCancelled: Bool
     let onCreateClass: (Date) -> Void
 
     private enum TemplatesState: Equatable {
@@ -43,7 +44,7 @@ struct AdminClassCalendarSections: View {
 
     private var sessionsByDay: [Date: [AdminClassSession]] {
         var groups: [Date: [AdminClassSession]] = [:]
-        for item in admin.classSessions {
+        for item in admin.classSessions where includeCancelled || item.status.lowercased() != "cancelled" {
             guard let start = item.start_time else { continue }
             groups[calendar.startOfDay(for: start), default: []].append(item)
         }

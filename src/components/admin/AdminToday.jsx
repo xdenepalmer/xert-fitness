@@ -33,7 +33,7 @@ function firstName(profile, user) {
 export function pickFocusClass(rows, now = Date.now()) {
   const sorted = [...(rows || [])]
     .filter(row => row?.start_time)
-    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
   if (sorted.length === 0) return null;
   const graceMs = 90 * 60 * 1000;
   return sorted.find(row => new Date(row.start_time).getTime() + graceMs > now) || sorted[sorted.length - 1];

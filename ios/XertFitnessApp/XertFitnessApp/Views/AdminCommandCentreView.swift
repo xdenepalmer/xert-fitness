@@ -6958,6 +6958,7 @@ private struct AdminScheduleView: View {
     let session: AuthSession
     @State private var query = ""
     @State private var scope = AdminScheduleScope.upcoming
+    @State private var showingCancelled = false
     @State private var mode = AdminScheduleViewMode.calendar
     @State private var showingCreate = false
     @State private var createInitialStart: Date?
@@ -6975,8 +6976,9 @@ private struct AdminScheduleView: View {
 
     private var rows: [AdminClassSession] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let scoped = admin.classSessions.filter { scope.includes($0, now: Date()) }
-        let filtered = term.isEmpty ? scoped : scoped.filter {
+        let scoped = scopedRows(for: scope)
+        let visible = scoped.filter { showingCancelled || $0.status.lowercased() != "cancelled" }
+        let filtered = term.isEmpty ? visible : visible.filter {
             "\($0.title) \($0.class_type ?? "") \($0.coach_name ?? "") \($0.location_zone ?? "")".lowercased().contains(term)
         }
         return filtered.sorted {
@@ -6986,13 +6988,25 @@ private struct AdminScheduleView: View {
         }
     }
 
+    private func scopedRows(for scope: AdminScheduleScope) -> [AdminClassSession] {
+        admin.classSessions.filter { scope.includes($0, now: Date()) }
+    }
+
+    private var cancelledCount: Int {
+        let source = mode == .calendar ? admin.classSessions : scopedRows(for: scope)
+        return source.filter { $0.status.lowercased() == "cancelled" }.count
+    }
+
     private func count(for scope: AdminScheduleScope) -> Int {
-        admin.classSessions.filter { scope.includes($0, now: Date()) }.count
+        scopedRows(for: scope).filter { $0.status.lowercased() != "cancelled" }.count
     }
 
     private var emptyMessage: String {
         if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "No matching \(scope.title.lowercased()) classes."
+        }
+        if !showingCancelled, cancelledCount > 0 {
+            return "\(cancelledCount) cancelled \(cancelledCount == 1 ? "class is" : "classes are") hidden. Show cancelled to review the retained record."
         }
         switch scope {
         case .upcoming: return "No current or upcoming classes are scheduled."
@@ -7044,6 +7058,25 @@ private struct AdminScheduleView: View {
                 .listRowBackground(Color.xertInk)
             }
 
+            if cancelledCount > 0 {
+                Section {
+                    Button {
+                        showingCancelled.toggle()
+                        XertHaptics.play(.selection)
+                    } label: {
+                        Label(
+                            showingCancelled ? "Hide cancelled" : "Show cancelled (\(cancelledCount))",
+                            systemImage: showingCancelled ? "eye.slash" : "eye"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Color.xertSteel)
+                    .accessibilityIdentifier("owner.timetable.cancelled")
+                    .accessibilityHint("Cancelled classes stay retained for audit and can be hidden from the timetable")
+                }
+                .listRowBackground(Color.xertInk)
+            }
+
             if let status = admin.classMutationStatusMessage {
                 Label(
                     status,
@@ -7084,6 +7117,7 @@ private struct AdminScheduleView: View {
                         admin: admin,
                         session: session,
                         timetableIsCurrent: timetableIsCurrent,
+                        includeCancelled: showingCancelled,
                         onCreateClass: { start in
                             createInitialStart = start
                             showingCreate = true
@@ -7155,6 +7189,7 @@ private struct AdminScheduleView: View {
                 Task {
                     let outcome = await admin.cancelClass(session: session, classSession: item)
                     XertHaptics.play(outcome == nil ? .error : .warning)
+                    if outcome != nil { showingCancelled = false }
                     pendingCancellation = nil
                 }
             }

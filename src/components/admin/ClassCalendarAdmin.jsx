@@ -504,6 +504,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [blackouts, setBlackouts] = useState([]);
   const [repeating, setRepeating] = useState(null);
   const [timeFilter, setTimeFilter] = useState('upcoming');
+  const [showCancelled, setShowCancelled] = useState(false);
   const [updatingBookingId, setUpdatingBookingId] = useState(null);
   const [promotingSessionId, setPromotingSessionId] = useState(null);
   const [promotionCandidate, setPromotionCandidate] = useState(null);
@@ -833,6 +834,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         setRoster([]);
       }
       setSessionToCancel(null);
+      setShowCancelled(false);
       await load();
     } catch (e) {
       toast({ title: 'Cancel failed', description: e.message, variant: 'destructive' });
@@ -922,12 +924,20 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const now = Date.now();
-  const filtered = sessions.filter(s => {
+  const sessionsInTimeFilter = sessions.filter(s => {
     if (timeFilter === 'all') return true;
     const isPast = s.start_time && new Date(s.start_time).getTime() < now;
     return timeFilter === 'past' ? isPast : !isPast;
   });
-  const upcomingCount = sessions.filter(s => !s.start_time || new Date(s.start_time).getTime() >= now).length;
+  const cancelledInTimeFilter = sessionsInTimeFilter.filter(s => s.status === 'cancelled');
+  const activeSessions = sessions.filter(s => s.status !== 'cancelled');
+  const filtered = sessionsInTimeFilter.filter(s => showCancelled || s.status !== 'cancelled');
+  const visibleCalendarSessions = sessions.filter(s => showCancelled || s.status !== 'cancelled');
+  const upcomingCount = activeSessions.filter(s => !s.start_time || new Date(s.start_time).getTime() >= now).length;
+  const pastCount = activeSessions.length - upcomingCount;
+  const cancelledCount = view === 'calendar'
+    ? sessions.filter(s => s.status === 'cancelled').length
+    : cancelledInTimeFilter.length;
   const attendanceSummary = summarizeAttendanceDraft(roster, attendanceDraft);
   const pendingAttendanceRequests = roster.filter(member => member.status === 'requested');
 
@@ -952,7 +962,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             <div className="flex">
               {[
                 { key: 'upcoming', label: `Upcoming (${upcomingCount})` },
-                { key: 'past', label: `Past (${sessions.length - upcomingCount})` },
+                { key: 'past', label: `Past (${pastCount})` },
                 { key: 'all', label: 'All' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTimeFilter(t.key)}
@@ -961,6 +971,16 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                 </button>
               ))}
             </div>
+          )}
+          {cancelledCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowCancelled(current => !current)}
+              aria-pressed={showCancelled}
+              className="min-h-10 px-3 border border-xert-red/30 font-body text-xs text-xert-concrete/65 hover:border-xert-red/60 transition-colors"
+            >
+              {showCancelled ? 'Hide cancelled' : `Show cancelled (${cancelledCount})`}
+            </button>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -990,7 +1010,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 bg-xert-ink animate-pulse" />)}</div>
       ) : view === 'calendar' ? (
         <ClassCalendarBoard
-          sessions={sessions}
+          sessions={visibleCalendarSessions}
           signupCounts={signupCounts}
           rosterSessionId={boardRosterSessionId}
           rosterSignups={bookings}
@@ -1021,7 +1041,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             {sessions.length === 0 ? 'No classes yet' : `No ${timeFilter === 'all' ? '' : timeFilter} classes`}
           </p>
           <p className="font-body text-sm text-xert-concrete/40 mb-6">
-            {sessions.length === 0 ? 'Create your first class session.' : 'Try another filter or create a new class.'}
+            {sessions.length === 0
+              ? 'Create your first class session.'
+              : !showCancelled && cancelledInTimeFilter.length > 0
+                ? `${cancelledInTimeFilter.length} cancelled ${cancelledInTimeFilter.length === 1 ? 'class is' : 'classes are'} hidden. Show cancelled to review the retained record.`
+                : 'Try another filter or create a new class.'}
           </p>
         </div>
       ) : (

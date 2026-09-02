@@ -41,6 +41,25 @@ test('command centre opens the exact daily roster or roll call', () => {
   assert.match(calendar, /class-session-\$\{target\.id\}/);
 });
 
+test('calendar hides cancelled classes by default while retaining an explicit review control', () => {
+  const calendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
+  const nativeTimetable = read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');
+  const nativeCalendar = read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminClassCalendarView.swift');
+
+  assert.match(calendar, /const \[showCancelled, setShowCancelled\] = useState\(false\)/);
+  assert.match(calendar, /showCancelled \|\| s\.status !== 'cancelled'/);
+  assert.match(calendar, /Show cancelled \(\$\{cancelledCount\}\)/);
+  assert.match(calendar, /Show cancelled to review the retained record/);
+  assert.match(calendar, /sessions=\{visibleCalendarSessions\}/);
+  assert.match(nativeTimetable, /@State private var showingCancelled = false/);
+  assert.match(nativeTimetable, /showingCancelled \|\| \$0\.status\.lowercased\(\) != "cancelled"/);
+  assert.match(nativeTimetable, /showingCancelled \? "Hide cancelled" : "Show cancelled/);
+  assert.match(nativeTimetable, /owner\.timetable\.cancelled/);
+  assert.match(nativeTimetable, /if outcome != nil \{ showingCancelled = false \}/);
+  assert.match(nativeCalendar, /let includeCancelled: Bool/);
+  assert.match(nativeCalendar, /includeCancelled \|\| item\.status\.lowercased\(\) != "cancelled"/);
+});
+
 test('SwiftUI home and model agree on the Brisbane training day', () => {
   const model = read('../ios/XertFitnessApp/XertFitnessApp/Models.swift');
   const home = read('../ios/XertFitnessApp/XertFitnessApp/Views/HomeView.swift');
