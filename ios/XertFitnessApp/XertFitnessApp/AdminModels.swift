@@ -4113,3 +4113,171 @@ struct AdminSmsOutcome: Decodable, Hashable {
         failed == 0 ? "\(sent) sent" : "\(sent) sent, \(failed) failed"
     }
 }
+
+
+// MARK: - FitBox live mirror
+
+struct AdminFitboxReadiness: Codable, Hashable {
+    let ready: Bool
+    let missing: [String]
+}
+
+struct AdminFitboxSummary: Codable, Hashable {
+    struct Users: Codable, Hashable {
+        let total: Int
+        let active: Int
+        let prospects: Int
+        let staff: Int
+    }
+    struct Subscriptions: Codable, Hashable {
+        let total: Int
+        let active: Int
+        let paid_active: Int
+    }
+    struct Attendance: Codable, Hashable {
+        let upcoming: Int
+        let cancelled: Int
+    }
+    let users: Users
+    let subscriptions: Subscriptions
+    let attendance: Attendance
+    let links: Int?
+}
+
+struct AdminFitboxSyncRun: Identifiable, Codable, Hashable {
+    let id: UUID
+    let feed: String
+    let status: String
+    let accepted: Int?
+    let rejected: Int?
+    let linked: Int?
+    let error_code: String?
+    let started_at: Date
+    let finished_at: Date?
+
+    var feedTitle: String {
+        switch feed {
+        case "users": return "Member profiles"
+        case "statuses": return "Member statuses"
+        case "subscriptions": return "Memberships"
+        case "bookings": return "Class bookings"
+        case "cancellations": return "Cancellations"
+        case "first_sessions": return "First sessions"
+        case "classes": return "Classes"
+        case "lookup": return "Lookup"
+        default: return feed.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+}
+
+struct AdminFitboxClass: Codable, Hashable {
+    let fitbox_class_id: String
+    let name: String
+}
+
+struct AdminFitboxOverview: Codable, Hashable {
+    let gym_id: String?
+    let gateway: AdminFitboxReadiness
+    let hooks: AdminFitboxReadiness
+    let events: AdminFitboxReadiness
+    let mirror_installed: Bool
+    let summary: AdminFitboxSummary?
+    let classes: [AdminFitboxClass]
+    let recent_runs: [AdminFitboxSyncRun]
+    let last_completed_sync: Date?
+    let review_queue: Int
+}
+
+struct AdminFitboxUser: Identifiable, Codable, Hashable {
+    let id: UUID
+    let fitbox_user_id: String
+    let first_name: String?
+    let last_name: String?
+    let email: String?
+    let phone: String?
+    let city: String?
+    let status: String?
+    let role: String?
+    let synced_at: Date
+
+    var displayName: String {
+        let name = [first_name, last_name].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+        if !name.isEmpty { return name }
+        return email ?? "FitBox user \(fitbox_user_id)"
+    }
+}
+
+struct AdminFitboxSubscription: Identifiable, Codable, Hashable {
+    let id: UUID
+    let fitbox_subscription_id: String
+    let fitbox_user_id: String
+    let email: String?
+    let product_name: String?
+    let status: String?
+    let price_in_cents: Int?
+    let start_date: String?
+    let expiration_date: String?
+    let sessions_count: Int?
+    let synced_at: Date
+
+    var priceLabel: String {
+        guard let cents = price_in_cents else { return "—" }
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "AUD"
+        return formatter.string(from: NSNumber(value: Double(cents) / 100)) ?? "—"
+    }
+}
+
+struct AdminFitboxAttendance: Identifiable, Codable, Hashable {
+    let id: UUID
+    let fitbox_attendance_id: String
+    let class_name: String?
+    let fitbox_user_id: String
+    let session_start_time: Date?
+    let status: String?
+    let feed: String
+    let synced_at: Date
+}
+
+struct AdminFitboxSyncRequest: Encodable {
+    let action: String
+    let feed: String
+}
+
+struct AdminFitboxSyncResponse: Codable, Hashable {
+    let feed: String
+    let accepted: Int
+    let rejected: Int
+    let linked: Int
+}
+
+struct AdminFitboxLookupRequest: Encodable {
+    let action: String
+    let email: String
+    let fitbox_user_id: String
+}
+
+struct AdminFitboxUserSnapshot: Codable, Hashable {
+    let fitbox_user_id: String
+    let first_name: String?
+    let last_name: String?
+    let email: String?
+    let phone: String?
+    let status: String?
+    let role: String?
+}
+
+struct AdminFitboxNextSession: Codable, Hashable {
+    let class_name: String?
+    let session_start_time: Date?
+    let status: String?
+    let unavailable: String?
+}
+
+struct AdminFitboxLookupResponse: Codable, Hashable {
+    let found: Bool
+    let user: AdminFitboxUserSnapshot?
+    let next_session: AdminFitboxNextSession?
+    let linked: Int?
+}

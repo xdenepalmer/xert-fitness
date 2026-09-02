@@ -166,6 +166,16 @@ final class AdminStore: ObservableObject {
     @Published private(set) var fitboxBridgeHealth: AdminFitboxBridgeHealth?
     @Published private(set) var fitboxBridgeHealthError: String?
     @Published private(set) var isRefreshingFitboxBridgeHealth = false
+    @Published private(set) var fitboxOverview: AdminFitboxOverview?
+    @Published private(set) var fitboxUsers: [AdminFitboxUser] = []
+    @Published private(set) var fitboxSubscriptions: [AdminFitboxSubscription] = []
+    @Published private(set) var fitboxAttendance: [AdminFitboxAttendance] = []
+    @Published private(set) var isLoadingFitboxWorkspace = false
+    @Published private(set) var fitboxWorkspaceStatusMessage: String?
+    @Published private(set) var isSyncingFitbox = false
+    @Published private(set) var fitboxSyncProgress: String?
+    @Published private(set) var fitboxLookupResult: AdminFitboxLookupResponse?
+    @Published private(set) var isLookingUpFitbox = false
     @Published private(set) var campaignAttributionRows: [AdminCampaignAttributionRow] = []
     @Published private(set) var siteContentRows: [AdminSiteContentRow] = []
     @Published private(set) var bookingRequests: [AdminBookingRequest] = []
@@ -1955,6 +1965,77 @@ final class AdminStore: ObservableObject {
             fitboxLeadErrors[leadID] = nil
         } catch {
             fitboxLeadErrors[leadID] = error.localizedDescription
+        }
+    }
+
+    /// Loads the FitBox overview and the admin-readable mirror. A missing mirror
+    /// table is reported, never treated as an empty gym.
+    func loadFitboxWorkspace(session: AuthSession) async {
+        guard !isLoadingFitboxWorkspace else { return }
+        isLoadingFitboxWorkspace = true
+        defer { isLoadingFitboxWorkspace = false }
+        do {
+            fitboxOverview = try await api.adminFitboxOverview(session: session)
+            fitboxWorkspaceStatusMessage = nil
+        } catch {
+            fitboxWorkspaceStatusMessage = "FitBox overview could not load. \(error.localizedDescription)"
+        }
+        guard fitboxOverview?.mirror_installed == true else {
+            fitboxUsers = []
+            fitboxSubscriptions = []
+            fitboxAttendance = []
+            return
+        }
+        async let users = api.adminFitboxUsers(session: session)
+        async let subscriptions = api.adminFitboxSubscriptions(session: session)
+        async let attendance = api.adminFitboxUpcomingAttendance(session: session)
+        do {
+            fitboxUsers = try await users
+            fitboxSubscriptions = try await subscriptions
+            fitboxAttendance = try await attendance
+        } catch {
+            fitboxWorkspaceStatusMessage = "FitBox mirror could not refresh. \(error.localizedDescription)"
+        }
+    }
+
+    /// Runs every gateway feed in turn. Each feed is one FitBox call, so a
+    /// failure in one leaves the others intact and is reported by name.
+    func syncFitbox(session: AuthSession) async -> String {
+        guard !isSyncingFitbox else { return "A FitBox sync is already running." }
+        isSyncingFitbox = true
+        defer {
+            isSyncingFitbox = false
+            fitboxSyncProgress = nil
+        }
+        let feeds = ["users", "statuses", "subscriptions", "bookings", "cancellations", "first_sessions", "classes"]
+        var stored = 0
+        var failures: [String] = []
+        for feed in feeds {
+            fitboxSyncProgress = feed
+            do {
+                let result = try await api.adminRunFitboxSync(session: session, feed: feed)
+                stored += result.accepted
+            } catch {
+                failures.append("\(feed): \(error.localizedDescription)")
+            }
+        }
+        await loadFitboxWorkspace(session: session)
+        if failures.isEmpty { return "\(stored) FitBox records refreshed." }
+        return "Sync finished with problems. " + failures.joined(separator: " · ")
+    }
+
+    func lookupFitbox(session: AuthSession, email: String) async {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isLookingUpFitbox else { return }
+        isLookingUpFitbox = true
+        defer { isLookingUpFitbox = false }
+        do {
+            fitboxLookupResult = try await api.adminLookupFitboxUser(session: session, email: trimmed)
+            fitboxWorkspaceStatusMessage = nil
+            if fitboxLookupResult?.found == true { await loadFitboxWorkspace(session: session) }
+        } catch {
+            fitboxLookupResult = nil
+            fitboxWorkspaceStatusMessage = "FitBox lookup failed. \(error.localizedDescription)"
         }
     }
 

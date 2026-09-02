@@ -23,7 +23,7 @@ test('FitBox production runbook enumerates the complete connector surface and it
   assert.match(runbook, /\| `Register User` \| XERT to FitBox \| \*\*LIVE\*\*/);
   assert.match(runbook, /\| `Update User` \| XERT to FitBox \| \*\*DISABLED\*\*/);
   assert.match(runbook, /\| `Get User` \| XERT query \/ FitBox result \| \*\*READ-ONLY\*\*/);
-  assert.match(runbook, /\| `Get Users Next Session` \| XERT query \/ FitBox result \| \*\*DISABLED\*\*/);
+  assert.match(runbook, /\| `Get Users Next Session` \| XERT query \/ FitBox result \| \*\*READ-ONLY\*\* \| Used only by the gateway lookup/);
   assert.equal((runbook.match(/\| \*\*READ-ONLY\*\* \|/g) || []).length, 7);
 });
 

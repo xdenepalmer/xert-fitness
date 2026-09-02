@@ -145,6 +145,122 @@ export async function refreshFitboxUser(leadId) {
   return body;
 }
 
+// ─── FitBox live mirror (Zapier MCP gateway) ────────────────────────────────
+// Reads come straight from the admin-readable mirror tables; anything that
+// talks to FitBox goes through the server so no Zapier credential reaches the
+// browser.
+
+async function adminApiToken() {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  return session.access_token;
+}
+
+function missingFitboxMirror(error) {
+  return ['42P01', 'PGRST205'].includes(error?.code);
+}
+
+export const FITBOX_SYNC_FEEDS = Object.freeze(['users', 'statuses', 'subscriptions', 'bookings', 'cancellations', 'first_sessions', 'classes']);
+
+export async function getFitboxOverview() {
+  const token = await adminApiToken();
+  const response = await fetch('/api/admin-fitbox-integration?overview=1', { headers: { Authorization: `Bearer ${token}` } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox overview could not be loaded.'));
+  return body;
+}
+
+export async function runFitboxSync(feed) {
+  if (!FITBOX_SYNC_FEEDS.includes(feed)) throw new Error('FitBox sync feed is invalid.');
+  const token = await adminApiToken();
+  const response = await fetch('/api/admin-fitbox-integration', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'sync_fitbox', feed }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, `FitBox ${feed} sync failed.`));
+  return body;
+}
+
+export async function lookupFitboxUser({ email = '', fitboxUserId = '' } = {}) {
+  const token = await adminApiToken();
+  const response = await fetch('/api/admin-fitbox-integration', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'lookup_fitbox', email: String(email || '').trim(), fitbox_user_id: String(fitboxUserId || '').trim() }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox lookup failed.'));
+  return body;
+}
+
+async function fitboxMirrorRows(table, build) {
+  const { data, error } = await build(supabase.from(table));
+  if (error) {
+    if (missingFitboxMirror(error)) return { rows: [], installed: false };
+    throw error;
+  }
+  return { rows: data || [], installed: true };
+}
+
+export function listFitboxUsers({ search = '', status = 'all', limit = 200 } = {}) {
+  return fitboxMirrorRows('fitbox_users', query => {
+    let request = query
+      .select('id, fitbox_gym_id, fitbox_user_id, first_name, last_name, email, phone, city, state, status, role, anniversary_date, provider_updated_at, synced_at')
+      .order('synced_at', { ascending: false })
+      .limit(Math.min(Math.max(Number(limit) || 200, 1), 500));
+    const term = String(search || '').trim();
+    if (term) {
+      const safe = term.replace(/[%,()]/g, ' ').trim();
+      request = request.or(`email.ilike.%${safe}%,first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,fitbox_user_id.eq.${safe.replace(/[^A-Za-z0-9_-]/g, '')}`);
+    }
+    if (status && status !== 'all') request = request.eq('status', status);
+    return request;
+  });
+}
+
+export function listFitboxSubscriptions({ status = 'all', limit = 200 } = {}) {
+  return fitboxMirrorRows('fitbox_subscriptions', query => {
+    let request = query
+      .select('id, fitbox_subscription_id, fitbox_user_id, email, product_id, product_name, status, payment_gateway, price_in_cents, setup_price_in_cents, discount_percentage, start_date, expiration_date, sessions_count, sessions_count_last_reset, provider_updated_at, synced_at')
+      .order('provider_updated_at', { ascending: false, nullsFirst: false })
+      .limit(Math.min(Math.max(Number(limit) || 200, 1), 500));
+    if (status && status !== 'all') request = request.eq('status', status);
+    return request;
+  });
+}
+
+export function listFitboxAttendance({ range = 'upcoming', limit = 200 } = {}) {
+  return fitboxMirrorRows('fitbox_attendance', query => {
+    let request = query
+      .select('id, fitbox_attendance_id, fitbox_event_id, fitbox_class_id, class_name, fitbox_user_id, session_start_time, status, feed, synced_at')
+      .limit(Math.min(Math.max(Number(limit) || 200, 1), 500));
+    const nowIso = new Date().toISOString();
+    if (range === 'upcoming') request = request.gte('session_start_time', nowIso).order('session_start_time', { ascending: true });
+    else request = request.order('session_start_time', { ascending: false, nullsFirst: false });
+    return request;
+  });
+}
+
+export function listFitboxClasses() {
+  return fitboxMirrorRows('fitbox_classes', query => query.select('id, fitbox_class_id, name, synced_at').order('name'));
+}
+
+export function listFitboxSyncRuns({ limit = 30 } = {}) {
+  return fitboxMirrorRows('fitbox_sync_runs', query => query
+    .select('id, feed, status, accepted, rejected, linked, error_code, started_at, finished_at')
+    .order('started_at', { ascending: false })
+    .limit(Math.min(Math.max(Number(limit) || 30, 1), 100)));
+}
+
+export function listFitboxMemberLinks() {
+  return fitboxMirrorRows('fitbox_member_links', query => query
+    .select('id, fitbox_gym_id, fitbox_user_id, lead_type, lead_id, fitbox_status, link_method, linked_at, last_verified_at, profile_synced_at')
+    .order('linked_at', { ascending: false })
+    .limit(500));
+}
+
 const FITBOX_RECONCILIATION_STATES = new Set(['needs_review', 'reviewed', 'ignored']);
 
 function normalizeFitboxReconciliationEventId(value) {
@@ -1833,7 +1949,7 @@ export async function getOperationsHealth() {
         return {
           status: 'attention',
           detail: `FitBox Zapier handoff is not configured${result.environment?.missing?.length ? `: ${result.environment.missing.join(', ')}` : '.'}`,
-          action: 'Complete the Zapier catch-hook configuration in Vercel, redeploy, then refresh.',
+          action: 'Add the Zapier MCP server URL (ZAPIER_MCP_URL) or the catch-hook settings in Vercel, redeploy, then refresh.',
         };
       }
       if (failed > 0 || stale > 0 || orphanedLinks > 0 || profileRefreshResults === 0) {

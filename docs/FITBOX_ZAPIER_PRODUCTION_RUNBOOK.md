@@ -23,7 +23,7 @@ the surface.
 | 1 | `Register User` | XERT to FitBox | **LIVE** | An admin may explicitly send one approved XERT lead. The result is a FitBox `prospect` link only, never proof of membership, subscription or payment. |
 | 2 | `Update User` | XERT to FitBox | **DISABLED** | The connector emitted `subrub` and an unsolicited `gender: Unspecified` during discovery. Edit the member in FitBox. |
 | 3 | `Get User` | XERT query / FitBox result | **READ-ONLY** | A linked lead may be refreshed explicitly. XERT stores only name, email, phone, status and freshness in the provider mirror; it ignores DOB and never changes XERT identity, access, booking or billing state. |
-| 4 | `Get Users Next Session` | XERT query / FitBox result | **DISABLED** | Only the no-result path was observed. Keep off until a booked synthetic user proves booking/session identity, timezone and cancellation semantics. |
+| 4 | `Get Users Next Session` | XERT query / FitBox result | **READ-ONLY** | Used only by the gateway lookup (3 September 2026) after a booked user returned `attendanceId`, `eventId`, `classId`, `sessionStartTime` and `status`. It writes only the FitBox mirror; never an XERT booking or credit. |
 | 5 | `Class Session Booked` | FitBox to XERT | **READ-ONLY** | Store the minimal event as `needs_review`; never create an XERT booking or consume a credit. |
 | 6 | `Class Session Cancelled` | FitBox to XERT | **READ-ONLY** | Store the minimal event as `needs_review`; never cancel an XERT booking or return a credit. |
 | 7 | `User First Session Booked` | FitBox to XERT | **READ-ONLY** | Store as an onboarding signal for review; do not infer attendance or deduplicate it against a booking without stable provider identity. |
@@ -52,7 +52,7 @@ guesswork:
 | `FitBox → XERT — User Status Changed (Review Only)` | `User Status Changed` | `user_status_changed` | On, capture only |
 | `FitBox → XERT — User Subscription Changed (Review Only)` | `User Subscription Changed` | `user_subscription_changed` | On, capture only |
 
-Do not create production Zaps for `Update User` or `Get Users Next Session`.
+Do not create production Zaps for `Update User`; `Get Users Next Session` runs only through the gateway lookup, never as a Zap.
 Keep the discovery asset named
 `XERT FitBox Discovery — DO NOT PUBLISH` off. If read-only searches are later
 implemented and contract-tested, reserve `XERT → FitBox — Get Next Session — Read Only`;
@@ -140,6 +140,90 @@ duplicate receipt without inserting a second review event. This is not a claim
 of logical-event deduplication; that remains unsupported until FitBox supplies
 stable event identity and ordering semantics.
 
+## Live gateway (Zapier MCP) — added 3 September 2026
+
+Zapier now also exposes the FitBox connector as MCP tools. XERT's server can
+call them synchronously, so the Command Centre no longer waits on a catch-hook
+Zap and a callback for the outbound work. The push Zaps stay as they are; the
+gateway adds a pull path on top.
+
+What the gateway gives the owner, all under **Command Centre → Business → FitBox**:
+
+| Tab | What it shows | Where it comes from |
+| --- | --- | --- |
+| Overview | Connection state, active members, active memberships, upcoming bookings, linked count, recent syncs, review-queue count, **Sync everything now** | `GET /api/admin-fitbox-integration?overview=1` and `fitbox_sync_runs` |
+| Members | Mirrored FitBox users with status, role, contact details, linked badge, search and status filter, plus **Look up in FitBox** (live) | `fitbox_users`, `fitbox_member_links`, `POST {action: 'lookup_fitbox'}` |
+| Memberships | Mirrored subscriptions with product, price, gateway, dates and session count | `fitbox_subscriptions` |
+| Bookings | Upcoming and recent class attendance with class, time, status and provider IDs | `fitbox_attendance` |
+| Review queue | The existing review-only inbound signals | `fitbox_integration_events` |
+| Setup | Readiness checklist for the mirror, gateway, catch hooks and inbound events, with exact next steps | overview readiness fields |
+
+The Members screen (People → Members) shows a FitBox panel per member with the
+linked FitBox user, membership and next booking, and a **Check FitBox now**
+button. The iOS owner app has the same FitBox workspace under Business.
+
+### Verified provider contract (recorded 2 September 2026)
+
+Read through the connector against the XERT Fitness gym. Values are omitted;
+the shapes are what XERT normalizes:
+
+- Member profile: `id, firstname, lastname, email, dob, gender, address1,
+  address2, city, state, postcode, country, contact_phone, current_weight,
+  height, status, anniversary_date, secondary_email, role, customFields`
+- Status change: `id, email, gymId, status, role, created_at, updated_at`
+- Subscription: `id, product_id, product_name, customer_id, email, status,
+  payment_gateway, price_in_cents, set_up_price_in_cents, discount_percentage,
+  start_date, expiration_date, sessions_count, sessions_count_last_reset,
+  created_at, updated_at`
+- Attendance (booked, cancelled, first session, next session): `attendanceId,
+  classId, className, eventId, sessionStartTime, status, userId, gymId`
+
+Stable identifiers now exist for attendance (`attendanceId`, `eventId`),
+subscriptions (`id`) and users (`id`), so the mirror upserts on them. This does
+not change the inbound Zap policy: pushed events remain evidence for review
+because the Zap mapping still carries no guaranteed event identity.
+
+XERT stores from FitBox only: names, email, phone, city, state, postcode,
+country, status, role, anniversary date, membership product and price fields,
+session counts and dates, and attendance identifiers, class, time and status.
+It never stores DOB, gender, weight, height, street address, secondary email,
+emergency contacts, custom fields or card data.
+
+### Gateway rules
+
+- `Register User` and `Get User` run through the gateway when it is
+  configured, and fall back to the catch-hook Zaps when it is not. Both keep
+  the existing job ledger, callback-hash identity checks and identity-conflict
+  guards; a gateway timeout on registration is recorded as
+  `dispatch_unknown` so it cannot be blindly retried.
+- `Get Users Next Session` is now used read-only during a lookup. It writes
+  only the mirror.
+- `Update User` stays unavailable. The connector still defaults `gender` to
+  `Unspecified` and misspells `subrub`; editing lives in FitBox.
+- The six trigger feeds are polled as read actions during **Sync everything
+  now**. FitBox's cancellation poll echoes recent bookings when nothing was
+  cancelled, so a cancellation row is stored only when its status says
+  cancelled.
+- A verified email link (`link_method = verified_email`) is created only when
+  exactly one FitBox user and exactly one XERT member share the same exact
+  email. Names are never used.
+- Every gateway call is recorded in `fitbox_sync_runs` with counts and a
+  bounded error code, never a payload.
+
+### Gateway setup
+
+1. Apply `supabase/migrations/20260903000000_fitbox_live_mirror.sql` and
+   confirm `fitbox_live_mirror` appears in schema readiness. The Codemagic
+   TestFlight preflight now requires it.
+2. In Zapier MCP, open the XERT server, choose **Connect**, pick a client
+   other than Claude, and copy the server URL. Set it in Vercel Production as
+   `ZAPIER_MCP_URL`; if Zapier shows a separate API key, set it as
+   `ZAPIER_MCP_TOKEN`. Keep `FITBOX_GYM_ID` set to the XERT Fitness gym.
+3. Redeploy, open Business → FitBox → Setup and confirm the gateway row is
+   green, then press **Sync everything now** and check each feed completes.
+4. Look up one known email in the Members tab and confirm the profile, next
+   session and (where the email matches an XERT member) the link.
+
 ## Server configuration
 
 Set these server-only values in the Vercel Production environment and redeploy.
@@ -151,9 +235,15 @@ FITBOX_GYM_ID
 FITBOX_ZAPIER_INGRESS_SECRET
 ZAPIER_FITBOX_REGISTER_HOOK_URL
 ZAPIER_FITBOX_GET_USER_HOOK_URL
+ZAPIER_MCP_URL
+ZAPIER_MCP_TOKEN
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
 ```
+
+`ZAPIER_MCP_URL` must be an `https://mcp.zapier.com/api/mcp/...` URL and
+`ZAPIER_MCP_TOKEN` is optional. When the gateway is set, the two catch-hook
+URLs become optional fallbacks.
 
 `VITE_SUPABASE_URL` is an accepted server fallback already used by the app, but
 the service-role key, Zapier hook and ingress secret must never use a `VITE_`

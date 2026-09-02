@@ -10,6 +10,7 @@ import { activationQueuePresentation, activationSnapshotPresentation } from '@/l
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import FitboxMemberPanel from '@/components/admin/FitboxMemberPanel';
 import { ADMIN_BUTTON, ADMIN_INPUT_BARE, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 function fmtDateTime(iso) {
@@ -320,6 +321,8 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                 </>
               )}
             </section>
+
+            <FitboxMemberPanel member={member} />
 
             {/* Staff notes */}
             <section>

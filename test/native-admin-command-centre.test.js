@@ -1182,7 +1182,7 @@ test('native owner access control governs launch-day administrator coverage', as
   assert.match(navigation, /case \.access: return "Admin access"/);
   assert.match(navigation, /case \.access: return "Who can sign in to the Command Centre"/);
   assert.match(navigation, /case \.access: return "person\.badge\.key"/);
-  assert.match(navigation, /case \.finance, \.orders, \.products, \.controls, \.health, \.access, \.audit: return \.business/);
+  assert.match(navigation, /case \.finance, \.orders, \.products, \.controls, \.health, \.fitbox, \.access, \.audit: return \.business/);
   assert.match(view, /case \.access:\s+AdminAccessControlView\(/);
   assert.match(view, /ForEach\(XertOwnerWorkspaceSection\.allCases\)[\s\S]*XertOwnerWorkspace\.workspaces\(in: section\)/);
 

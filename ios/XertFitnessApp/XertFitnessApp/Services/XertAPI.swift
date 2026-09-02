@@ -1784,6 +1784,67 @@ final class XertAPI {
         )
     }
 
+    func adminFitboxOverview(session auth: AuthSession) async throws -> AdminFitboxOverview {
+        try await vercelGet(
+            path: "/api/admin-fitbox-integration",
+            queryItems: [URLQueryItem(name: "overview", value: "1")],
+            auth: auth
+        )
+    }
+
+    func adminFitboxUsers(session auth: AuthSession) async throws -> [AdminFitboxUser] {
+        try await restRequest(
+            path: "/rest/v1/fitbox_users",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,fitbox_user_id,first_name,last_name,email,phone,city,status,role,synced_at"),
+                URLQueryItem(name: "order", value: "synced_at.desc,id.desc"),
+                URLQueryItem(name: "limit", value: "300")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminFitboxSubscriptions(session auth: AuthSession) async throws -> [AdminFitboxSubscription] {
+        try await restRequest(
+            path: "/rest/v1/fitbox_subscriptions",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,fitbox_subscription_id,fitbox_user_id,email,product_name,status,price_in_cents,start_date,expiration_date,sessions_count,synced_at"),
+                URLQueryItem(name: "order", value: "synced_at.desc,id.desc"),
+                URLQueryItem(name: "limit", value: "300")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminFitboxUpcomingAttendance(session auth: AuthSession) async throws -> [AdminFitboxAttendance] {
+        try await restRequest(
+            path: "/rest/v1/fitbox_attendance",
+            queryItems: [
+                URLQueryItem(name: "select", value: "id,fitbox_attendance_id,class_name,fitbox_user_id,session_start_time,status,feed,synced_at"),
+                URLQueryItem(name: "session_start_time", value: "gte.\(ISO8601DateFormatter.standard.string(from: Date()))"),
+                URLQueryItem(name: "order", value: "session_start_time.asc"),
+                URLQueryItem(name: "limit", value: "200")
+            ],
+            auth: auth
+        )
+    }
+
+    func adminRunFitboxSync(session auth: AuthSession, feed: String) async throws -> AdminFitboxSyncResponse {
+        try await vercelRequest(
+            path: "/api/admin-fitbox-integration",
+            body: AdminFitboxSyncRequest(action: "sync_fitbox", feed: feed),
+            auth: auth
+        )
+    }
+
+    func adminLookupFitboxUser(session auth: AuthSession, email: String) async throws -> AdminFitboxLookupResponse {
+        try await vercelRequest(
+            path: "/api/admin-fitbox-integration",
+            body: AdminFitboxLookupRequest(action: "lookup_fitbox", email: email, fitbox_user_id: ""),
+            auth: auth
+        )
+    }
+
     func adminResolveStripeReview(
         session auth: AuthSession,
         eventID: String,

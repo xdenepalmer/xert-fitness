@@ -36,7 +36,7 @@ function eventScope(event) {
   return parts.join(' · ') || 'Provider identifier unavailable';
 }
 
-export default function FitboxReconciliation() {
+export default function FitboxReconciliation({ embedded = false } = {}) {
   const [state, setState] = useState('needs_review');
   const [events, setEvents] = useState([]);
   const [linkIntegrity, setLinkIntegrity] = useState(null);
@@ -87,7 +87,7 @@ export default function FitboxReconciliation() {
   const orphanedLinks = Number(linkIntegrity?.orphaned || 0);
 
   return (
-    <div className={`${ADMIN_PAGE} space-y-5`}>
+    <div className={embedded ? 'space-y-5' : `${ADMIN_PAGE} space-y-5`}>
       <header className="border border-xert-steel/20 bg-gradient-to-r from-xert-deep/40 to-xert-navy/75 p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 gap-3">

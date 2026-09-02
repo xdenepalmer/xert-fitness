@@ -84,7 +84,7 @@ export const ADMIN_HUBS = Object.freeze([
       { key: 'products', label: 'Pricing', detail: 'Session packs and prices', icon: Ticket },
       { key: 'settings', label: 'Settings', detail: 'Launch date, bookings and payments', icon: Settings },
       { key: 'health', label: 'System status', detail: 'Is everything connected and working', icon: ShieldCheck },
-      { key: 'fitbox', label: 'FitBox review', detail: 'Provider signals, read-only', icon: ClipboardCheck },
+      { key: 'fitbox', label: 'FitBox', detail: 'Members, memberships, bookings and sync', icon: ClipboardCheck },
       { key: 'audit', label: 'Activity log', detail: 'Who changed what, and when', icon: ScrollText },
     ],
   },

@@ -155,7 +155,7 @@ final class ModelsTests: XCTestCase {
 
     func testOwnerWorkspaceRoutesAreTypedBoundedAndStrictlyScoped() throws {
         // 24 since the forms builder, workout and SMS workspaces are all owner-routable.
-        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 24)
+        XCTAssertEqual(XertOwnerWorkspace.allCases.count, 25)
         for workspace in XertOwnerWorkspace.allCases {
             let route = XertOwnerRoute(workspace: workspace)
             XCTAssertEqual(XertOwnerRoute.restore(route.restorationValue), route)

@@ -3007,6 +3007,8 @@ struct AdminCommandCentreView: View {
                 onOpenTask: { openOwnerRoute(XertOwnerRoute(task: $0)) },
                 onOpenWorkspace: openWorkspace
             )
+        case .fitbox:
+            AdminFitboxView(admin: admin, session: session)
         case .audit:
             AdminAuditView(admin: admin, session: session)
         }

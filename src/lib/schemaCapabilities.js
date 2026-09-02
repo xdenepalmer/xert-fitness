@@ -54,6 +54,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   form_response_snapshots: 'Apply the 20260813010000 and 20260813020000 form response migrations in Supabase.',
   fitbox_zapier_bridge: 'Apply supabase/migrations/20260902010000_fitbox_zapier_bridge.sql in Supabase.',
   fitbox_get_user_refresh: 'Apply supabase/migrations/20260902020000_fitbox_get_user_refresh.sql in Supabase.',
+  fitbox_live_mirror: 'Apply supabase/migrations/20260903000000_fitbox_live_mirror.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

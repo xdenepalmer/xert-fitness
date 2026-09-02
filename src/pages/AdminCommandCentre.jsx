@@ -24,7 +24,7 @@ const OrdersManager = lazy(() => import('@/components/admin/OrdersManager'));
 const ProductsManager = lazy(() => import('@/components/admin/ProductsManager'));
 const ContentManager = lazy(() => import('@/components/admin/ContentManager'));
 const OperationsHealth = lazy(() => import('@/components/admin/OperationsHealth'));
-const FitboxReconciliation = lazy(() => import('@/components/admin/FitboxReconciliation'));
+const FitboxHub = lazy(() => import('@/components/admin/FitboxHub'));
 const AdminAuditLog = lazy(() => import('@/components/admin/AdminAuditLog'));
 const AnnouncementsManager = lazy(() => import('@/components/admin/AnnouncementsManager'));
 const SmsManager = lazy(() => import('@/components/admin/SmsManager'));
@@ -128,7 +128,7 @@ export default function AdminCommandCentre() {
     switch (section) {
       case 'overview': return <AdminToday onNavigate={setSection} />;
       case 'health': return <OperationsHealth onNavigate={setSection} />;
-      case 'fitbox': return <FitboxReconciliation />;
+      case 'fitbox': return <FitboxHub initialTab={intent.get('tab') || 'overview'} />;
       case 'audit': return <AdminAuditLog />;
       // key remounts the shared table per section so filters/selection don't bleed between lead types
       case 'members': return <LeadTable key={section} type="member" />;

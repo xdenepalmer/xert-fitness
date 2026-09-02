@@ -106,6 +106,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
     case products
     case controls
     case health
+    case fitbox
     case audit
 
     var id: String { rawValue }
@@ -135,6 +136,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .products: return "Pricing"
         case .controls: return "Settings"
         case .health: return "System status"
+        case .fitbox: return "FitBox"
         case .audit: return "Activity log"
         }
     }
@@ -164,6 +166,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .products: return "Session packs and prices"
         case .controls: return "Launch date, bookings and payments"
         case .health: return "Is everything connected and working"
+        case .fitbox: return "Members, memberships, bookings and sync"
         case .audit: return "Who changed what, and when"
         }
     }
@@ -193,6 +196,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .products: return "ticket"
         case .controls: return "switch.2"
         case .health: return "checkmark.shield"
+        case .fitbox: return "link.circle"
         case .audit: return "clock.arrow.circlepath"
         }
     }
@@ -205,7 +209,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .members, .retention, .leads, .campaigns: return .people
         case .sms, .notices: return .communications
         case .forms, .siteContent, .team, .events: return .website
-        case .finance, .orders, .products, .controls, .health, .access, .audit: return .business
+        case .finance, .orders, .products, .controls, .health, .fitbox, .access, .audit: return .business
         }
     }
 
@@ -236,6 +240,7 @@ enum XertOwnerWorkspace: String, CaseIterable, Identifiable, Codable, Hashable {
         case .controls: return ["member app controls", "controls", "member app", "client access", "launch", "payment", "booking", "platform", "settings"]
         case .health: return ["operations health", "status", "health", "Stripe", "APNs", "schema", "release", "webhook", "readiness"]
         case .audit: return ["admin audit", "activity log", "audit", "history", "change", "operator"]
+        case .fitbox: return ["fitbox", "zapier", "membership", "subscription", "provider", "sync", "gateway"]
         }
     }
 
