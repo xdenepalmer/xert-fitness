@@ -188,6 +188,8 @@ test('FitBox server endpoints remain server-only and use the durable callback co
   assert.match(admin, /fail_fitbox_prospect_job/);
   assert.match(admin, /normalizeFitboxCallback\(zapierDataEnvelope\(body\)\)/);
   assert.match(admin, /normalizeFitboxEvent\(zapierDataEnvelope\(body\)\)/);
+  assert.match(admin, /error\?\.code === '23505' && event\.deliveryId/);
+  assert.match(admin, /\{ received: true, duplicate: true \}/);
   assert.match(admin, /event_types: eventTypes/);
   assert.match(admin, /launch_validation: \{/);
   assert.match(admin, /read_only_profile_completed: Number\(allTimeProfileRefreshes\.count \|\| 0\)/);
@@ -208,6 +210,7 @@ test('FitBox migration is fail-closed, admin-readable and service-mutated only',
   assert.match(sql, /create table if not exists public\.fitbox_member_links/i);
   assert.match(sql, /create table if not exists public\.fitbox_integration_events/i);
   assert.match(sql, /processing_state text not null default 'needs_review'/i);
+  assert.match(sql, /unique index if not exists fitbox_integration_events_delivery_unique[\s\S]*where delivery_id is not null/i);
   assert.match(sql, /unique index if not exists fitbox_integration_jobs_active_lead_unique/i);
   assert.match(sql, /alter table public\.fitbox_integration_jobs enable row level security/i);
   assert.match(sql, /using \(public\.is_admin\(\)\)/i);
