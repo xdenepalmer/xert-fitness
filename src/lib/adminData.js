@@ -1828,7 +1828,7 @@ export async function getOperationsHealth() {
       const reconciliation = Number(result.reconciliation || 0);
       const orphanedLinks = Number(result.link_integrity?.orphaned || 0);
       const profileRefreshes = Number(result.profile_refreshes_24h?.completed || 0);
-      const profileRefreshProofs = Number(result.launch_validation?.read_only_profile_completed || 0);
+      const profileRefreshResults = Number(result.launch_validation?.read_only_profile_completed || 0);
       if (!result.environment?.ready) {
         return {
           status: 'attention',
@@ -1836,14 +1836,14 @@ export async function getOperationsHealth() {
           action: 'Complete the Zapier catch-hook configuration in Vercel, redeploy, then refresh.',
         };
       }
-      if (failed > 0 || stale > 0 || orphanedLinks > 0 || profileRefreshProofs === 0) {
+      if (failed > 0 || stale > 0 || orphanedLinks > 0 || profileRefreshResults === 0) {
         return {
           status: 'attention',
-          count: failed + stale + orphanedLinks + (profileRefreshProofs === 0 ? 1 : 0),
-          detail: `${completed} completed, ${failed} failed, ${stale} stale and ${orphanedLinks} link${orphanedLinks === 1 ? '' : 's'} without an XERT lead; ${profileRefreshes} read-only profile refresh${profileRefreshes === 1 ? '' : 'es'} in 24 hours and ${profileRefreshProofs} recorded launch proof${profileRefreshProofs === 1 ? '' : 's'}; ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
+          count: failed + stale + orphanedLinks + (profileRefreshResults === 0 ? 1 : 0),
+          detail: `${completed} completed, ${failed} failed, ${stale} stale and ${orphanedLinks} link${orphanedLinks === 1 ? '' : 's'} without an XERT lead; ${profileRefreshes} read-only profile refresh${profileRefreshes === 1 ? '' : 'es'} in 24 hours and ${profileRefreshResults} recorded successful read-only profile result${profileRefreshResults === 1 ? '' : 's'}; ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
           action: orphanedLinks > 0
             ? 'Open FitBox Review, preserve the orphaned evidence and investigate the deleted XERT source before any provider action.'
-            : profileRefreshProofs === 0
+            : profileRefreshResults === 0
               ? 'Complete one read-only FitBox profile refresh against an approved synthetic pair before treating the bridge as launch-validated.'
             : 'Open Member Leads, review the affected lead and retry only after correcting its details or provider issue.',
         };

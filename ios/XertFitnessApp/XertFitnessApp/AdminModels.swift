@@ -1984,7 +1984,7 @@ struct AdminFitboxBridgeHealth: Codable, Hashable {
         let prospect_registration_completed: Int
         let read_only_profile_completed: Int
 
-        var hasReadOnlyProfileProof: Bool { read_only_profile_completed > 0 }
+        var hasReadOnlyProfileEvidence: Bool { read_only_profile_completed > 0 }
     }
     struct EventSummary: Identifiable, Codable, Hashable {
         var id: String { event_type }

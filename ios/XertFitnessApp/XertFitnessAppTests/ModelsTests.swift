@@ -6526,7 +6526,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(health.ready)
         XCTAssertTrue(health.hasReviewRequired)
         XCTAssertEqual(health.profile_refreshes_24h?.completed, 1)
-        XCTAssertTrue(health.launch_validation?.hasReadOnlyProfileProof == true)
+        XCTAssertTrue(health.launch_validation?.hasReadOnlyProfileEvidence == true)
         XCTAssertEqual(health.eventSummaries.count, 1)
         XCTAssertEqual(health.eventSummaries[0].title, "Class booked")
         XCTAssertEqual(health.eventSummaries[0].events_24h, 3)
