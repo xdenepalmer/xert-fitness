@@ -83,7 +83,7 @@ struct AccountView: View {
                     XertScrollEndSpacer()
                 }
                 .xertListBackground()
-                .listStyle(.plain)
+                .listStyle(.insetGrouped)
                 .navigationTitle("Account")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.hidden, for: .tabBar)
@@ -385,8 +385,9 @@ struct AccountView: View {
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
         .padding(10)
         .background(Color.xertNavy.opacity(0.38))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 2)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.xertSteel.opacity(0.18), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
@@ -1608,9 +1609,10 @@ private extension View {
             .tint(Color.xertSteel)
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
-            .background(Color.xertInk)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color.xertSteel.opacity(0.3), lineWidth: 1)
             )
     }

@@ -115,8 +115,9 @@ struct AdminSmsView: View {
                         .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                         .padding(12)
                         .background(audience == option ? Color.xertSteel : Color.xertInk)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(
-                            Rectangle().strokeBorder(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(
                                 audience == option ? Color.xertSteel : Color.xertSteel.opacity(0.25),
                                 lineWidth: 1
                             )
@@ -276,7 +277,8 @@ struct AdminSmsView: View {
                 .scrollContentBackground(.hidden)
                 .padding(10)
                 .background(Color.xertInk)
-                .overlay(Rectangle().strokeBorder(Color.xertSteel.opacity(0.25), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.xertSteel.opacity(0.25), lineWidth: 1))
                 .foregroundStyle(Color.xertOffWhite)
                 .accessibilityLabel("Message text")
 

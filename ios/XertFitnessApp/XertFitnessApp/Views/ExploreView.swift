@@ -81,7 +81,7 @@ struct ExploreView: View {
                 XertScrollEndSpacer()
             }
             .xertListBackground()
-            .listStyle(.plain)
+            .listStyle(.insetGrouped)
             .navigationTitle("Explore")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .tabBar)
@@ -537,8 +537,9 @@ private struct CoachPhoto: View {
                 }
             } else { initials }
         }
-        .frame(width: size, height: size).clipped()
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.25), lineWidth: 1))
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.xertSteel.opacity(0.25), lineWidth: 1))
         .accessibilityHidden(true)
     }
 

@@ -1391,10 +1391,10 @@ private struct XertNavigationDock: View {
             VStack(spacing: 4) {
                 ZStack {
                     if item == .booking {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
                             .fill(selected ? Color.xertPale : Color.xertSteel)
-                            .frame(width: 38, height: 34)
-                            .overlay(Rectangle().stroke(Color.xertOffWhite.opacity(0.32), lineWidth: 1))
+                            .frame(width: 40, height: 34)
+                            .shadow(color: Color.xertSteel.opacity(0.35), radius: 8, y: 3)
                     }
                     Image(systemName: selected ? item.selectedIcon : item.icon)
                         .font(.system(size: item == .booking ? 17 : 18, weight: .semibold))
@@ -1887,7 +1887,7 @@ private struct XertNavigationCommandPalette: View {
             .padding(.horizontal, 12)
             .background(node.isCurrent ? Color.xertDeep : Color.xertNavy)
             .overlay {
-                Rectangle().stroke(
+                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(
                     node.isCurrent ? Color.xertSteel.opacity(0.7) : Color.xertSteel.opacity(0.16),
                     lineWidth: node.isCurrent ? 1.5 : 1
                 )
@@ -2207,36 +2207,22 @@ struct XertSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center) {
-                Rectangle()
-                    .fill(Color.xertSteel)
-                    .frame(width: 22, height: 1)
-                    .accessibilityHidden(true)
+            HStack(alignment: .firstTextBaseline) {
                 Text(title)
                     .xertDisplay(24)
                 Spacer()
                 if let actionTitle, let action {
                     Button(actionTitle, action: action)
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.xertOffWhite)
+                        .foregroundStyle(Color.xertSteel)
                 }
             }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 18)
-        .padding(.horizontal, 16)
-        .background(Color.xertInk.opacity(0.72))
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Color.xertSteel.opacity(0.55))
-                .frame(width: 2)
-        }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.xertSteel.opacity(0.15))
-                .frame(height: 1)
-        }
+        .padding(.vertical, XertSpace.lg)
+        .padding(.horizontal, XertSpace.lg)
+        .xertCardStyle()
     }
 }
 

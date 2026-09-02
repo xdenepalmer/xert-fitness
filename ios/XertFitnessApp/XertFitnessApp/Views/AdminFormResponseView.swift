@@ -186,7 +186,8 @@ struct AdminFormResponseView: View {
         }
         .padding(15)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.2)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.2)))
     }
 
     private var loadingRecord: some View {
@@ -205,7 +206,8 @@ struct AdminFormResponseView: View {
         .frame(maxWidth: .infinity, minHeight: 220)
         .padding(20)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.2)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.2)))
         .accessibilityElement(children: .combine)
     }
 
@@ -231,7 +233,8 @@ struct AdminFormResponseView: View {
         .frame(maxWidth: .infinity, minHeight: 240)
         .padding(20)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.orange.opacity(0.3)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.orange.opacity(0.3)))
     }
 
     @ViewBuilder

@@ -99,7 +99,7 @@
     --border: 213 25% 22%;
     --input: 213 25% 18%;
     --ring: 203 24% 61%;
-    --radius: 0.125rem;
+    --radius: 0.875rem;
 
     /* XERT brand tokens — from official brandboard */
     --xert-black: #000000;
@@ -109,6 +109,8 @@
     --xert-pale: #D1DDE6;
     --xert-offwhite: #F1F3F4;
     --xert-white: #FFFFFF;
+    --xert-radius-card: 1rem;
+    --xert-radius-control: 0.875rem;
 
     --font-display: 'Bebas Neue', 'Arial Black', system-ui, sans-serif;
     --font-heading: 'Bebas Neue', 'Arial Black', system-ui, sans-serif;
@@ -228,18 +230,131 @@
   .xert-btn-primary {
     background-color: var(--xert-steel);
     color: var(--xert-navy);
-    transition: background-color 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease;
+    border-radius: var(--xert-radius-control);
+    box-shadow: 0 10px 30px -12px rgba(123, 167, 188, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition: background-color 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease, box-shadow 200ms ease;
   }
   .xert-btn-primary:hover { background-color: var(--xert-pale); }
-  .xert-btn-primary:active { transform: scale(0.98); }
+  .xert-btn-primary:active { transform: scale(0.98); box-shadow: 0 4px 14px -8px rgba(123, 167, 188, 0.5); }
   .xert-btn-ghost {
-    border: 1px solid rgba(123, 167, 188, 0.6);
+    border: 1px solid rgba(123, 167, 188, 0.55);
     color: var(--xert-steel);
-    background-color: transparent;
-    transition: border-color 200ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease;
+    background-color: rgba(123, 167, 188, 0.04);
+    border-radius: var(--xert-radius-control);
+    transition: border-color 200ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms cubic-bezier(0.22, 1, 0.36, 1), background-color 200ms ease, transform 120ms ease;
   }
-  .xert-btn-ghost:hover { border-color: var(--xert-steel); color: var(--xert-pale); }
+  .xert-btn-ghost:hover { border-color: var(--xert-steel); color: var(--xert-pale); background-color: rgba(123, 167, 188, 0.1); }
   .xert-btn-ghost:active { transform: scale(0.98); }
+
+  /* ── Surface system ─────────────────────────────────────────────────────
+     One card, one chip, one input and one backdrop for the whole public site,
+     so every page reads as the same product on a phone. Soft continuous
+     radii replace the old 2px "blueprint" corners. */
+  .xert-card {
+    border-radius: var(--xert-radius-card);
+    border: 1px solid rgba(123, 167, 188, 0.16);
+    background:
+      linear-gradient(160deg, rgba(50, 72, 90, 0.30) 0%, rgba(25, 36, 46, 0.96) 55%, rgba(13, 23, 32, 0.98) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 1px 2px rgba(0, 0, 0, 0.28);
+  }
+  .xert-card-flat {
+    border-radius: var(--xert-radius-card);
+    border: 1px solid rgba(123, 167, 188, 0.14);
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+  .xert-card-accent {
+    border-radius: var(--xert-radius-card);
+    border: 1px solid rgba(123, 167, 188, 0.34);
+    background:
+      linear-gradient(160deg, rgba(123, 167, 188, 0.16) 0%, rgba(50, 72, 90, 0.34) 45%, rgba(16, 24, 32, 0.96) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -24px rgba(123, 167, 188, 0.45);
+  }
+  .xert-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(123, 167, 188, 0.3);
+    background-color: rgba(123, 167, 188, 0.08);
+    color: var(--xert-steel);
+    padding: 0.35rem 0.8rem;
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+  .xert-chip-solid {
+    background-color: var(--xert-steel);
+    border-color: var(--xert-steel);
+    color: var(--xert-navy);
+  }
+  .xert-icon-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.875rem;
+    background-color: rgba(123, 167, 188, 0.14);
+    color: var(--xert-steel);
+    flex-shrink: 0;
+  }
+  .xert-input {
+    width: 100%;
+    min-height: 3rem;
+    border-radius: var(--xert-radius-control);
+    border: 1px solid rgba(123, 167, 188, 0.24);
+    background-color: rgba(255, 255, 255, 0.04);
+    color: var(--xert-offwhite);
+    padding: 0.75rem 1rem;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.4;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+  .xert-input::placeholder { color: rgba(209, 221, 230, 0.4); }
+  .xert-input:focus {
+    outline: none;
+    border-color: var(--xert-steel);
+    background-color: rgba(255, 255, 255, 0.055);
+    box-shadow: 0 0 0 3px rgba(123, 167, 188, 0.2);
+  }
+  .xert-input[aria-invalid="true"] { border-color: rgba(240, 161, 161, 0.7); }
+  select.xert-input { color-scheme: dark; }
+  .xert-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(209, 221, 230, 0.6);
+  }
+  /* Atmosphere: soft steel glows instead of the old hard blueprint grid. */
+  .xert-glow-top {
+    background-image:
+      radial-gradient(60% 45% at 50% 0%, rgba(123, 167, 188, 0.16), transparent 70%),
+      radial-gradient(40% 30% at 85% 20%, rgba(50, 72, 90, 0.35), transparent 70%);
+  }
+  .xert-glow-center {
+    background-image: radial-gradient(55% 45% at 50% 50%, rgba(123, 167, 188, 0.12), transparent 72%);
+  }
+  .xert-grid-faint {
+    background-image:
+      linear-gradient(rgba(123, 167, 188, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(123, 167, 188, 0.035) 1px, transparent 1px);
+    background-size: 96px 96px;
+    mask-image: linear-gradient(180deg, transparent, black 25%, black 75%, transparent);
+    -webkit-mask-image: linear-gradient(180deg, transparent, black 25%, black 75%, transparent);
+  }
+  .xert-divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(123, 167, 188, 0.28), transparent); }
+  .xert-glass {
+    background-color: rgba(16, 24, 32, 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(123, 167, 188, 0.18);
+  }
 }
 
 /* Visible keyboard focus on the dark theme (inputs keep their own treatment) */

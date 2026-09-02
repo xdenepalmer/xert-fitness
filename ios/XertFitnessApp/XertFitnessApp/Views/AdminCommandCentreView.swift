@@ -1285,7 +1285,8 @@ struct AdminCommandCentreView: View {
         }
         .padding(16)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(color.opacity(0.38), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(color.opacity(0.38), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("owner.incidentControl")
         .confirmationDialog(
@@ -1329,7 +1330,8 @@ struct AdminCommandCentreView: View {
             .padding(.horizontal, 9)
             .frame(minHeight: 30)
             .background(color.opacity(0.1))
-            .overlay(Rectangle().stroke(color.opacity(0.32), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(color.opacity(0.32), lineWidth: 1))
             .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -2003,7 +2005,8 @@ struct AdminCommandCentreView: View {
         .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
         .padding(.horizontal, 12)
         .background(Color.xertDeep.opacity(0.3))
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
     }
 
     @ViewBuilder
@@ -3231,7 +3234,7 @@ private struct AdminWorkspaceSwitcher: View {
             .padding(12)
             .background(Color.xertNavy.opacity(0.72))
             .overlay {
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
                         enabled ? Color.xertSteel.opacity(0.16) : Color.orange.opacity(0.34),
                         lineWidth: 1
@@ -6525,7 +6528,7 @@ private struct AdminClassRosterView: View {
                 colour: .orange
             )
         }
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.34), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.34), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Attendance for \(member.displayName)")
     }
@@ -10938,7 +10941,8 @@ private struct AdminCampaignMetric: View {
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
         .padding(12)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.16), lineWidth: 1))
     }
 }
 
@@ -13902,7 +13906,7 @@ private struct AdminAnnouncementStatusStrip: View {
                     .padding(.horizontal, 12)
                     .background(Color.xertInk)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 2)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.xertSteel.opacity(0.24), lineWidth: 1)
                     }
                 }
@@ -14866,7 +14870,8 @@ private struct AdminAuditView: View {
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
         .background(Color.xertNavy.opacity(0.72))
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.14), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.14), lineWidth: 1))
     }
 
     private func operatorLabel(_ entry: AdminAuditEntry) -> String {
@@ -17109,7 +17114,7 @@ private struct AdminHubCard: View {
             .xertCardStyle()
             .overlay {
                 if isExpanded {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(Color.xertSteel.opacity(0.5), lineWidth: 1)
                 }
             }
@@ -17497,7 +17502,7 @@ private struct AdminOperationalDataWarning: View {
         .padding(14)
         .background(Color.orange.opacity(0.08))
         .overlay {
-            RoundedRectangle(cornerRadius: 2)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.orange.opacity(0.42), lineWidth: 1)
         }
         .accessibilityLabel("Operational data is partial. Unavailable: \(unavailableSources.joined(separator: ", "))")
@@ -17628,7 +17633,7 @@ private struct AdminRefreshDataWarning: View {
         .padding(16)
         .background(Color.orange.opacity(0.08))
         .overlay {
-            RoundedRectangle(cornerRadius: 2)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.orange.opacity(0.42), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)

@@ -107,7 +107,8 @@ struct AdminFormsView: View {
         }
         .padding(18)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.22)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.22)))
     }
 
     @ViewBuilder
@@ -136,7 +137,7 @@ struct AdminFormsView: View {
             }
             Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(Color.xertSteel.opacity(0.55))
         }
-        .padding(14).background(Color.xertInk).overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18)))
+        .padding(14).background(Color.xertInk).overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.18)))
         .contentShape(Rectangle())
     }
 
@@ -584,7 +585,8 @@ private struct AdminFormDetailView: View {
         .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
         .padding(.horizontal, 10)
         .background(Color.xertSteel.opacity(0.08))
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.16)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.16)))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(label), \(value)")
     }

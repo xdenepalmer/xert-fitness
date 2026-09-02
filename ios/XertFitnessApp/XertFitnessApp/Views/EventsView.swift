@@ -124,7 +124,7 @@ struct EventsView: View {
                 XertScrollEndSpacer()
               }
               .xertListBackground()
-              .listStyle(.plain)
+              .listStyle(.insetGrouped)
               .navigationTitle("Events")
               .navigationBarTitleDisplayMode(.inline)
               .toolbar(.hidden, for: .tabBar)
@@ -168,7 +168,7 @@ struct EventsView: View {
         .xertCardStyle()
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
         .accessibilityIdentifier("xert-event-\(event.stableID)")
     }
 
@@ -246,8 +246,9 @@ struct EventsView: View {
         }
         .frame(width: 58, height: 58)
         .background(Color.xertDeep)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 2)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.xertSteel.opacity(0.35), lineWidth: 1)
         )
         .accessibilityHidden(true)
@@ -262,7 +263,7 @@ struct EventsView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Color.xertSteel)
-            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     @ViewBuilder

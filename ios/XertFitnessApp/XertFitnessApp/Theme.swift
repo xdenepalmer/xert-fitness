@@ -3,8 +3,8 @@ import UIKit
 
 // MARK: - XERT design system
 // Mirrors the website's brand tokens (src/index.css) so both surfaces read as
-// one product: navy/ink surfaces, steel accents, pale text, sharp 2pt corners
-// and condensed uppercase display type (Bebas Neue).
+// one product: navy/ink surfaces, steel accents, pale text, soft continuous
+// corners and condensed uppercase display type (Bebas Neue).
 //
 // Core brand colors (xertNavy, xertInk, xertSteel, xertOffWhite) live in
 // RootView.swift; this file adds the remaining tokens plus typography and
@@ -226,46 +226,86 @@ struct XertScrollEndSpacer: View {
     }
 }
 
-/// Low-contrast blueprint texture used by the website, rendered natively so it
-/// stays crisp at every device scale and does not require a decorative asset.
+/// The shared screen atmosphere: a deep navy field with two soft steel
+/// glows and a gentle vignette, drawn natively so it stays crisp at every
+/// scale. No grid, no rails; surfaces carry the structure now.
 struct XertScreenBackdrop: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color.xertDeep.opacity(0.46), Color.xertNavy, Color.xertInk],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                colors: [Color.xertDeep.opacity(0.42), Color.xertNavy, Color.xertInk],
+                startPoint: .top,
+                endPoint: .bottom
             )
 
             Canvas(opaque: false, colorMode: .linear, rendersAsynchronously: true) { context, size in
-                let spacing: CGFloat = 64
-                var grid = Path()
-                stride(from: CGFloat.zero, through: size.width, by: spacing).forEach { x in
-                    grid.move(to: CGPoint(x: x, y: 0))
-                    grid.addLine(to: CGPoint(x: x, y: size.height))
-                }
-                stride(from: CGFloat.zero, through: size.height, by: spacing).forEach { y in
-                    grid.move(to: CGPoint(x: 0, y: y))
-                    grid.addLine(to: CGPoint(x: size.width, y: y))
-                }
-                context.stroke(grid, with: .color(Color.xertSteel.opacity(0.055)), lineWidth: 0.7)
-
-                var rail = Path()
-                rail.move(to: CGPoint(x: size.width * 0.82, y: 0))
-                rail.addLine(to: CGPoint(x: size.width * 0.32, y: size.height))
-                context.stroke(rail, with: .color(Color.xertSteel.opacity(0.07)), lineWidth: 28)
-            }
-            .allowsHitTesting(false)
-
-            VStack {
-                Rectangle()
-                    .fill(Color.xertSteel.opacity(0.34))
-                    .frame(height: 1)
-                Spacer()
+                let topGlow = CGRect(
+                    x: size.width * 0.45, y: -size.height * 0.18,
+                    width: size.width * 0.95, height: size.height * 0.62
+                )
+                context.fill(
+                    Path(ellipseIn: topGlow),
+                    with: .radialGradient(
+                        Gradient(colors: [Color.xertSteel.opacity(0.20), Color.xertSteel.opacity(0)]),
+                        center: CGPoint(x: topGlow.midX, y: topGlow.midY),
+                        startRadius: 0,
+                        endRadius: max(topGlow.width, topGlow.height) / 2
+                    )
+                )
+                let lowGlow = CGRect(
+                    x: -size.width * 0.35, y: size.height * 0.55,
+                    width: size.width * 0.9, height: size.height * 0.6
+                )
+                context.fill(
+                    Path(ellipseIn: lowGlow),
+                    with: .radialGradient(
+                        Gradient(colors: [Color.xertDeep.opacity(0.55), Color.xertDeep.opacity(0)]),
+                        center: CGPoint(x: lowGlow.midX, y: lowGlow.midY),
+                        startRadius: 0,
+                        endRadius: max(lowGlow.width, lowGlow.height) / 2
+                    )
+                )
             }
             .allowsHitTesting(false)
         }
         .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Chips and controls
+
+extension View {
+    /// Small uppercase pill: status, category and count labels.
+    func xertChip(_ tint: Color = .xertSteel, filled: Bool = false) -> some View {
+        font(.caption2.weight(.bold))
+            .textCase(.uppercase)
+            .tracking(1)
+            .lineLimit(1)
+            .foregroundStyle(filled ? Color.xertNavy : tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(filled ? tint : tint.opacity(0.1))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(tint.opacity(filled ? 0 : 0.4), lineWidth: 1))
+    }
+
+    /// A 44pt round glass control for icons sitting on photography.
+    func xertGlassControl() -> some View {
+        frame(width: 44, height: 44)
+            .background(Color.xertInk.opacity(0.55))
+            .background(.ultraThinMaterial)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.white.opacity(0.16), lineWidth: 1))
+    }
+
+    /// The quiet inset used for metric tiles inside a card.
+    func xertInsetTile() -> some View {
+        background(Color.xertNavy.opacity(0.42))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.xertSteel.opacity(0.16), lineWidth: 1)
+            )
     }
 }
 
@@ -385,12 +425,12 @@ struct XertPageHero: View {
 
             LinearGradient(
                 colors: [
-                    Color.xertNavy.opacity(0.42),
-                    Color.xertDeep.opacity(0.5),
-                    Color.xertNavy.opacity(0.97),
+                    Color.xertNavy.opacity(0.28),
+                    Color.xertNavy.opacity(0.55),
+                    Color.xertNavy.opacity(0.98),
                 ],
-                startPoint: .topTrailing,
-                endPoint: .bottomLeading
+                startPoint: .top,
+                endPoint: .bottom
             )
             .accessibilityHidden(true)
 
@@ -407,23 +447,22 @@ struct XertPageHero: View {
                     .fixedSize(horizontal: false, vertical: true)
                 if let badge {
                     Text(badge)
-                        .font(.caption2.weight(.bold))
-                        .textCase(.uppercase)
-                        .foregroundStyle(Color.xertSteel)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.55), lineWidth: 1))
-                        .padding(.top, 3)
+                        .xertChip()
+                        .padding(.top, 4)
                 }
             }
             .padding(20)
         }
         .frame(maxWidth: .infinity, minHeight: heroHeight)
         .clipped()
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.xertSteel.opacity(0.72))
-                .frame(height: 2)
+        .overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [Color.clear, Color.xertNavy.opacity(0.35)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 40)
+            .allowsHitTesting(false)
         }
         .accessibilityElement(children: .combine)
     }

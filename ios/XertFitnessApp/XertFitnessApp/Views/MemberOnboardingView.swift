@@ -305,7 +305,7 @@ struct MemberOnboardingView: View {
                             .foregroundStyle(Color.xertSteel)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 4)
-                            .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45)))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.45)))
                     }
 
                     Text(document.body)
@@ -469,7 +469,7 @@ struct MemberOnboardingView: View {
                                 .foregroundStyle(Color.xertSteel)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 4)
-                                .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45)))
+                                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.45)))
                         }
 
                         Text(document.body)

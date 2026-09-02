@@ -246,8 +246,9 @@ struct HomeView: View {
                 .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil, minHeight: 44)
                 .padding(.horizontal, 12)
                 .background(Color.xertSteel.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.xertSteel.opacity(0.38), lineWidth: 1)
                 )
                 .contentShape(Rectangle())
@@ -332,7 +333,7 @@ struct HomeView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 2)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.xertSteel.opacity(0.5), lineWidth: 1)
                     )
             }
@@ -473,8 +474,9 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
         .padding(9)
         .background(Color.xertNavy.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 2)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.xertSteel.opacity(0.16), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
@@ -678,7 +680,7 @@ struct HomeView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 2)
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .stroke(Color.xertSteel.opacity(0.5), lineWidth: 1)
                             )
                     }
@@ -1014,21 +1016,16 @@ private struct NativeHomeHero: View {
                     .accessibilityHidden(true)
 
                 LinearGradient(
-                    colors: [
-                        Color.xertNavy.opacity(0.76),
-                        Color.xertDeep.opacity(0.45),
-                        Color.xertNavy.opacity(0.96),
+                    stops: [
+                        .init(color: Color.xertNavy.opacity(0.55), location: 0),
+                        .init(color: Color.xertDeep.opacity(0.18), location: 0.35),
+                        .init(color: Color.xertNavy.opacity(0.82), location: 0.72),
+                        .init(color: Color.xertNavy, location: 1),
                     ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
                 .accessibilityHidden(true)
-
-                Rectangle()
-                    .fill(Color.xertSteel.opacity(0.78))
-                    .frame(height: 2)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center) {
@@ -1038,9 +1035,7 @@ private struct NativeHomeHero: View {
                             Button(action: onNotices) {
                                 Image(systemName: noticeCount > 0 ? "bell.fill" : "bell")
                                     .font(.system(size: 16, weight: .semibold))
-                                    .frame(width: 44, height: 44)
-                                    .background(Color.xertInk.opacity(0.72))
-                                    .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45), lineWidth: 1))
+                                    .xertGlassControl()
                                     .overlay(alignment: .topTrailing) {
                                         if noticeCount > 0 {
                                             Text(noticeCount > 99 ? "99+" : "\(noticeCount)")
@@ -1062,9 +1057,7 @@ private struct NativeHomeHero: View {
                         Button(action: onRefresh) {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 44, height: 44)
-                                .background(Color.xertInk.opacity(0.72))
-                                .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45), lineWidth: 1))
+                                .xertGlassControl()
                         }
                         .foregroundStyle(Color.xertSteel)
                         .accessibilityLabel("Refresh XERT home")
@@ -1115,18 +1108,11 @@ private struct NativeHomeHero: View {
                     }
                     .padding(.top, 18)
 
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.xertSteel)
-                            .frame(width: 7, height: 7)
-                        Text(content.supporting ?? "Booking-based semi-private classes · Kingaroy QLD")
-                            .font(.caption2.weight(.semibold))
-                            .textCase(.uppercase)
-                            .foregroundStyle(Color.xertSteel)
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 14)
+                    Text(content.supporting ?? "Booking-based semi-private classes · Kingaroy QLD")
+                        .xertChip()
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 14)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, XertScreenLayout.heroContentTopInset(deviceTopInset: topSafeAreaInset))
@@ -1195,8 +1181,10 @@ private struct NativeHomeHero: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Next training photo")
             }
-            .background(Color.xertInk.opacity(0.72))
-            .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.45), lineWidth: 1))
+            .background(Color.xertInk.opacity(0.55))
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.16), lineWidth: 1))
         }
     }
 
@@ -1284,38 +1272,25 @@ private struct NativeValueStrip: View {
     private let values = ["Discipline", "Structure", "Purpose", "Performance"]
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 12) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
+                HStack(spacing: 8) {
                     ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                        if index > 0 {
-                            Circle()
-                                .fill(Color.xertSteel.opacity(0.45))
-                                .frame(width: 4, height: 4)
-                        }
                         Text(value)
-                            .font(XertTheme.displayFont(size: 17, relativeTo: .headline))
-                            .textCase(.uppercase)
-                            .tracking(1.4)
-                            .foregroundStyle(index.isMultiple(of: 2) ? Color.xertOffWhite : Color.xertSteel)
+                            .xertChip(index.isMultiple(of: 2) ? Color.xertPale : Color.xertSteel)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 15)
+                .padding(.horizontal, 16)
             }
 
-            HStack(spacing: 0) {
+            HStack(spacing: 8) {
                 ValueMetric(label: "Coached model", value: "Semi-private")
                 ValueMetric(label: "Programming", value: "12-week blocks")
                 ValueMetric(label: "Location", value: "Kingaroy QLD")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 14)
-            .background(Color.xertDeep.opacity(0.86))
+            .padding(.horizontal, 16)
         }
-        .background(Color.xertInk.opacity(0.94))
-        .overlay(alignment: .top) { Rectangle().fill(Color.xertSteel.opacity(0.22)).frame(height: 1) }
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.xertSteel.opacity(0.22)).frame(height: 1) }
+        .padding(.vertical, 4)
     }
 }
 
@@ -1324,25 +1299,25 @@ private struct ValueMetric: View {
     let value: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 8, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
                 .textCase(.uppercase)
+                .tracking(0.8)
                 .foregroundStyle(Color.xertSteel)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(value)
-                .font(XertTheme.displayFont(size: 15, relativeTo: .subheadline))
+                .font(XertTheme.displayFont(size: 17, relativeTo: .subheadline))
                 .textCase(.uppercase)
                 .foregroundStyle(Color.xertOffWhite)
                 .lineLimit(2)
                 .minimumScaleFactor(0.72)
         }
-        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-        .padding(.horizontal, 8)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(Color.xertSteel.opacity(0.22)).frame(width: 1)
-        }
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .padding(.horizontal, XertSpace.md)
+        .padding(.vertical, XertSpace.sm)
+        .xertCardStyle()
     }
 }
 
@@ -1395,7 +1370,8 @@ private struct NativeTrainingIdentity: View {
             .padding(18)
             .background(Color.xertInk.opacity(0.9))
         }
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.24), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.xertSteel.opacity(0.24), lineWidth: 1))
     }
 }
 
@@ -1417,7 +1393,8 @@ private struct TrainingPillar: View {
         }
         .frame(maxWidth: .infinity, minHeight: 68)
         .background(Color.xertDeep.opacity(0.34))
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.18), lineWidth: 1))
     }
 }
 
@@ -1462,7 +1439,7 @@ private struct MemberNoticeCenter: View {
                             )
                             .overlay {
                                 if announcement.id == highlightedAnnouncementID {
-                                    Rectangle().stroke(Color.xertSteel, lineWidth: 2)
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel, lineWidth: 2)
                                 }
                             }
                         }

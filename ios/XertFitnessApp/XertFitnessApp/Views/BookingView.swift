@@ -75,7 +75,7 @@ struct BookingView: View {
                 }
                 .tint(.xertSteel)
                 .xertListBackground()
-                .listStyle(.plain)
+                .listStyle(.insetGrouped)
                 .scrollDismissesKeyboard(.interactively)
                 .navigationTitle("Book")
                 .navigationBarTitleDisplayMode(.inline)
@@ -668,7 +668,7 @@ struct BookingView: View {
         .accessibilityIdentifier("xert-class-session-\(session.id.uuidString.lowercased())")
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
     }
 
     @ViewBuilder
@@ -990,9 +990,10 @@ struct BookingView: View {
             .foregroundStyle(tone)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 2))
+            .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(tone.opacity(0.5), lineWidth: 1)
             )
             .accessibilityLabel(spots > 0 ? "\(spots) spots left" : "No spots left")

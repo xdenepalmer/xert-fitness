@@ -143,7 +143,8 @@ struct AdminWorkoutOfDayView: View {
         }
         .padding(18)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.22)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.22)))
     }
 
     @ViewBuilder
@@ -220,7 +221,8 @@ struct AdminWorkoutOfDayView: View {
                             .padding(.horizontal, 14)
                             .frame(minHeight: 46)
                             .background(selected ? Color.xertSteel : Color.xertNavy)
-                            .overlay(Rectangle().stroke(Color.xertSteel.opacity(selected ? 1 : 0.28)))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(selected ? 1 : 0.28)))
                         }
                         .buttonStyle(.plain)
                         .disabled(isLoadingDay || isSaving)
@@ -230,7 +232,8 @@ struct AdminWorkoutOfDayView: View {
         }
         .padding(16)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.18)))
     }
 
     private var editorCard: some View {
@@ -265,7 +268,8 @@ struct AdminWorkoutOfDayView: View {
                     .textInputAutocapitalization(.sentences)
                     .padding(12)
                     .background(Color.xertNavy)
-                    .overlay(Rectangle().stroke(fieldBorder(draft.title.count, limit: AdminWorkoutOfDay.titleLimit)))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(fieldBorder(draft.title.count, limit: AdminWorkoutOfDay.titleLimit)))
                     .disabled(!canEdit)
             }
 
@@ -295,7 +299,8 @@ struct AdminWorkoutOfDayView: View {
                         .disabled(!canEdit)
                 }
                 .background(Color.xertNavy)
-                .overlay(Rectangle().stroke(fieldBorder(draft.body.count, limit: AdminWorkoutOfDay.bodyLimit)))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(fieldBorder(draft.body.count, limit: AdminWorkoutOfDay.bodyLimit)))
                 Text("Line breaks and spacing appear on the TV exactly as entered.")
                     .font(.caption)
                     .foregroundStyle(Color.xertPale.opacity(0.5))
@@ -334,7 +339,8 @@ struct AdminWorkoutOfDayView: View {
         }
         .padding(18)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.2)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.2)))
         .opacity(isLoadingDay ? 0.62 : 1)
     }
 
@@ -386,7 +392,8 @@ struct AdminWorkoutOfDayView: View {
                     }
                 }
                 .background(Color.xertInk)
-                .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18)))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.18)))
             }
         }
     }
@@ -415,7 +422,8 @@ struct AdminWorkoutOfDayView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 260)
         .background(Color.xertInk)
-        .overlay(Rectangle().stroke(Color.xertSteel.opacity(0.18)))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.xertSteel.opacity(0.18)))
     }
 
     private func statusBanner(_ message: String, icon: String, color: Color) -> some View {
@@ -425,7 +433,8 @@ struct AdminWorkoutOfDayView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(13)
             .background(color.opacity(0.1))
-            .overlay(Rectangle().stroke(color.opacity(0.28)))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(color.opacity(0.28)))
     }
 
     private func characterCount(_ count: Int, limit: Int) -> some View {
