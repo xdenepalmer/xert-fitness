@@ -86,6 +86,29 @@ declaring final launch acceptance; it must use the approved synthetic record,
 not a real member. Register sends only the approved prospect contact fields;
 Get User refreshes only the explicitly allowed read-only profile fields.
 
+### Live revalidation evidence — 2 September 2026 (AEST)
+
+The signed-in Zapier automation list was rechecked after publication. The eight
+named supported Zaps above were each visibly enabled. The separate
+`XERT FitBox Discovery — DO NOT PUBLISH` asset remained disabled. The two
+outbound workflows each contain only Webhooks by Zapier and FitBox steps: Get
+User contains no Update User step, while prospect registration contains no
+payment or subscription step. Each inbound review-only workflow shows only
+FitBox and Webhooks by Zapier.
+
+The live XERT FitBox Review screen loaded the seven accepted evidence receipts
+and retained them as `needs_review`; no receipt was marked reviewed during this
+revalidation. It also surfaced one historic provider link whose `lead_id` is a
+legacy non-UUID value, so it has no corresponding XERT lead. XERT intentionally
+does not create a replacement lead, re-register the same provider user, or use
+that record for the outstanding fresh Get User check. FitBox admin access was
+also confirmed, read-only.
+
+This is evidence that publication and guardrails are live, not evidence that
+the outstanding fresh post-publication Get User acceptance has passed. That
+test needs either a recoverable original XERT lead or a separately authorised,
+new synthetic XERT/FitBox pair.
+
 ## Server configuration
 
 Set these server-only values in the Vercel Production environment and redeploy.
