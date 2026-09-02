@@ -264,6 +264,19 @@ summary:focus-visible {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Native select menus can otherwise combine the Command Centre's pale selected
+   text with a browser-provided white option panel. Keep the browser/PWA picker
+   in the same dark, high-contrast palette as the control that opened it. */
+[data-admin-workspace] select {
+  color-scheme: dark;
+}
+
+[data-admin-workspace] select option,
+[data-admin-workspace] select optgroup {
+  background-color: var(--xert-navy);
+  color: var(--xert-offwhite);
+}
+
 /* iOS Safari zooms the viewport when a focused form control renders below
    16px. Admin editors intentionally use compact typography on desktop, but
    mobile controls must stay at 16px so the keyboard never destroys context. */
