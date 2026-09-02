@@ -189,6 +189,8 @@ test('FitBox server endpoints remain server-only and use the durable callback co
   assert.match(admin, /normalizeFitboxCallback\(zapierDataEnvelope\(body\)\)/);
   assert.match(admin, /normalizeFitboxEvent\(zapierDataEnvelope\(body\)\)/);
   assert.match(admin, /event_types: eventTypes/);
+  assert.match(admin, /launch_validation: \{/);
+  assert.match(admin, /read_only_profile_completed: Number\(allTimeProfileRefreshes\.count \|\| 0\)/);
   assert.match(admin, /needs_review: Number\(reviews\.count/);
   assert.match(admin, /last_received_at: latestEvent\.data\?\.received_at/);
   assert.match(admin, /timingSafeEqual/);

@@ -6505,6 +6505,7 @@ final class ModelsTests: XCTestCase {
           "environment": { "ready": true, "missing": [] },
           "jobs_24h": { "completed": 1, "failed": 0 },
           "profile_refreshes_24h": { "completed": 1, "failed": 0 },
+          "launch_validation": { "prospect_registration_completed": 1, "read_only_profile_completed": 1 },
           "active": 0,
           "stale": 0,
           "events_24h": 3,
@@ -6525,6 +6526,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(health.ready)
         XCTAssertTrue(health.hasReviewRequired)
         XCTAssertEqual(health.profile_refreshes_24h?.completed, 1)
+        XCTAssertTrue(health.launch_validation?.hasReadOnlyProfileProof == true)
         XCTAssertEqual(health.eventSummaries.count, 1)
         XCTAssertEqual(health.eventSummaries[0].title, "Class booked")
         XCTAssertEqual(health.eventSummaries[0].events_24h, 3)

@@ -1980,6 +1980,12 @@ struct AdminFitboxBridgeHealth: Codable, Hashable {
         let completed: Int
         let failed: Int
     }
+    struct LaunchValidation: Codable, Hashable {
+        let prospect_registration_completed: Int
+        let read_only_profile_completed: Int
+
+        var hasReadOnlyProfileProof: Bool { read_only_profile_completed > 0 }
+    }
     struct EventSummary: Identifiable, Codable, Hashable {
         var id: String { event_type }
         let event_type: String
@@ -2022,6 +2028,7 @@ struct AdminFitboxBridgeHealth: Codable, Hashable {
     let environment: Environment
     let jobs_24h: Jobs
     let profile_refreshes_24h: Jobs?
+    let launch_validation: LaunchValidation?
     let active: Int
     let stale: Int
     let events_24h: Int

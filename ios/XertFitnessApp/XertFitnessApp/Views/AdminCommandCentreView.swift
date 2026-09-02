@@ -13992,6 +13992,26 @@ private struct AdminOperationsHealthView: View {
         return !bridge.hasReviewRequired
     }
 
+    private var fitboxReadOnlyProfileProofReady: Bool? {
+        guard admin.fitboxBridgeHealthError == nil,
+              let bridge = admin.fitboxBridgeHealth else { return nil }
+        return bridge.launch_validation?.hasReadOnlyProfileProof
+    }
+
+    private var fitboxReadOnlyProfileProofDetail: String {
+        guard admin.fitboxBridgeHealthError == nil,
+              let bridge = admin.fitboxBridgeHealth else {
+            return "The read-only FitBox profile proof could not be verified. Do not treat the bridge as launch-validated."
+        }
+        guard let validation = bridge.launch_validation else {
+            return "This server snapshot predates launch-proof reporting. Refresh after the current production deployment is live."
+        }
+        if validation.hasReadOnlyProfileProof {
+            return "\(validation.read_only_profile_completed) read-only FitBox profile result\(validation.read_only_profile_completed == 1 ? " is" : "s are") recorded. XERT identity, bookings and billing remained unchanged."
+        }
+        return "No successful read-only FitBox profile result is recorded yet. Complete it with an approved synthetic pair; do not reuse an orphaned provider link."
+    }
+
     private var fitboxReviewDetail: String {
         guard admin.fitboxBridgeHealthError == nil,
               let bridge = admin.fitboxBridgeHealth else {
@@ -14172,6 +14192,11 @@ private struct AdminOperationsHealthView: View {
                     detail: fitboxReviewDetail
                 )
                 HealthStatusRow(
+                    title: "FitBox read-only profile proof",
+                    ready: fitboxReadOnlyProfileProofReady,
+                    detail: fitboxReadOnlyProfileProofDetail
+                )
+                HealthStatusRow(
                     title: "Database contract",
                     ready: databaseReady,
                     detail: databaseDetail
@@ -14196,6 +14221,7 @@ private struct AdminOperationsHealthView: View {
                 Section("FitBox activity (24 hours)") {
                     HealthCountRow(label: "FitBox jobs completed", value: bridge.jobs_24h.completed)
                     HealthCountRow(label: "Read-only profile refreshes", value: bridge.profile_refreshes_24h?.completed ?? 0)
+                    HealthCountRow(label: "Recorded read-only profile proofs", value: bridge.launch_validation?.read_only_profile_completed ?? 0)
                     HealthCountRow(label: "Handoffs in progress", value: bridge.active)
                     HealthCountRow(label: "Provider events received", value: bridge.events_24h)
                     HealthCountRow(label: "Awaiting reconciliation", value: bridge.reconciliation)

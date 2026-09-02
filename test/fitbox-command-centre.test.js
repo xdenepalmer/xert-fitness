@@ -17,4 +17,5 @@ test('web Command Centre gives member leads an explicit, privacy-clear FitBox ha
   assert.match(handoff, /profile_synced_at/);
   assert.match(data, /api\/admin-fitbox-integration/);
   assert.match(data, /healthCheck\('fitbox-integration', 'FitBox prospect handoff'/);
+  assert.match(data, /Complete one read-only FitBox profile refresh against an approved synthetic pair/);
 });

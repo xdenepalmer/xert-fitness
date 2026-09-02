@@ -351,13 +351,15 @@ async function fitboxLinkIntegrity(admin) {
 async function integrationHealth(admin) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString();
   const staleBefore = new Date(Date.now() - 15 * 60 * 1_000).toISOString();
-  const [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, active, stale, latest, eventTypes, linkIntegrity] = await Promise.all([
+  const [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, allTimeProspectCompletions, allTimeProfileRefreshes, active, stale, latest, eventTypes, linkIntegrity] = await Promise.all([
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'completed').gte('updated_at', since),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('updated_at', since),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'completed').gte('updated_at', since),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'failed').gte('updated_at', since),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'failed')
       .in('last_error_code', ['FITBOX_USER_NOT_FOUND', 'FITBOX_LOOKUP_IDENTITY_MISMATCH']),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'register_prospect').eq('status', 'completed'),
+    admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'completed'),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'dispatched', 'dispatch_unknown']),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'dispatched', 'dispatch_unknown']).lt('updated_at', staleBefore),
     admin.from('fitbox_integration_jobs').select('status, fitbox_user_id, last_error_code, updated_at').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
@@ -383,7 +385,7 @@ async function integrationHealth(admin) {
     })),
     fitboxLinkIntegrity(admin),
   ]);
-  for (const result of [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, active, stale, latest]) if (result.error) throw result.error;
+  for (const result of [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, allTimeProspectCompletions, allTimeProfileRefreshes, active, stale, latest]) if (result.error) throw result.error;
   const events = eventTypes.reduce((sum, event) => sum + event.events_24h, 0);
   const reviews = eventTypes.reduce((sum, event) => sum + event.needs_review, 0);
   const lastEvent = eventTypes
@@ -401,6 +403,10 @@ async function integrationHealth(admin) {
     },
     jobs_24h: { completed: Number(completed.count || 0), failed: Number(failed.count || 0) },
     profile_refreshes_24h: { completed: Number(profileRefreshes.count || 0), failed: Number(profileRefreshFailures.count || 0) },
+    launch_validation: {
+      prospect_registration_completed: Number(allTimeProspectCompletions.count || 0),
+      read_only_profile_completed: Number(allTimeProfileRefreshes.count || 0),
+    },
     active: Number(active.count || 0),
     stale: Number(stale.count || 0),
     last_job: latest.data || null,
