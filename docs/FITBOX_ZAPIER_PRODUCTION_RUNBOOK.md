@@ -200,16 +200,23 @@ payload hash. The current `delivery_id` uniqueness guard prevents only a proven
 duplicate delivery; it does not solve distinct Zap deliveries of the same
 logical FitBox change or out-of-order transitions.
 
-For every item awaiting review, compare the member/entity in FitBox, record the
-decision through the controlled XERT review workflow when available, and leave
-the underlying XERT booking, subscription, payment and attendance state
-unchanged. Until that workflow exists, the queue is an attention signal and
-must not be cleared with manual database edits.
+For every item awaiting review, open **Command Centre → FitBox Review**, compare
+the provider entity in FitBox, then use **Mark reviewed** only after the owner
+has made that comparison. That action writes the protected XERT review ledger
+only; it never contacts FitBox or changes an XERT booking, subscription,
+payment, attendance record, membership or profile. Never clear this queue with
+manual database edits.
+
+If a historic FitBox link or job no longer has its originating XERT lead, leave
+it visible as evidence and investigate the source record. Do not create a new
+lead merely to make an old provider link actionable, and never register a
+second prospect to test an existing FitBox identity.
 
 ## Monitoring and incident response
 
 Open **Command Centre → Operations Health** after deployment and at opening,
-midday and close during launch week. The FitBox check must show:
+midday and close during launch week. Open **FitBox Review** whenever the health
+check reports reconciliation work. The FitBox check must show:
 
 - Configuration ready with no missing environment names.
 - No failed prospect handoffs in the last 24 hours.

@@ -3,6 +3,7 @@ export const DEFAULT_ADMIN_SECTION = 'overview';
 export const ADMIN_SECTION_KEYS = Object.freeze([
   'overview',
   'health',
+  'fitbox',
   'audit',
   'gym-members',
   'orders',

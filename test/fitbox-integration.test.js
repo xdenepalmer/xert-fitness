@@ -219,3 +219,20 @@ test('FitBox migration is fail-closed, admin-readable and service-mutated only',
   assert.match(sql, /FITBOX_IDENTITY_CONFLICT/);
   assert.match(sql, /values \('fitbox_zapier_bridge'\)/i);
 });
+
+test('FitBox reconciliation is bounded, admin-only and acknowledges evidence without provider mutation', async () => {
+  const admin = await readFile(new URL('../api/admin-fitbox-integration.js', import.meta.url), 'utf8');
+  const client = await readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
+  const queue = await readFile(new URL('../src/components/admin/FitboxReconciliation.jsx', import.meta.url), 'utf8');
+  const navigation = await readFile(new URL('../src/lib/adminNavigation.js', import.meta.url), 'utf8');
+
+  assert.match(admin, /const EVENT_PAGE_LIMIT = 50/);
+  assert.match(admin, /function publicFitboxEvent\(event\)/);
+  assert.match(admin, /action === 'review_event'/);
+  assert.match(admin, /\.eq\('processing_state', 'needs_review'\)/);
+  assert.match(client, /getFitboxReconciliationEvents/);
+  assert.match(client, /acknowledgeFitboxReconciliationEvent/);
+  assert.match(queue, /protected XERT review ledger/);
+  assert.match(queue, /does not contact FitBox or change any booking, credit, membership, payment or member profile/);
+  assert.match(navigation, /'fitbox'/);
+});

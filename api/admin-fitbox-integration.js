@@ -20,6 +20,9 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const MAX_REQUEST_BYTES = 8_192;
 const DISPATCH_TIMEOUT_MS = 12_000;
 const EVENT_REQUEST_BYTES = 16_384;
+const EVENT_PAGE_LIMIT = 50;
+const FITBOX_EVENT_STATES = new Set(['needs_review', 'reviewed', 'ignored']);
+const FITBOX_EVENT_SELECT = 'id, event_type, fitbox_gym_id, fitbox_user_id, fitbox_booking_id, fitbox_session_id, fitbox_subscription_id, provider_event_id, delivery_id, provider_status, provider_occurred_at, provider_updated_at, processing_state, review_reason, reviewed_at, received_at';
 
 function callbackTokenHash(token) {
   return createHash('sha256').update(token).digest('hex');
@@ -223,6 +226,75 @@ function requestLeadID(request) {
   return normalizeFitboxLeadID(value);
 }
 
+function requestQuery(request, key) {
+  return request.query?.[key] ?? new URL(request.url, 'https://xert.invalid').searchParams.get(key);
+}
+
+function normalizeFitboxEventID(value) {
+  const id = String(value || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error('INVALID_FITBOX_EVENT_ID');
+  }
+  return id;
+}
+
+function fitboxEventState(value) {
+  const state = String(value || 'needs_review').trim().toLowerCase();
+  if (!FITBOX_EVENT_STATES.has(state)) throw new Error('INVALID_FITBOX_EVENT_STATE');
+  return state;
+}
+
+function publicFitboxEvent(event) {
+  if (!event) return null;
+  return {
+    id: event.id,
+    event_type: event.event_type,
+    fitbox_gym_id: event.fitbox_gym_id,
+    fitbox_user_id: event.fitbox_user_id,
+    fitbox_booking_id: event.fitbox_booking_id,
+    fitbox_session_id: event.fitbox_session_id,
+    fitbox_subscription_id: event.fitbox_subscription_id,
+    provider_event_id: event.provider_event_id,
+    delivery_id: event.delivery_id,
+    provider_status: event.provider_status,
+    provider_occurred_at: event.provider_occurred_at,
+    provider_updated_at: event.provider_updated_at,
+    processing_state: event.processing_state,
+    review_reason: event.review_reason,
+    reviewed_at: event.reviewed_at,
+    received_at: event.received_at,
+  };
+}
+
+async function fitboxReconciliationEvents(admin, state) {
+  const { data, error } = await admin.from('fitbox_integration_events')
+    .select(FITBOX_EVENT_SELECT)
+    .eq('processing_state', state)
+    .order('received_at', { ascending: false })
+    .limit(EVENT_PAGE_LIMIT);
+  if (error) throw error;
+  return { events: (data || []).map(publicFitboxEvent), state, limit: EVENT_PAGE_LIMIT };
+}
+
+async function reviewFitboxEvent(admin, eventId, reviewerId) {
+  const reviewedAt = new Date().toISOString();
+  const { data, error } = await admin.from('fitbox_integration_events')
+    .update({ processing_state: 'reviewed', reviewed_by: reviewerId, reviewed_at: reviewedAt })
+    .eq('id', eventId)
+    .eq('processing_state', 'needs_review')
+    .select(FITBOX_EVENT_SELECT)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) return { event: publicFitboxEvent(data), already_reviewed: false };
+
+  const { data: existing, error: existingError } = await admin.from('fitbox_integration_events')
+    .select(FITBOX_EVENT_SELECT).eq('id', eventId).maybeSingle();
+  if (existingError) throw existingError;
+  if (!existing) throw new Error('FITBOX_EVENT_NOT_FOUND');
+  if (existing.processing_state !== 'reviewed') throw new Error('FITBOX_EVENT_NOT_REVIEWABLE');
+  return { event: publicFitboxEvent(existing), already_reviewed: true };
+}
+
 async function leadIntegrationState(admin, leadId) {
   const { error: expiryError } = await admin.from('fitbox_integration_jobs').update({
     status: 'expired',
@@ -407,9 +479,10 @@ export default async function handler(request, response) {
 
   if (request.method === 'GET') {
     try {
-      const wantsHealth = request.query?.health === '1'
-        || new URL(request.url, 'https://xert.invalid').searchParams.get('health') === '1';
+      const wantsHealth = requestQuery(request, 'health') === '1';
+      const wantsEvents = requestQuery(request, 'events') === '1';
       if (wantsHealth) return json(await integrationHealth(admin));
+      if (wantsEvents) return json(await fitboxReconciliationEvents(admin, fitboxEventState(requestQuery(request, 'state'))));
       const leadId = requestLeadID(request);
       const state = await leadIntegrationState(admin, leadId);
       const environment = fitboxIntegrationEnvironment(process.env);
@@ -422,6 +495,7 @@ export default async function handler(request, response) {
         profile_refresh_issue: getUserEnvironment.ready ? null : 'FitBox read-only profile refresh is not configured.',
       });
     } catch (error) {
+      if (error.message === 'INVALID_FITBOX_EVENT_STATE') return json({ error: 'FitBox event state is invalid.' }, 400);
       if (error.message === 'INVALID_FITBOX_LEAD_ID') return json({ error: 'Lead selection is invalid.' }, 400);
       if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox integration storage is not installed.' }, 503);
       return json({ error: 'FitBox status could not be loaded.' }, 500);
@@ -435,7 +509,27 @@ export default async function handler(request, response) {
   } catch {
     return json({ error: 'FitBox request is invalid.' }, 400);
   }
-  if (!['register_prospect', 'refresh_user'].includes(body?.action)) return json({ error: 'FitBox request is invalid.' }, 400);
+  if (!['register_prospect', 'refresh_user', 'review_event'].includes(body?.action)) return json({ error: 'FitBox request is invalid.' }, 400);
+
+  if (body.action === 'review_event') {
+    try {
+      const eventId = normalizeFitboxEventID(body.event_id);
+      const result = await reviewFitboxEvent(admin, eventId, access.user.id);
+      console.info('FitBox review-only event acknowledged.', {
+        requestId: trace.requestId,
+        eventId,
+        actorId: access.user.id,
+        alreadyReviewed: result.already_reviewed,
+      });
+      return json(result);
+    } catch (error) {
+      if (error.message === 'INVALID_FITBOX_EVENT_ID') return json({ error: 'FitBox event selection is invalid.' }, 400);
+      if (error.message === 'FITBOX_EVENT_NOT_FOUND') return json({ error: 'This FitBox event no longer exists. Refresh the queue.' }, 404);
+      if (error.message === 'FITBOX_EVENT_NOT_REVIEWABLE') return json({ error: 'This FitBox event cannot be acknowledged from the queue.' }, 409);
+      if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox reconciliation storage is unavailable.' }, 503);
+      return json({ error: 'The FitBox event could not be acknowledged.' }, 500);
+    }
+  }
 
   let leadId;
   try {

@@ -59,5 +59,6 @@ export function AdminSectionHeading({ id, children, trailing = null, className =
 }
 
 export function AdminButton({ variant = 'primary', className = '', type = 'button', ...props }) {
-  return <button type={type} className={`${ADMIN_BUTTON[variant] || ADMIN_BUTTON.primary} ${className}`} {...props} />;
+  const buttonType = type === 'submit' || type === 'reset' ? type : 'button';
+  return <button type={buttonType} className={`${ADMIN_BUTTON[variant] || ADMIN_BUTTON.primary} ${className}`} {...props} />;
 }

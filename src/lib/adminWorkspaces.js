@@ -1,5 +1,5 @@
 import {
-  BarChart3, BellRing, CalendarDays, CalendarRange, ClipboardList, DollarSign,
+  BarChart3, BellRing, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, DollarSign,
   Dumbbell, Handshake, Inbox, LayoutDashboard, ListChecks, MessageSquareText, PenSquare, ScrollText,
   Settings, ShieldCheck, Ticket, Trophy, Tv, UserCog, Users, UserSquare2,
 } from 'lucide-react';
@@ -63,6 +63,7 @@ export const ADMIN_WORKSPACE_GROUPS = Object.freeze([
     items: [
       { key: 'settings', label: 'Member App Controls', detail: 'Launch, booking and payment switches', icon: Settings },
       { key: 'health', label: 'Operations Health', detail: 'Stripe, schema and push readiness', icon: ShieldCheck },
+      { key: 'fitbox', label: 'FitBox Review', detail: 'Review provider signals without changing XERT records', icon: ClipboardCheck },
       { key: 'audit', label: 'Admin Audit', detail: 'Protected operational history', icon: ScrollText },
     ],
   },

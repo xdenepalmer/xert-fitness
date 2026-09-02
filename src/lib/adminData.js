@@ -145,6 +145,46 @@ export async function refreshFitboxUser(leadId) {
   return body;
 }
 
+const FITBOX_RECONCILIATION_STATES = new Set(['needs_review', 'reviewed', 'ignored']);
+
+function normalizeFitboxReconciliationEventId(value) {
+  const id = String(value || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error('FitBox event selection is invalid.');
+  }
+  return id;
+}
+
+export async function getFitboxReconciliationEvents(state = 'needs_review') {
+  const safeState = String(state || '').trim().toLowerCase();
+  if (!FITBOX_RECONCILIATION_STATES.has(safeState)) throw new Error('FitBox event state is invalid.');
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch(`/api/admin-fitbox-integration?events=1&state=${encodeURIComponent(safeState)}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox reconciliation queue could not be loaded.'));
+  return body;
+}
+
+export async function acknowledgeFitboxReconciliationEvent(eventId) {
+  const id = normalizeFitboxReconciliationEventId(eventId);
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.access_token) throw new Error('Admin session is unavailable.');
+  const response = await fetch('/api/admin-fitbox-integration', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'review_event', event_id: id }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'FitBox event could not be acknowledged.'));
+  return body;
+}
+
 export async function updateLegacyBookingNotes(id, adminNotes) {
   const mutation = normalizeLegacyBookingNotes(id, adminNotes);
   const { error } = await supabase.rpc('admin_update_request', {
@@ -1517,22 +1557,27 @@ export async function getBusinessStats() {
 // ─── Sidebar badge counts (things needing attention) ─────────────────────────
 
 export async function getAdminBadgeCounts() {
-  const [newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT, formResponses] = await Promise.all([
+  const [newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT, formResponses, fitboxEvents] = await Promise.all([
     supabase.from('member_interest').select('id', { count: 'exact', head: true }).eq('status', 'new'),
     supabase.from('class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('session_bookings').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
     supabase.from('private_session_requests').select('id', { count: 'exact', head: true }).eq('status', 'requested'),
-    supabase.from('xert_form_responses').select('id', { count: 'exact', head: true }).eq('status', 'new').is('archived_at', null)
+    supabase.from('xert_form_responses').select('id', { count: 'exact', head: true }).eq('status', 'new').is('archived_at', null),
+    supabase.from('fitbox_integration_events').select('id', { count: 'exact', head: true }).eq('processing_state', 'needs_review'),
   ]);
   assertSupabaseResponses([newLeads, pendingLegacyBookings, pendingMemberBookings, pendingPT]);
   if (formResponses.error && formResponses.error.code !== '42P01') {
     assertSupabaseResponses([formResponses]);
   }
+  if (fitboxEvents.error && !['42P01', 'PGRST205'].includes(fitboxEvents.error.code)) {
+    assertSupabaseResponses([fitboxEvents]);
+  }
   return {
     members: newLeads.count || 0,
     bookings: (pendingLegacyBookings.count || 0) + (pendingMemberBookings.count || 0),
     'pt-requests': pendingPT.count || 0,
-    forms: formResponses.error ? 0 : formResponses.count || 0
+    forms: formResponses.error ? 0 : formResponses.count || 0,
+    fitbox: fitboxEvents.error ? 0 : fitboxEvents.count || 0,
   };
 }
 

@@ -52,7 +52,7 @@ const ROUTES = {
   'commerce-config': 'products',
   'push-notifications': 'announcements',
   'platform-controls': 'settings',
-  'fitbox-integration': 'members',
+  'fitbox-integration': 'fitbox',
   'booking-provider': 'settings',
 };
 
