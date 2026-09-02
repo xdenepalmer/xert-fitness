@@ -4120,6 +4120,11 @@ struct AdminSmsOutcome: Decodable, Hashable {
 struct AdminFitboxReadiness: Codable, Hashable {
     let ready: Bool
     let missing: [String]
+    let mode: String?
+    let feeds_available: Bool?
+    let error_code: String?
+
+    var feedsAvailable: Bool { feeds_available == true }
 }
 
 struct AdminFitboxSummary: Codable, Hashable {

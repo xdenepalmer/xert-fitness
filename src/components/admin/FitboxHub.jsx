@@ -146,10 +146,15 @@ function OverviewTab({ overview, loading, error, onReload, onSync, syncing, sync
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
-          <button type="button" onClick={onSync} disabled={!gatewayReady || syncing || !overview.mirror_installed} className={`${ADMIN_BUTTON.primary} min-h-11 px-5`}>
+          <button type="button" onClick={onSync} disabled={!gatewayReady || !overview.gateway?.feeds_available || syncing || !overview.mirror_installed} className={`${ADMIN_BUTTON.primary} min-h-11 px-5`}>
             {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             {syncing ? `Syncing ${FEED_LABELS[syncProgress] || ''}…` : 'Sync everything now'}
           </button>
+          {gatewayReady && !overview.gateway?.feeds_available && (
+            <p className="max-w-xs font-body text-xs leading-relaxed text-amber-200 sm:text-right">
+              This Zapier server is in actions-only mode: lookups and prospect registration work, but bulk feeds do not. Lookups keep the mirror current per member.
+            </p>
+          )}
           {!gatewayReady && <button type="button" onClick={() => onGoTo('setup')} className="font-body text-xs uppercase tracking-wider text-xert-steel underline-offset-4 hover:underline">Open setup</button>}
         </div>
       </div>
@@ -367,7 +372,13 @@ function SetupTab({ overview }) {
         <h3 className="font-display text-xl uppercase text-xert-offwhite">Connection checklist</h3>
         <ul className="mt-2 divide-y divide-white/[0.06]">
           <ReadinessRow ok={Boolean(overview?.mirror_installed)} label="Mirror tables installed" detail={overview?.mirror_installed ? 'fitbox_users, fitbox_subscriptions, fitbox_attendance, fitbox_classes and fitbox_sync_runs exist.' : 'Apply supabase/migrations/20260903000000_fitbox_live_mirror.sql in the Supabase SQL editor.'} />
-          <ReadinessRow ok={Boolean(gateway?.ready)} label="Live gateway (Zapier MCP)" detail={gateway?.ready ? 'Synchronous FitBox lookups, syncs and prospect registration are on.' : `Missing in Vercel: ${(gateway?.missing || ['ZAPIER_MCP_URL']).join(', ')}. In Zapier MCP open your server, choose Connect, pick a non-Claude client, copy the server URL (and API key if shown) into Vercel as ZAPIER_MCP_URL and ZAPIER_MCP_TOKEN, then redeploy.`} />
+          <ReadinessRow ok={Boolean(gateway?.ready)} label="Live gateway (Zapier MCP)" detail={gateway?.ready
+            ? (gateway.mode === 'dynamic'
+              ? 'Dynamic server: lookups, prospect registration and all bulk feeds are on.'
+              : `Actions-only server (${(gateway.tools || []).length} FitBox tools): lookups and prospect registration are on; bulk feeds are not. Connect the dynamic server URL to enable feeds.`)
+            : gateway?.mode === 'unreachable'
+              ? `Zapier rejected the configured server URL (${readable(gateway.error_code || '').toLowerCase() || 'unreachable'}). Regenerate the server URL in Zapier and update ZAPIER_MCP_URL.`
+              : `Missing in Vercel: ${(gateway?.missing || ['ZAPIER_MCP_URL']).join(', ')}. In Zapier MCP open your server, choose Connect, copy the server URL into Vercel as ZAPIER_MCP_URL (and ZAPIER_MCP_TOKEN if a key is shown), then redeploy.`} />
           <ReadinessRow ok={Boolean(hooks?.ready)} label="Push Zaps (catch hooks)" detail={hooks?.ready ? 'Register and Get User catch hooks are configured as the fallback path.' : `Optional once the gateway is live. Missing: ${(hooks?.missing || []).join(', ') || 'none'}.`} />
           <ReadinessRow ok={Boolean(events?.ready)} label="Inbound event Zaps" detail={events?.ready ? 'FitBox → XERT review-only triggers are accepted.' : `Missing: ${(events?.missing || []).join(', ')}.`} />
         </ul>

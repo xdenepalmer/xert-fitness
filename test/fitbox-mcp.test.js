@@ -9,6 +9,7 @@ import {
   fitboxActionArguments,
   fitboxMcpEnvironment,
   fitboxRegisterArguments,
+  gatewayCapabilities,
   matchProfilesToFitboxUsers,
   mcpToolCallRequest,
   normalizeFitboxAttendance,
@@ -162,6 +163,9 @@ test('the gateway API is admin-gated, fail-closed and never logs provider payloa
   assert.match(api, /redirect: 'error'/);
   assert.match(api, /MCP_UNAUTHORIZED/);
   assert.match(api, /'sync_fitbox', 'lookup_fitbox'/);
+  assert.match(api, /async function gatewayTools/);
+  assert.match(api, /FITBOX_FEED_UNAVAILABLE/);
+  assert.match(api, /gym_id: numericGym\(config\.gymId\)/);
   assert.match(api, /wantsOverview[\s\S]*fitboxOverview\(admin\)/);
   // Gateway timeouts on a write cannot prove FitBox did nothing, so retries stay blocked.
   assert.match(api, /code === 'FITBOX_GATEWAY_TIMEOUT' \? 'dispatch_unknown' : 'failed'/);
@@ -183,4 +187,17 @@ test('the gateway API is admin-gated, fail-closed and never logs provider payloa
   assert.match(view, /case \.fitbox:\s+AdminFitboxView\(admin: admin, session: session\)/);
   const yaml = await read('../codemagic.yaml');
   assert.match(yaml, /fitbox_live_mirror/);
+});
+
+test('the gateway tells a dynamic Zapier server from an actions-only one', () => {
+  const dynamic = gatewayCapabilities(['execute_zapier_read_action', 'execute_zapier_write_action', 'inspect_zapier_actions']);
+  assert.equal(dynamic.mode, 'dynamic');
+  assert.equal(dynamic.feeds_available, true);
+  assert.deepEqual(dynamic.actions, { get_user: true, next_session: true, register_user: true });
+  const fixed = gatewayCapabilities(['get_configuration_url', 'list_dynamic_enum_values', 'fitbox_get_user', 'fitbox_get_users_next_session', 'fitbox_register_user', 'fitbox_update_user']);
+  assert.equal(fixed.mode, 'static');
+  assert.equal(fixed.feeds_available, false);
+  assert.deepEqual(fixed.tools, ['fitbox_get_user', 'fitbox_get_users_next_session', 'fitbox_register_user', 'fitbox_update_user']);
+  assert.deepEqual(fixed.actions, { get_user: true, next_session: true, register_user: true });
+  assert.equal(gatewayCapabilities(['get_configuration_url']).mode, 'empty');
 });

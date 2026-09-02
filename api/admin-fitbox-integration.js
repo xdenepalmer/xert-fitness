@@ -17,7 +17,9 @@ import {
 import {
   FITBOX_MCP_ACTIONS,
   FITBOX_MCP_FEEDS,
+  ZAPIER_ENUM_TOOL,
   ZAPIER_INSPECT_TOOL,
+  gatewayCapabilities,
   ZAPIER_READ_TOOL,
   ZAPIER_WRITE_TOOL,
   extractToolPayload,
@@ -531,9 +533,10 @@ async function startGetUserRefresh({ admin, access, leadId }) {
 // in Vercel; the browser and iOS app never see them. Nothing here logs a
 // provider payload, member field or token.
 
-async function callZapierMcp(config, { tool, arguments: toolArguments }, fetchImpl = fetch) {
-  const id = randomUUID();
-  const body = mcpToolCallRequest({ id, tool, arguments: toolArguments });
+let gatewayToolCache = { url: null, at: 0, names: [] };
+const GATEWAY_TOOL_CACHE_MS = 5 * 60_000;
+
+async function mcpPost(config, body, id, fetchImpl = fetch) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MCP_TIMEOUT_MS);
   const headers = {
@@ -551,9 +554,9 @@ async function callZapierMcp(config, { tool, arguments: toolArguments }, fetchIm
       signal: controller.signal,
     });
     const text = await response.text();
-    if (response.status === 401 || response.status === 403) throw new Error('MCP_UNAUTHORIZED');
+    if (response.status === 401 || response.status === 403 || response.status === 404) throw new Error('MCP_UNAUTHORIZED');
     if (!response.ok) throw new Error(`MCP_HTTP_${response.status}`);
-    return extractToolPayload(parseMcpResponseText(text, id));
+    return parseMcpResponseText(text, id);
   } catch (error) {
     if (error?.name === 'AbortError') throw new Error('MCP_TIMEOUT');
     throw error;
@@ -562,38 +565,71 @@ async function callZapierMcp(config, { tool, arguments: toolArguments }, fetchIm
   }
 }
 
-async function fitboxAction(config, { action, tool, kind, params = {} }) {
+async function callZapierMcp(config, { tool, arguments: toolArguments }, fetchImpl = fetch) {
+  const id = randomUUID();
+  const body = mcpToolCallRequest({ id, tool, arguments: toolArguments });
+  return extractToolPayload(await mcpPost(config, body, id, fetchImpl));
+}
+
+/** Which tools the configured server exposes; cached briefly per function instance. */
+async function gatewayTools(config, fetchImpl = fetch) {
+  const now = Date.now();
+  if (gatewayToolCache.url === config.url && now - gatewayToolCache.at < GATEWAY_TOOL_CACHE_MS) return gatewayToolCache.names;
+  const id = randomUUID();
+  const result = await mcpPost(config, { jsonrpc: '2.0', id, method: 'tools/list', params: {} }, id, fetchImpl);
+  const names = (Array.isArray(result?.tools) ? result.tools : []).map(tool => String(tool?.name || '')).filter(Boolean);
+  gatewayToolCache = { url: config.url, at: now, names };
+  return names;
+}
+
+async function gatewayMode(config) {
+  return gatewayCapabilities(await gatewayTools(config));
+}
+
+function numericGym(gymId) {
+  return /^\d+$/.test(String(gymId)) ? Number(gymId) : gymId;
+}
+
+async function fitboxAction(config, { action, tool, kind, params = {}, feed = false }) {
   const args = fitboxActionArguments({ action, tool, params, gymId: config.gymId });
-  try {
-    return await callZapierMcp(config, { tool: kind === 'write' ? ZAPIER_WRITE_TOOL : ZAPIER_READ_TOOL, arguments: args });
-  } catch (error) {
-    // A Zapier server in static mode exposes one tool per FitBox action.
-    if (!/MCP_ERROR: .*(unknown tool|not found|no such tool|invalid tool|tool .* does not exist)/i.test(error.message || '')) throw error;
-    return callZapierMcp(config, { tool, arguments: { instructions: `XERT Command Centre: ${action}`, ...args.params } });
+  const capabilities = await gatewayMode(config);
+  if (capabilities.mode === 'dynamic') {
+    return callZapierMcp(config, { tool: kind === 'write' ? ZAPIER_WRITE_TOOL : ZAPIER_READ_TOOL, arguments: args });
   }
+  // Static servers expose one tool per enabled action and never trigger feeds.
+  if (feed || !capabilities.tools.includes(tool)) throw new Error(feed ? 'FITBOX_FEED_UNAVAILABLE' : 'FITBOX_GATEWAY_TOOL_UNAVAILABLE');
+  return callZapierMcp(config, { tool, arguments: { ...args.params, gym_id: numericGym(config.gymId) } });
 }
 
 async function fitboxClassCatalogue(config) {
-  const payload = await callZapierMcp(config, {
-    tool: ZAPIER_INSPECT_TOOL,
-    arguments: { tool_name: FITBOX_MCP_FEEDS.bookings.tool, enum_property: 'class_id', params: { gym_id: config.gymId } },
-  });
-  const apps = Array.isArray(payload) ? payload : [payload];
-  const values = [];
-  for (const app of apps) {
-    for (const action of Array.isArray(app?.actions) ? app.actions : []) {
-      for (const param of Array.isArray(action?.params) ? action.params : []) {
-        if (param?.key === 'class_id' && Array.isArray(param.dynamic_enum_values)) values.push(...param.dynamic_enum_values);
+  const capabilities = await gatewayMode(config);
+  if (capabilities.mode === 'dynamic') {
+    const payload = await callZapierMcp(config, {
+      tool: ZAPIER_INSPECT_TOOL,
+      arguments: { tool_name: FITBOX_MCP_FEEDS.bookings.tool, enum_property: 'class_id', params: { gym_id: config.gymId } },
+    });
+    const apps = Array.isArray(payload) ? payload : [payload];
+    const values = [];
+    for (const app of apps) {
+      for (const action of Array.isArray(app?.actions) ? app.actions : []) {
+        for (const param of Array.isArray(action?.params) ? action.params : []) {
+          if (param?.key === 'class_id' && Array.isArray(param.dynamic_enum_values)) values.push(...param.dynamic_enum_values);
+        }
       }
     }
+    return normalizeFitboxClasses(values);
   }
-  return normalizeFitboxClasses(values);
+  if (!capabilities.tools.includes(ZAPIER_ENUM_TOOL) && !(await gatewayTools(config)).includes(ZAPIER_ENUM_TOOL)) throw new Error('FITBOX_FEED_UNAVAILABLE');
+  // The class list hangs off a trigger, which static servers do not expose.
+  throw new Error('FITBOX_FEED_UNAVAILABLE');
 }
 
 function gatewayErrorCode(error) {
   const message = String(error?.message || '');
   if (message === 'MCP_TIMEOUT') return 'FITBOX_GATEWAY_TIMEOUT';
   if (message === 'MCP_UNAUTHORIZED') return 'FITBOX_GATEWAY_UNAUTHORIZED';
+  if (message === 'FITBOX_FEED_UNAVAILABLE') return 'FITBOX_FEED_UNAVAILABLE';
+  if (message === 'FITBOX_GATEWAY_TOOL_UNAVAILABLE') return 'FITBOX_GATEWAY_TOOL_UNAVAILABLE';
   if (/^MCP_HTTP_/.test(message)) return 'FITBOX_GATEWAY_HTTP_ERROR';
   if (/^MCP_ERROR/.test(message)) return 'FITBOX_GATEWAY_REJECTED';
   if (/^FITBOX_ACTION_FAILED/.test(message)) {
@@ -684,7 +720,7 @@ async function runFitboxSync({ admin, access, feed }) {
       }
       accepted = classes.length;
     } else {
-      const payload = await fitboxAction(config, { ...FITBOX_MCP_FEEDS[feed], kind: 'read' });
+      const payload = await fitboxAction(config, { ...FITBOX_MCP_FEEDS[feed], kind: 'read', feed: true });
       const normalized = normalizeFitboxFeed(feed, toolResultRows(payload), config.gymId);
       await storeFitboxFeed(admin, feed, normalized.accepted);
       if (feed === 'users' || feed === 'statuses') linked = await linkVerifiedProfiles(admin, access, normalized.accepted, config.gymId);
@@ -893,9 +929,18 @@ async function fitboxOverview(admin) {
   const getUserHooks = fitboxGetUserEnvironment(process.env);
   const events = fitboxEventEnvironment(process.env);
   const installed = await mirrorInstalled(admin);
+  let gatewayState = { ready: gateway.ready, missing: gateway.missing, mode: null, tools: [], feeds_available: false, error_code: null };
+  if (gateway.ready) {
+    try {
+      const capabilities = await gatewayMode(gateway);
+      gatewayState = { ...gatewayState, mode: capabilities.mode, tools: capabilities.tools, feeds_available: capabilities.feeds_available, actions: capabilities.actions };
+    } catch (error) {
+      gatewayState = { ...gatewayState, ready: false, mode: 'unreachable', error_code: gatewayErrorCode(error) };
+    }
+  }
   const base = {
     gym_id: gateway.gymId || events.gymId || null,
-    gateway: { ready: gateway.ready, missing: gateway.missing },
+    gateway: gatewayState,
     hooks: { ready: hooks.ready && getUserHooks.ready, missing: [...new Set([...hooks.missing, ...getUserHooks.missing])] },
     events: { ready: events.ready, missing: events.missing },
     mirror_installed: installed,
@@ -931,6 +976,8 @@ function gatewayFailureResponse(json, error) {
     FITBOX_GATEWAY_UNAUTHORIZED: ['Zapier rejected the gateway credentials. Rotate the MCP server URL or token in Vercel.', 502],
     FITBOX_GATEWAY_HTTP_ERROR: ['Zapier returned an error. Retry shortly; nothing was changed.', 502],
     FITBOX_GATEWAY_REJECTED: ['Zapier rejected the request. Check the FitBox connection in Zapier.', 502],
+    FITBOX_FEED_UNAVAILABLE: ['This Zapier server exposes FitBox actions only. Bulk feeds need the dynamic server; lookups and registration still work.', 409],
+    FITBOX_GATEWAY_TOOL_UNAVAILABLE: ['That FitBox action is not enabled on the Zapier server. Add it under the server\'s tools.', 409],
     FITBOX_GATEWAY_RESPONSE_INVALID: ['Zapier returned an unexpected response. Nothing was changed.', 502],
     FITBOX_MIRROR_NOT_INSTALLED: ['FitBox mirror tables are not installed. Apply the live-mirror migration first.', 503],
     FITBOX_USER_NOT_FOUND: ['FitBox could not find that user.', 404],

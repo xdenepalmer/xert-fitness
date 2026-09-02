@@ -30,6 +30,8 @@ export const ZAPIER_MCP_HOST = 'mcp.zapier.com';
 export const ZAPIER_READ_TOOL = 'execute_zapier_read_action';
 export const ZAPIER_WRITE_TOOL = 'execute_zapier_write_action';
 export const ZAPIER_INSPECT_TOOL = 'inspect_zapier_actions';
+export const ZAPIER_ENUM_TOOL = 'list_dynamic_enum_values';
+
 
 /** Polling feeds: each maps to one FitBox trigger exposed as a read action. */
 export const FITBOX_MCP_FEEDS = Object.freeze({
@@ -48,6 +50,29 @@ export const FITBOX_MCP_ACTIONS = Object.freeze({
   next_session: Object.freeze({ action: 'get_user_next_session', tool: 'fitbox_get_users_next_session', kind: 'read' }),
   register_user: Object.freeze({ action: 'register_user', tool: 'fitbox_register_user', kind: 'write' }),
 });
+
+/**
+ * A Zapier MCP server is either "dynamic" (Claude-style execute tools that can
+ * also run trigger feeds) or "static" (one tool per enabled action, no feeds).
+ */
+export function gatewayCapabilities(toolNames) {
+  const names = new Set((Array.isArray(toolNames) ? toolNames : []).map(name => String(name || '')));
+  const fitboxTools = [...names].filter(name => name.startsWith('fitbox_')).sort();
+  const dynamic = names.has(ZAPIER_READ_TOOL) && names.has(ZAPIER_WRITE_TOOL);
+  const mode = dynamic ? 'dynamic' : fitboxTools.length ? 'static' : 'empty';
+  const has = tool => dynamic || names.has(tool);
+  return Object.freeze({
+    mode,
+    tools: fitboxTools,
+    feeds_available: dynamic,
+    classes_available: dynamic,
+    actions: Object.freeze({
+      get_user: has(FITBOX_MCP_ACTIONS.get_user.tool),
+      next_session: has(FITBOX_MCP_ACTIONS.next_session.tool),
+      register_user: has(FITBOX_MCP_ACTIONS.register_user.tool),
+    }),
+  });
+}
 
 function boundedText(value, maxLength) {
   return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, maxLength);

@@ -111,9 +111,17 @@ struct AdminFitboxView: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.xertPrimary)
-            .disabled(!gatewayReady || !mirrorInstalled || admin.isSyncingFitbox)
+            .disabled(!gatewayReady || !mirrorInstalled || admin.isSyncingFitbox || overview?.gateway.feedsAvailable != true)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())
+
+            if gatewayReady, overview?.gateway.feedsAvailable != true {
+                Text("This Zapier server is in actions-only mode: lookups and prospect registration work, bulk feeds do not.")
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(Color.xertInk)
+            }
 
             if let syncOutcome {
                 Text(syncOutcome)
@@ -131,6 +139,9 @@ struct AdminFitboxView: View {
         guard let overview else { return "Checking the FitBox connection…" }
         if !overview.mirror_installed {
             return "FitBox mirror tables are not installed. Apply the live-mirror migration in Supabase, then sync."
+        }
+        if overview.gateway.mode == "unreachable" {
+            return "Zapier rejected the configured server URL. Regenerate it in Zapier and update Vercel."
         }
         if overview.gateway.ready {
             if let last = overview.last_completed_sync {
