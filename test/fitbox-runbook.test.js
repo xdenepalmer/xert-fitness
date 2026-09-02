@@ -24,7 +24,7 @@ test('FitBox production runbook enumerates the complete connector surface and it
   assert.match(runbook, /\| `Update User` \| XERT to FitBox \| \*\*DISABLED\*\*/);
   assert.match(runbook, /\| `Get User` \| XERT query \/ FitBox result \| \*\*READ-ONLY\*\*/);
   assert.match(runbook, /\| `Get Users Next Session` \| XERT query \/ FitBox result \| \*\*READ-ONLY\*\* \| Used only by the gateway lookup/);
-  assert.equal((runbook.match(/\| \*\*READ-ONLY\*\* \|/g) || []).length, 7);
+  assert.equal((runbook.match(/\| \*\*READ-ONLY\*\* \|/g) || []).length, 8, "seven read-only surfaces plus the gateway next-session lookup");
 });
 
 test('FitBox production runbook fixes exact Zap names and server-only settings without values', async () => {
