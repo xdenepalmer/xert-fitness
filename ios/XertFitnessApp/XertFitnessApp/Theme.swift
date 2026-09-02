@@ -180,8 +180,8 @@ extension View {
             .background(XertScreenBackdrop().ignoresSafeArea())
     }
 
-    /// Brand card: ink surface with the site's hairline steel border and the
-    /// sharp 2pt radius from the web (`--radius: 0.125rem`).
+    /// Brand card: ink surface with a hairline steel border and softly rounded
+    /// corners, matching the redesigned web Command Centre panels.
     func xertCardStyle() -> some View {
         background(
             LinearGradient(
@@ -194,10 +194,6 @@ extension View {
                 endPoint: .bottomTrailing
             )
         )
-            .overlay(
-                RoundedRectangle(cornerRadius: 2)
-                    .stroke(Color.xertSteel.opacity(0.24), lineWidth: 1)
-            )
             .overlay(alignment: .top) {
                 Rectangle()
                     .fill(
@@ -209,6 +205,11 @@ extension View {
                     )
                     .frame(height: 1)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.xertSteel.opacity(0.24), lineWidth: 1)
+            )
     }
 }
 
@@ -292,7 +293,7 @@ struct XertPrimaryButtonStyle: ButtonStyle {
                     endPoint: .bottomTrailing
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(alignment: .top) {
                 Rectangle().fill(Color.white.opacity(0.28)).frame(height: 1)
             }
@@ -321,8 +322,9 @@ struct XertGhostButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(Color.xertSteel.opacity(configuration.isPressed ? 0.12 : 0.035))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.xertSteel.opacity(configuration.isPressed ? 1 : 0.6), lineWidth: 1)
             )
             .opacity(isEnabled ? 1 : 0.42)

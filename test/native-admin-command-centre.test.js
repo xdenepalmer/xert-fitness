@@ -350,12 +350,12 @@ test('native owner dashboard consolidates live priorities into actionable worksp
     assert.match(view, new RegExp(`workspace: \\.${destination}`));
   }
   assert.match(view, /openOwnerRouteWithFeedback\(priority\.route\)/);
-  assert.match(view, /var actionTitle: String \{\s*task == nil \? "Open workspace" : "Open exact task"/);
+  assert.match(view, /var actionTitle: String \{\s*task == nil \? "Open" : "Open this one"/);
   assert.match(view, /Label\(priority\.actionTitle, systemImage: "arrow\.right"\)/);
-  assert.match(view, /All operational queues are clear/);
-  assert.match(view, /case \.idle, \.loading:[\s\S]*Checking operational queues/);
+  assert.match(view, /Nothing needs you right now/);
+  assert.match(view, /case \.idle, \.loading:[\s\S]*Checking what needs you/);
   assert.match(view, /case \.partial\(let unavailableSources\)/);
-  assert.match(view, /case \.ready:[\s\S]*All operational queues are clear/);
+  assert.match(view, /case \.ready:[\s\S]*Nothing needs you right now/);
   assert.match(view, /Button \{\s*openWorkspaceWithFeedback\(\.classDesk\)[\s\S]*Text\("OPEN DESK"\)/);
   assert.match(view, /AdminMetricTile[\s\S]*let action: \(\(\) -> Void\)\?/);
   // adminHeading now delegates to the shared owner design system, so the
@@ -371,13 +371,13 @@ test('native owner priorities open the exact protected task when one workload is
     view.indexOf('private var attendancePriorityRoute: XertOwnerRoute'),
   );
 
-  assert.match(priorities, /title: "Pack sales setup"[\s\S]*task: singlePricingAttentionTask/);
-  assert.match(priorities, /title: "Class booking requests"[\s\S]*task: singleBookingRequestTask \?\? singleBookingRequestClassTask/);
-  assert.match(priorities, /title: "PT enquiries"[\s\S]*task: singlePTRequestTask/);
-  assert.match(priorities, /title: "Waitlisted members"[\s\S]*task: singleWaitlistClassTask/);
-  assert.match(priorities, /title: "Member activation actions"[\s\S]*task: singleActivationTask/);
-  assert.match(priorities, /title: "Retention follow-ups"[\s\S]*task: singleRetentionTask/);
-  assert.match(priorities, /title: "Orders to reconcile"[\s\S]*task: singleRecoverableOrderTask/);
+  assert.match(priorities, /title: "Pricing needs a fix"[\s\S]*task: singlePricingAttentionTask/);
+  assert.match(priorities, /title: "Class requests waiting"[\s\S]*task: singleBookingRequestTask \?\? singleBookingRequestClassTask/);
+  assert.match(priorities, /title: "Personal training enquiries"[\s\S]*task: singlePTRequestTask/);
+  assert.match(priorities, /title: "People on waitlists"[\s\S]*task: singleWaitlistClassTask/);
+  assert.match(priorities, /title: "New members to welcome"[\s\S]*task: singleActivationTask/);
+  assert.match(priorities, /title: "Members to follow up"[\s\S]*task: singleRetentionTask/);
+  assert.match(priorities, /title: "Payments to check"[\s\S]*task: singleRecoverableOrderTask/);
 
   assert.match(priorities, /private var singlePricingAttentionTask:[\s\S]*return \.product\(product\.id\)[\s\S]*return \.product\(draft\.id\)/);
   assert.match(priorities, /private var singleBookingRequestTask:[\s\S]*admin\.bookingRequests\.filter \{ \$0\.status == "requested" \}[\s\S]*let recordID = request\.routeRecordID[\s\S]*return \.bookingRequest\(request\.source, recordID\)/);
@@ -412,7 +412,7 @@ test('native owner overview counts fresh lead work without downloading lead hist
   assert.match(store, /leadActionCounts = try await leadActionCountRequest[\s\S]*successfulSources\.insert\("lead actions"\)/);
   assert.match(store, /let next = try await leadActionCountRequest[\s\S]*generation == operationalRefreshGeneration[\s\S]*leadActionCounts = next/);
   assert.match(store, /"activation actions", "orders", "PT requests", "lead actions"/);
-  assert.match(view, /title: "New lead enquiries"[\s\S]*count: admin\.leadActionCounts\?\.total \?\? 0[\s\S]*workspace: \.leads,[\s\S]*isCritical: \(admin\.leadActionCounts\?\.overdueTotal \?\? 0\) > 0/);
+  assert.match(view, /title: "New enquiries"[\s\S]*count: admin\.leadActionCounts\?\.total \?\? 0[\s\S]*workspace: \.leads,[\s\S]*isCritical: \(admin\.leadActionCounts\?\.overdueTotal \?\? 0\) > 0/);
   assert.match(view, /counts\.memberLeads[\s\S]*counts\.trainerApplicants[\s\S]*counts\.partnerEnquiries/);
   assert.match(view, /counts\.overdueTotal > 0[\s\S]*waiting 24h\+/);
   assert.match(view, /case \.leads:[\s\S]*admin\.leadActionCounts\?\.total/);
@@ -445,11 +445,11 @@ test('native owner overview is freshness-aware and exposes safe one-tap operatin
   assert.match(view, /private var quickTools: some View/);
   for (const label of [
     'Find a member',
-    'Create a class',
+    'Add a class',
     'Publish a notice',
     "Set today's workout",
     'Create a form',
-    'Create a session pack',
+    'Text members',
   ]) {
     assert.match(view, new RegExp(label));
   }
@@ -727,7 +727,7 @@ test('native owner overview detects today setup defects and opens the exact clas
   assert.match(readiness, /var affectedClassCount: Int/);
   assert.match(readiness, /var singleAffectedClassID: UUID\?/);
 
-  assert.match(overview, /title: "Class setup gaps"/);
+  assert.match(overview, /title: "Classes missing a coach or area"/);
   assert.match(overview, /task: dailyClassReadiness\.singleAffectedClassID\.map \{ \.classSetup\(\$0\) \}/);
   assert.ok(overview.includes('dailyClassReadiness.issues.contains(where: \\.isCritical)'));
   assert.match(overview, /classCapacitySummary\(item\)/);

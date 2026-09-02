@@ -66,7 +66,7 @@ struct AdminCommandCentreView: View {
     @State private var createFormIntentID: UUID?
     @State private var pendingCreateFormNavigation = false
     @State private var foregroundPresentationRefreshTask: Task<Void, Never>?
-    @State private var showingAllWorkspaces = false
+    @State private var expandedHub: XertOwnerWorkspaceSection?
     @State private var showingBusinessPulse = false
     @State private var pinnedWorkspaces: [XertOwnerWorkspace] = []
     @State private var presentedOwnerTask: XertOwnerTask?
@@ -541,7 +541,7 @@ struct AdminCommandCentreView: View {
         pendingLauncherAction = nil
         createFormIntentID = nil
         pendingCreateFormNavigation = false
-        showingAllWorkspaces = false
+        expandedHub = nil
         editorExitCoordinator.clearAll()
         platformDraftSnapshot = nil
         pendingOwnerExitRequest = nil
@@ -1085,11 +1085,25 @@ struct AdminCommandCentreView: View {
                 .font(.caption.weight(.bold))
                 .tracking(1.4)
                 .foregroundStyle(Color.xertSteel)
-            Text("Today at XERT")
+            Text(ownerGreeting)
                 .xertDisplay(30)
                 .foregroundStyle(Color.xertOffWhite)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// "Good morning, Byron" rather than a dashboard label. The first name
+    /// comes from the signed-in profile; without one the greeting stands alone.
+    private var ownerGreeting: String {
+        let hour = Calendar.current.component(.hour, from: Date.now)
+        let greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
+        let firstName = store.profile?.full_name?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .first
+            .map(String.init)
+        guard let firstName, !firstName.isEmpty else { return greeting }
+        return "\(greeting), \(firstName)"
     }
 
     private var stripeLaunchState: XertStripeLaunchRunway {
@@ -1670,7 +1684,7 @@ struct AdminCommandCentreView: View {
 
     private var quickTools: some View {
         VStack(alignment: .leading, spacing: 12) {
-            adminHeading("Quick tools")
+            adminHeading("Quick actions")
             LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
                 AdminQuickToolButton(
                     title: "Find a member",
@@ -1681,7 +1695,7 @@ struct AdminCommandCentreView: View {
                     showingWorkspaceSwitcher = true
                 }
                 AdminQuickToolButton(
-                    title: "Create a class",
+                    title: "Add a class",
                     detail: quickToolDetail(source: "full timetable", ready: "Add to the timetable"),
                     icon: "calendar.badge.plus",
                     isEnabled: quickMutationIsAvailable(source: "full timetable")
@@ -1690,7 +1704,7 @@ struct AdminCommandCentreView: View {
                 }
                 AdminQuickToolButton(
                     title: "Publish a notice",
-                    detail: quickToolDetail(source: "member notices", ready: "Reach web and iOS members"),
+                    detail: quickToolDetail(source: "member notices", ready: "Show it in the member app"),
                     icon: "bell.badge.fill",
                     isEnabled: quickMutationIsAvailable(source: "member notices")
                 ) {
@@ -1711,12 +1725,11 @@ struct AdminCommandCentreView: View {
                     requestCreateForm()
                 }
                 AdminQuickToolButton(
-                    title: "Create a session pack",
-                    detail: quickToolDetail(source: "session packs", ready: "Start as a private draft"),
-                    icon: "ticket.fill",
-                    isEnabled: quickMutationIsAvailable(source: "session packs")
+                    title: "Text members",
+                    detail: "SMS any group with a mobile",
+                    icon: "message.badge"
                 ) {
-                    presentQuickAction(.newSessionPack)
+                    openWorkspaceWithFeedback(.sms)
                 }
             }
         }
@@ -1738,7 +1751,7 @@ struct AdminCommandCentreView: View {
 
     private var attentionGrid: some View {
         VStack(alignment: .leading, spacing: 12) {
-            adminHeading("Live workload")
+            adminHeading("At a glance")
             LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
                 AdminMetricTile(
                     title: "Class requests",
@@ -1781,12 +1794,12 @@ struct AdminCommandCentreView: View {
         return VStack(alignment: .leading, spacing: 12) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
-                    adminHeading("Operational priority queue")
+                    adminHeading("Needs you")
                     Spacer(minLength: 8)
                     operationalPulseControl
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    adminHeading("Operational priority queue")
+                    adminHeading("Needs you")
                     operationalPulseControl
                 }
             }
@@ -1829,14 +1842,11 @@ struct AdminCommandCentreView: View {
                     }
                 }
                 .foregroundStyle(operationalFreshnessColour(freshness))
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
                 .frame(minHeight: 44)
-                .background(operationalFreshnessColour(freshness).opacity(0.1))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 2)
-                        .stroke(operationalFreshnessColour(freshness).opacity(0.36), lineWidth: 1)
-                }
-                .contentShape(Rectangle())
+                .background(Color.white.opacity(0.04))
+                .clipShape(Capsule())
+                .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .disabled(admin.isLoading || admin.isRefreshingOperations)
@@ -2065,7 +2075,7 @@ struct AdminCommandCentreView: View {
         case .idle, .loading:
             HStack(spacing: 12) {
                 ProgressView().tint(Color.xertSteel)
-                Text("Checking operational queues…")
+                Text("Checking what needs you…")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.xertPale.opacity(0.82))
             }
@@ -2073,20 +2083,20 @@ struct AdminCommandCentreView: View {
             .padding(XertSpace.lg)
             .xertCardStyle()
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Checking operational queues")
+            .accessibilityLabel("Checking what needs you")
         case .partial(let unavailableSources):
             AdminOperationalDataWarning(unavailableSources: unavailableSources)
             if priorities.isEmpty {
                 AdminEmptyState(
                     icon: "exclamationmark.triangle.fill",
-                    text: "Available queues have no open items. Some operational data could not be checked."
+                    text: "Nothing waiting in the parts we could check. Some data could not be loaded."
                 )
             } else {
                 priorityRows(priorities)
             }
         case .ready:
             if priorities.isEmpty {
-                AdminEmptyState(icon: "checkmark.seal.fill", text: "All operational queues are clear.")
+                AdminEmptyState(icon: "checkmark.seal.fill", text: "Nothing needs you right now.")
             } else {
                 priorityRows(priorities)
             }
@@ -2105,15 +2115,15 @@ struct AdminCommandCentreView: View {
     private var operationalPriorities: [AdminPriorityAction] {
         [
             AdminPriorityAction(
-                title: "Release health issues",
-                detail: "Review schema, Stripe and push readiness",
+                title: "System status needs attention",
+                detail: "Something is not connected properly",
                 icon: "cross.case.fill",
                 count: admin.healthIssues,
                 workspace: .health,
                 isCritical: true
             ),
             AdminPriorityAction(
-                title: "Pack sales setup",
+                title: "Pricing needs a fix",
                 detail: admin.products.isEmpty
                     ? "Create the first private session-pack draft"
                     : "Fix active packs before members reach checkout",
@@ -2124,15 +2134,15 @@ struct AdminCommandCentreView: View {
                 isCritical: admin.settings?.payments_enabled == true
             ),
             AdminPriorityAction(
-                title: "Class booking requests",
-                detail: "Confirm or decline member places",
+                title: "Class requests waiting",
+                detail: "Say yes or no to people asking for a spot",
                 icon: "person.crop.circle.badge.questionmark",
                 count: admin.requestedPlaces,
                 workspace: .bookingRequests,
                 task: singleBookingRequestTask ?? singleBookingRequestClassTask
             ),
             AdminPriorityAction(
-                title: "Class setup gaps",
+                title: "Classes missing a coach or area",
                 detail: dailyClassSetupPriorityDetail,
                 icon: "calendar.badge.exclamationmark",
                 count: dailyClassReadiness.affectedClassCount,
@@ -2141,39 +2151,39 @@ struct AdminCommandCentreView: View {
                 isCritical: dailyClassReadiness.issues.contains(where: \.isCritical)
             ),
             AdminPriorityAction(
-                title: "PT enquiries",
-                detail: "Respond to coaching requests",
+                title: "Personal training enquiries",
+                detail: "People asking for one-on-one sessions",
                 icon: "figure.strengthtraining.traditional",
                 count: admin.pendingPTRequests,
                 workspace: .ptRequests,
                 task: singlePTRequestTask
             ),
             AdminPriorityAction(
-                title: "Attendance due",
-                detail: "Complete outstanding class roll calls",
+                title: "Roll calls to finish",
+                detail: "Mark who turned up",
                 icon: "checklist",
                 count: admin.attendanceDue,
                 workspace: .classDesk,
                 task: singleAttendanceTask
             ),
             AdminPriorityAction(
-                title: "Waitlisted members",
-                detail: "Review queues and available places",
+                title: "People on waitlists",
+                detail: "Free spots you could offer them",
                 icon: "person.2.badge.clock",
                 count: admin.waitingMembers,
                 workspace: .classDesk,
                 task: singleWaitlistClassTask
             ),
             AdminPriorityAction(
-                title: "Member activation actions",
-                detail: "Complete onboarding and first-session outreach",
+                title: "New members to welcome",
+                detail: "Finish sign-up and book their first class",
                 icon: "person.crop.circle.badge.exclamationmark",
                 count: admin.activationQueue.count,
                 workspace: .retention,
                 task: singleActivationTask
             ),
             AdminPriorityAction(
-                title: "New lead enquiries",
+                title: "New enquiries",
                 detail: leadActionPriorityDetail,
                 icon: "person.2.badge.plus",
                 count: admin.leadActionCounts?.total ?? 0,
@@ -2181,16 +2191,16 @@ struct AdminCommandCentreView: View {
                 isCritical: (admin.leadActionCounts?.overdueTotal ?? 0) > 0
             ),
             AdminPriorityAction(
-                title: "Retention follow-ups",
-                detail: "Contact members who need support",
+                title: "Members to follow up",
+                detail: "They have gone quiet, give them a call",
                 icon: "phone.arrow.up.right",
                 count: admin.followUps.count,
                 workspace: .retention,
                 task: singleRetentionTask
             ),
             AdminPriorityAction(
-                title: "Orders to reconcile",
-                detail: "Recover unresolved paid checkouts",
+                title: "Payments to check",
+                detail: "Paid but not matched to an order yet",
                 icon: "arrow.triangle.2.circlepath.circle",
                 count: admin.orders.lazy.filter(\.isRecoverable).count,
                 workspace: .orders,
@@ -2321,7 +2331,7 @@ struct AdminCommandCentreView: View {
             } label: {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        adminHeading("Business pulse")
+                        adminHeading("Money")
                         Text(showingBusinessPulse
                              ? "Hide revenue, members and orders"
                              : "Revenue, members and orders")
@@ -2337,7 +2347,7 @@ struct AdminCommandCentreView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(showingBusinessPulse ? "Hide business pulse" : "Show business pulse")
+            .accessibilityLabel(showingBusinessPulse ? "Hide money" : "Show money")
 
             if showingBusinessPulse {
                 LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
@@ -2559,12 +2569,7 @@ struct AdminCommandCentreView: View {
     }
 
     private var nextClassHeading: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            adminHeading("Run next")
-            Text("The highest-priority class action right now")
-                .font(.caption)
-                .foregroundStyle(Color.xertPale.opacity(0.6))
-        }
+        adminHeading("Next class")
     }
 
     private func nextClassPhaseLabel(_ focus: AdminClassOperationalFocus) -> some View {
@@ -2780,41 +2785,27 @@ struct AdminCommandCentreView: View {
         return values.isEmpty ? "Coach and training area not assigned" : values.joined(separator: " · ")
     }
 
+    /// The four hubs, always visible. Tapping a hub card lists its screens
+    /// right underneath; tapping again folds them away.
     private var managementDirectory: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button {
-                XertHaptics.play(.selection)
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
-                    showingAllWorkspaces.toggle()
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        adminHeading("Manage XERT")
-                        Text(showingAllWorkspaces ? "Hide the full owner directory" : "Open all \(XertOwnerWorkspace.allCases.count - 1) management workspaces")
-                            .font(.caption)
-                            .foregroundStyle(Color.xertPale.opacity(0.6))
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: showingAllWorkspaces ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(Color.xertSteel)
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showingAllWorkspaces ? "Hide all management workspaces" : "Show all management workspaces")
-
-            if showingAllWorkspaces {
+            adminHeading("Go to")
+            LazyVGrid(columns: dashboardMetricColumns, spacing: 10) {
                 ForEach(XertOwnerWorkspaceSection.allCases) { section in
-                    VStack(alignment: .leading, spacing: 2) {
-                        adminHeading(section.rawValue)
-                        Text(section.detail)
-                            .font(.caption)
-                            .foregroundStyle(Color.xertSteel.opacity(0.7))
+                    AdminHubCard(
+                        section: section,
+                        badge: hubBadge(section),
+                        isExpanded: expandedHub == section
+                    ) {
+                        XertHaptics.play(.selection)
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                            expandedHub = expandedHub == section ? nil : section
+                        }
                     }
-                    .padding(.top, section == .classes ? 0 : 8)
+                }
+            }
+            if let section = expandedHub {
+                VStack(alignment: .leading, spacing: 10) {
                     ForEach(XertOwnerWorkspace.workspaces(in: section)) { workspace in
                         AdminDestinationRow(
                             title: workspace.title,
@@ -2826,6 +2817,21 @@ struct AdminCommandCentreView: View {
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
+        }
+    }
+
+    /// Open items per hub, so the owner can see where the work is before
+    /// tapping in. Mirrors the badge the web Command Centre shows.
+    private func hubBadge(_ section: XertOwnerWorkspaceSection) -> Int {
+        switch section {
+        case .classes:
+            return admin.requestedPlaces + admin.attendanceDue + admin.waitingMembers + admin.pendingPTRequests
+        case .people:
+            return (admin.leadActionCounts?.total ?? 0) + admin.followUps.count + admin.activationQueue.count
+        case .communications, .website:
+            return 0
+        case .business:
+            return admin.healthIssues + admin.orders.lazy.filter(\.isRecoverable).count
         }
     }
 
@@ -17056,6 +17062,66 @@ private struct AdminOwnerFreshnessBadge: View {
     }
 }
 
+private struct AdminHubCard: View {
+    let section: XertOwnerWorkspaceSection
+    let badge: Int
+    let isExpanded: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(Color.xertSteel.opacity(isExpanded ? 0.28 : 0.14))
+                        Image(systemName: section.icon)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(Color.xertSteel)
+                    }
+                    .frame(width: 44, height: 44)
+                    Spacer(minLength: 4)
+                    if badge > 0 {
+                        Text(badge > 99 ? "99+" : "\(badge)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.xertNavy)
+                            .padding(.horizontal, 7)
+                            .frame(minHeight: 20)
+                            .background(Color.xertSteel)
+                            .clipShape(Capsule())
+                    }
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.xertSteel.opacity(0.7))
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(section.rawValue)
+                        .font(.headline)
+                        .foregroundStyle(Color.xertOffWhite)
+                    Text(section.detail)
+                        .font(.caption)
+                        .foregroundStyle(Color.xertPale.opacity(0.62))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+            .padding(XertSpace.lg)
+            .xertCardStyle()
+            .overlay {
+                if isExpanded {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.xertSteel.opacity(0.5), lineWidth: 1)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(section.rawValue). \(section.detail)\(badge > 0 ? ". \(badge) open" : "")")
+        .accessibilityHint(isExpanded ? "Hides this hub's screens" : "Shows this hub's screens")
+        .accessibilityAddTraits(isExpanded ? .isSelected : [])
+    }
+}
+
 private struct AdminQuickToolButton: View {
     let title: String
     let detail: String
@@ -17116,7 +17182,7 @@ private struct AdminPriorityAction: Identifiable {
     }
 
     var actionTitle: String {
-        task == nil ? "Open workspace" : "Open exact task"
+        task == nil ? "Open" : "Open this one"
     }
 
     var id: String { "\(route.restorationValue):\(title)" }

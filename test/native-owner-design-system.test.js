@@ -103,7 +103,7 @@ test('the command centre home leads with the shift, not the dashboard', async ()
   // Both closing sections stay collapsed so navigation is reachable without
   // scrolling through review material.
   assert.match(view, /@State private var showingBusinessPulse = false/);
-  assert.match(view, /@State private var showingAllWorkspaces = false/);
+  assert.match(view, /@State private var expandedHub: XertOwnerWorkspaceSection?/);
   assert.match(view, /if showingBusinessPulse \{[\s\S]{0,200}LazyVGrid/);
 });
 
