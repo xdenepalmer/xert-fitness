@@ -198,6 +198,12 @@ test('the gateway tells a dynamic Zapier server from an actions-only one', () =>
   assert.equal(fixed.mode, 'static');
   assert.equal(fixed.feeds_available, false);
   assert.deepEqual(fixed.tools, ['fitbox_get_user', 'fitbox_get_users_next_session', 'fitbox_register_user', 'fitbox_update_user']);
+  const withFeeds = gatewayCapabilities(['list_dynamic_enum_values', 'fitbox_get_user', 'fitbox_user_profile_changed', 'fitbox_class_session_booked']);
+  assert.equal(withFeeds.mode, 'static');
+  assert.equal(withFeeds.feeds_available, true);
+  assert.equal(withFeeds.feeds.users, true);
+  assert.equal(withFeeds.feeds.subscriptions, false);
+  assert.equal(withFeeds.classes_available, true);
   assert.deepEqual(fixed.actions, { get_user: true, next_session: true, register_user: true });
   assert.equal(gatewayCapabilities(['get_configuration_url']).mode, 'empty');
 });

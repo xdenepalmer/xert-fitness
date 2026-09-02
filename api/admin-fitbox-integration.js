@@ -596,8 +596,9 @@ async function fitboxAction(config, { action, tool, kind, params = {}, feed = fa
   if (capabilities.mode === 'dynamic') {
     return callZapierMcp(config, { tool: kind === 'write' ? ZAPIER_WRITE_TOOL : ZAPIER_READ_TOOL, arguments: args });
   }
-  // Static servers expose one tool per enabled action and never trigger feeds.
-  if (feed || !capabilities.tools.includes(tool)) throw new Error(feed ? 'FITBOX_FEED_UNAVAILABLE' : 'FITBOX_GATEWAY_TOOL_UNAVAILABLE');
+  // Static servers expose one tool per enabled action; a trigger feed is only
+  // there when Zapier let the owner enable it on that server.
+  if (!capabilities.tools.includes(tool)) throw new Error(feed ? 'FITBOX_FEED_UNAVAILABLE' : 'FITBOX_GATEWAY_TOOL_UNAVAILABLE');
   return callZapierMcp(config, { tool, arguments: { ...args.params, gym_id: numericGym(config.gymId) } });
 }
 
@@ -619,9 +620,14 @@ async function fitboxClassCatalogue(config) {
     }
     return normalizeFitboxClasses(values);
   }
-  if (!capabilities.tools.includes(ZAPIER_ENUM_TOOL) && !(await gatewayTools(config)).includes(ZAPIER_ENUM_TOOL)) throw new Error('FITBOX_FEED_UNAVAILABLE');
-  // The class list hangs off a trigger, which static servers do not expose.
-  throw new Error('FITBOX_FEED_UNAVAILABLE');
+  // On a static server the class list hangs off the booking trigger tool.
+  const names = await gatewayTools(config);
+  if (!names.includes(ZAPIER_ENUM_TOOL) || !capabilities.tools.includes(FITBOX_MCP_FEEDS.bookings.tool)) throw new Error('FITBOX_FEED_UNAVAILABLE');
+  const payload = await callZapierMcp(config, {
+    tool: ZAPIER_ENUM_TOOL,
+    arguments: { tool_name: FITBOX_MCP_FEEDS.bookings.tool, property_name: 'class_id', tool_arguments: { gym_id: numericGym(config.gymId) } },
+  });
+  return normalizeFitboxClasses(Array.isArray(payload?.values) ? payload.values : []);
 }
 
 function gatewayErrorCode(error) {

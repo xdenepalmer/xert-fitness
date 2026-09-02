@@ -61,11 +61,14 @@ export function gatewayCapabilities(toolNames) {
   const dynamic = names.has(ZAPIER_READ_TOOL) && names.has(ZAPIER_WRITE_TOOL);
   const mode = dynamic ? 'dynamic' : fitboxTools.length ? 'static' : 'empty';
   const has = tool => dynamic || names.has(tool);
+  const feedTools = Object.values(FITBOX_MCP_FEEDS).map(feed => feed.tool);
+  const feedsAvailable = dynamic || feedTools.some(tool => names.has(tool));
   return Object.freeze({
     mode,
     tools: fitboxTools,
-    feeds_available: dynamic,
-    classes_available: dynamic,
+    feeds_available: feedsAvailable,
+    feeds: Object.freeze(Object.fromEntries(Object.entries(FITBOX_MCP_FEEDS).map(([key, feed]) => [key, has(feed.tool)]))),
+    classes_available: dynamic || (names.has(ZAPIER_ENUM_TOOL) && names.has(FITBOX_MCP_FEEDS.bookings.tool)),
     actions: Object.freeze({
       get_user: has(FITBOX_MCP_ACTIONS.get_user.tool),
       next_session: has(FITBOX_MCP_ACTIONS.next_session.tool),
