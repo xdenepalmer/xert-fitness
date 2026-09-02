@@ -43,8 +43,8 @@ guesswork:
 
 | Zap name | Connector surface | XERT `event_type` | Required mode |
 | --- | --- | --- | --- |
-| `XERT → FitBox — Register Approved Prospect` | `Register User` | `xert_fitbox_register_prospect` | On after launch verification |
-| `XERT → FitBox — Get User — Read Only` | `Get User` | `xert_fitbox_get_user` | On after linked-user callback verification |
+| `XERT → FitBox — Register Approved Prospect` | `Register User` | `xert_fitbox_register_prospect` | On; explicit admin action only |
+| `XERT → FitBox — Get User — Read Only` | `Get User` | `xert_fitbox_get_user` | On; linked user and read-only fields only |
 | `FitBox → XERT — Class Session Booked (Review Only)` | `Class Session Booked` | `class_session_booked` | On, capture only |
 | `FitBox → XERT — Class Session Cancelled (Review Only)` | `Class Session Cancelled` | `class_session_cancelled` | On, capture only |
 | `FitBox → XERT — User First Session Booked (Review Only)` | `User First Session Booked` | `user_first_session_booked` | On, capture only |
@@ -64,7 +64,8 @@ its name does not authorize activation.
 replacement for checking the named Zap and Operations Health at the time of an
 incident.
 
-The following Zaps are published, on, and have passed a safe XERT receipt test:
+All eight supported Zaps are published and on. The following inbound Zaps have
+passed a safe XERT receipt test:
 
 - `FitBox → XERT — Class Session Booked (Review Only)`
 - `FitBox → XERT — Class Session Cancelled (Review Only)`
@@ -78,11 +79,12 @@ to the allowlisted event envelope. No XERT booking, member profile, membership,
 credit, payment, Stripe or attendance record was changed.
 
 `XERT → FitBox — Register Approved Prospect` and `XERT → FitBox — Get User —
-Read Only` remain deliberately unpublished until the owner gives an
-action-time privacy confirmation for the exact contact fields moving between
-XERT, Zapier and FitBox. They have already been structurally verified against
-the callback contract. This record must be updated only after each outbound
-flow has an approved synthetic end-to-end test and is published.
+Read Only` were published on 2 September 2026 after owner confirmation. Their
+approved synthetic callback tests validate the FitBox-to-XERT result contract.
+A fresh post-publication synthetic end-to-end run remains required before
+declaring final launch acceptance; it must use the approved synthetic record,
+not a real member. Register sends only the approved prospect contact fields;
+Get User refreshes only the explicitly allowed read-only profile fields.
 
 ## Server configuration
 
