@@ -221,8 +221,7 @@ private struct NativeInterestFormView: View {
             }
             XertScrollEndSpacer()
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.xertNavy)
+        .xertListBackground()
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)

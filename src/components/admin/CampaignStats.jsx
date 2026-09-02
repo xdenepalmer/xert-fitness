@@ -5,6 +5,7 @@ import { getCampaignAttributionRows } from '@/lib/adminData';
 import { campaignCsvRows, summarizeCampaignAttribution } from '@/lib/campaignAnalytics';
 import { downloadCsv } from '@/lib/csv';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const RANGE_OPTIONS = [
   { value: '30', label: 'Last 30 days' },
@@ -82,14 +83,14 @@ export default function CampaignStats() {
     ]
   );
 
-  if (!hasLoaded && loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
-  if (!hasLoaded && loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
+  if (!hasLoaded && loading) return <div className={ADMIN_PAGE}><div className="h-40 bg-xert-ink animate-pulse" /></div>;
+  if (!hasLoaded && loadError) return <div className={ADMIN_PAGE}><AdminLoadError message={loadError} onRetry={load} /></div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={`${ADMIN_PAGE} space-y-6`}>
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-lg text-xert-offwhite uppercase">Campaign Attribution</h2>
+          <h2 className={ADMIN_TEXT.pageTitle}>Campaign Attribution</h2>
           <p className="font-body text-xs text-xert-concrete/40 mt-1">
             Complete member-interest attribution in Australia/Brisbane time
             {updatedAt ? ` · refreshed ${updatedAt.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}` : ''}

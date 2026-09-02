@@ -13,6 +13,7 @@ import {
 } from '@/lib/smsCampaigns';
 import { sendAdminSms } from '@/lib/smsSend';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import { ADMIN_INPUT, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const AUDIENCES = [
   { key: 'members', label: 'All members', detail: 'Every signed-up member account', icon: Users },
@@ -21,7 +22,7 @@ const AUDIENCES = [
   { key: 'pt', label: 'PT requests', detail: 'Private training enquiries', icon: Dumbbell },
 ];
 
-const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-base text-xert-offwhite focus:outline-none focus:border-xert-red';
+const inputCls = ADMIN_INPUT;
 
 function formatSessionLabel(session) {
   const when = session.start_time
@@ -136,9 +137,9 @@ export default function SmsManager() {
   const skipped = pool.missingPhone + pool.invalidPhone;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={`${ADMIN_PAGE} space-y-6`}>
       <div>
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Text Members</h2>
+        <h2 className={ADMIN_TEXT.pageTitle}>Text Members</h2>
         <p className="mt-1 font-body text-sm text-xert-concrete/50">
           Send an SMS through Twilio to any group with a mobile number on file. Untick anyone who should not receive it.
         </p>
@@ -150,7 +151,7 @@ export default function SmsManager() {
           const active = audience === option.key;
           return (
             <button key={option.key} type="button" onClick={() => setAudience(option.key)} aria-pressed={active}
-              className={`flex min-h-11 flex-col items-start gap-1 border p-3 text-left transition-colors ${active ? 'border-xert-steel bg-xert-steel/12' : 'border-xert-steel/20 hover:border-xert-steel/50'}`}>
+              className={`flex min-h-11 flex-col items-start gap-1 border p-3 text-left transition-colors ${active ? 'border-xert-steel bg-xert-steel/10' : 'border-xert-steel/20 hover:border-xert-steel/50'}`}>
               <span className="flex items-center gap-2 font-display text-sm uppercase text-xert-offwhite">
                 <Icon className="h-4 w-4 text-xert-steel" /> {option.label}
               </span>
@@ -192,7 +193,7 @@ export default function SmsManager() {
             </div>
           </div>
           {loading ? (
-            <p role="status" className="p-6 text-center font-body text-sm text-xert-concrete/50">
+            <p role="status" className={`${ADMIN_PAGE} text-center font-body text-sm text-xert-concrete/50`}>
               <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Loading recipients…
             </p>
           ) : loadError ? (
@@ -204,9 +205,9 @@ export default function SmsManager() {
               </button>
             </div>
           ) : audience === 'class' && !sessionId ? (
-            <p className="p-6 font-body text-sm text-xert-concrete/45">Choose a class to load its sign-ups and roster.</p>
+            <p className={`${ADMIN_PAGE} font-body text-sm text-xert-concrete/45`}>Choose a class to load its sign-ups and roster.</p>
           ) : pool.recipients.length === 0 ? (
-            <p className="p-6 font-body text-sm text-xert-concrete/45">
+            <p className={`${ADMIN_PAGE} font-body text-sm text-xert-concrete/45`}>
               Nobody in this group has a usable Australian mobile number{skipped ? ` (${skipped} without one)` : ''}.
             </p>
           ) : (

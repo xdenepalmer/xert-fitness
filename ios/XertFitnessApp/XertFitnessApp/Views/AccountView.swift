@@ -363,7 +363,7 @@ struct AccountView: View {
                 .foregroundStyle(Color.xertMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(14)
+        .padding(XertSpace.lg)
         .xertCardStyle()
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -413,7 +413,7 @@ struct AccountView: View {
                 .buttonStyle(.xertPrimary)
                 .accessibilityHint("Opens session packs on the Book page")
             }
-            .padding(14)
+            .padding(XertSpace.lg)
             .xertCardStyle()
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -1319,7 +1319,7 @@ struct AccountView: View {
             // instead of letting a row tap activate them.
             .buttonStyle(.borderless)
         }
-        .padding(14)
+        .padding(XertSpace.lg)
         .xertCardStyle()
     }
 

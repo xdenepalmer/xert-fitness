@@ -662,7 +662,7 @@ struct BookingView: View {
 
             sessionAction(for: session, booking: booking, timeConflict: timeConflict)
         }
-        .padding(14)
+        .padding(XertSpace.lg)
         .xertCardStyle()
         .id(ScrollTarget.session(session.id))
         .accessibilityIdentifier("xert-class-session-\(session.id.uuidString.lowercased())")

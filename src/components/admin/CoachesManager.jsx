@@ -6,6 +6,7 @@ import ImageUploader from '@/components/admin/ImageUploader';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { normalizeCoachInput } from '@/lib/coachAdmin';
+import { ADMIN_BUTTON, ADMIN_INPUT, ADMIN_LABEL, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const CATEGORIES = [
   { value: 'coach', label: 'Coach' },
@@ -14,8 +15,8 @@ const CATEGORIES = [
   { value: 'physio', label: 'Physiotherapist' },
 ];
 
-const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
-const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+const inputCls = ADMIN_INPUT;
+const labelCls = ADMIN_LABEL;
 const NOOP = _dirty => {};
 const EMPTY_COACH = {
   name: '', role: '', category: 'coach', bio: '', experience: '',
@@ -93,7 +94,7 @@ function CoachEditor({ coach, onSave, onCancel, onDirtyChange }) {
           </div>
           <button type="button" onClick={requestCancel} disabled={saving} aria-label="Close team member editor" title="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center text-xert-concrete/40 hover:text-xert-offwhite disabled:opacity-40"><X className="w-5 h-5" /></button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className={`${ADMIN_PAGE} space-y-4`}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="coach-name" className={labelCls}>Name *</label>
@@ -142,7 +143,7 @@ function CoachEditor({ coach, onSave, onCancel, onDirtyChange }) {
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
           <button type="button" onClick={requestCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
-          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+          <button type="button" onClick={handleSave} disabled={saving} className={`${ADMIN_BUTTON.primary} flex-1`}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -208,11 +209,11 @@ export default function CoachesManager({ initialAction, onIntentHandled, onDirty
   };
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Coaches &amp; Practitioners</h2>
+        <h2 className={ADMIN_TEXT.pageTitle}>Coaches &amp; Practitioners</h2>
         <button onClick={() => { setEditing(null); setShowEditor(true); }}
-          className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors">
+          className={ADMIN_BUTTON.primary}>
           + Add Person
         </button>
       </div>
@@ -248,7 +249,7 @@ export default function CoachesManager({ initialAction, onIntentHandled, onDirty
                     ? <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">Published</span>
                     : <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/40 px-2 py-0.5 uppercase">Hidden</span>}
                 </div>
-                <h3 className="font-display text-lg text-xert-offwhite uppercase">{c.name}</h3>
+                <h3 className={ADMIN_TEXT.pageTitle}>{c.name}</h3>
                 <p className="font-body text-xs text-xert-concrete/50">{[c.role, c.experience].filter(Boolean).join(' · ')}</p>
               </div>
               <div className="flex gap-2 shrink-0">

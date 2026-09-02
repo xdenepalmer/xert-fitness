@@ -38,7 +38,7 @@ struct MemberReadinessStatusCard: View {
             .disabled(!store.onboardingLoaded && store.memberOnboarding == nil && !isUnavailable)
             .accessibilityHint("Opens your private member details, emergency contact and current XERT documents")
         }
-        .padding(14)
+        .padding(XertSpace.lg)
         .xertCardStyle()
         .accessibilityElement(children: .contain)
     }

@@ -10,6 +10,7 @@ import { activationQueuePresentation, activationSnapshotPresentation } from '@/l
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import { ADMIN_BUTTON, ADMIN_INPUT_BARE, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 function fmtDateTime(iso) {
   if (!iso) return '';
@@ -156,17 +157,17 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/70" onClick={requestClose} />
       <div role="dialog" aria-modal="true" aria-labelledby="member-detail-title" tabIndex={-1}
-        className="relative h-[100dvh] max-h-[100dvh] w-full max-w-lg overflow-y-auto overscroll-contain animate-slide-up sm:animate-none"
-        style={{ backgroundColor: '#0e161e', borderLeft: '1px solid rgba(123,167,188,0.2)' }}>
+        className="relative h-[100dvh] max-h-[100dvh] w-full max-w-lg overflow-y-auto overscroll-contain animate-slide-up sm:animate-none bg-[#0e161e] border-l border-xert-steel/20"
+>
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))]"
-          style={{ backgroundColor: '#0e161e', borderBottom: '1px solid rgba(123,167,188,0.14)' }}>
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))] bg-[#0e161e] border-b border-xert-steel/15"
+>
           <div className="min-w-0">
             <h3 id="member-detail-title" className="font-display text-2xl uppercase leading-none text-xert-offwhite">{member.full_name || '(no name)'}</h3>
-            <p className="mt-1.5 break-words font-body text-xs" style={{ color: 'rgba(209,221,230,0.45)' }}>
+            <p className="mt-1.5 break-words font-body text-xs text-xert-pale/45" >
               {member.email}{member.phone ? ` · ${member.phone}` : ''}
             </p>
-            <p className="font-body text-[11px] mt-0.5" style={{ color: 'rgba(123,167,188,0.5)' }}>
+            <p className="font-body text-[11px] mt-0.5 text-xert-steel/50" >
               Member since {fmtDate(member.joined_at)}{member.role === 'admin' ? ' · Admin' : ''}
             </p>
           </div>
@@ -177,7 +178,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
               <RefreshCw className={`h-4 w-4 ${detailLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
             </button>
             <button type="button" onClick={requestClose} title="Close member detail" aria-label="Close member detail"
-              className="inline-flex min-h-11 min-w-11 items-center justify-center shrink-0" style={{ color: 'rgba(209,221,230,0.5)' }}>
+ className="inline-flex min-h-11 min-w-11 items-center justify-center shrink-0 text-xert-pale/50" >
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -187,7 +188,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
           <div className="p-5"><AdminLoadError message={detailError} onRetry={() => loadDetail()} /></div>
         ) : !detail ? (
           <div className="flex items-center justify-center gap-3 py-20" role="status" aria-live="polite">
-            <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#7BA7BC' }} />
+            <Loader2 className="w-5 h-5 animate-spin text-xert-steel" />
             <span className="font-body text-sm text-xert-concrete/55">Loading {member.full_name || member.email || 'member'} record…</span>
           </div>
         ) : (
@@ -214,17 +215,17 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
             <section>
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
-                  <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.7)' }}>
+                  <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/70" >
                     <BellRing className="w-3.5 h-3.5" /> Private notices
                   </h4>
-                  <p className="font-body text-[11px] leading-relaxed mt-1" style={{ color: 'rgba(209,221,230,0.4)' }}>
+                  <p className="font-body text-[11px] leading-relaxed mt-1 text-xert-pale/40" >
                     Send an account-only message with optional iOS push delivery.
                   </p>
                 </div>
               </div>
 
               {!detail.memberNoticesAvailable ? (
-                <p className="font-body text-xs" style={{ color: '#e0b36a' }}>
+                <p className="font-body text-xs text-amber-300" >
                   Private notices are paused until targeted_member_notices_upgrade.sql is applied.
                 </p>
               ) : (
@@ -283,7 +284,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                       </label>
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <p className="font-body text-[10px] leading-relaxed" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                      <p className="font-body text-[10px] leading-relaxed text-xert-pale/35" >
                         The member sees this privately in XERT. Sending and receipt activity remain in this record.
                       </p>
                       <button type="submit" disabled={!detailMutationsAllowed || noticeSaving || noticeDraft.title.trim().length < 3 || noticeDraft.body.trim().length < 3}
@@ -297,9 +298,9 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
 
                   <div className="mt-4 space-y-2">
                     {detail.notices.length === 0 ? (
-                      <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No private notices yet.</p>
+                      <p className="font-body text-sm text-xert-pale/40" >No private notices yet.</p>
                     ) : detail.notices.map(notice => (
-                      <article key={notice.id} className="p-3" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.12)' }}>
+                      <article key={notice.id} className="p-3 bg-xert-navy/60 border border-xert-steel/10">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="font-display text-sm uppercase text-xert-offwhite break-words">{notice.title}</p>
@@ -323,11 +324,11 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
             {/* Staff notes */}
             <section>
               <div className="flex items-center justify-between gap-3 mb-3">
-                <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+                <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >
                   <MessageSquarePlus className="w-3.5 h-3.5" /> Staff notes
                 </h4>
                 {detail.notes.some(note => note.archived_at) && (
-                  <label className="inline-flex min-h-11 items-center gap-2 font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                  <label className="inline-flex min-h-11 items-center gap-2 font-body text-[10px] uppercase tracking-wider text-xert-pale/55" >
                     <input type="checkbox" checked={showArchivedNotes} onChange={event => setShowArchivedNotes(event.target.checked)} className="accent-xert-steel" />
                     Show archived
                   </label>
@@ -335,7 +336,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
               </div>
 
               {!detail.memberNotesAvailable ? (
-                <p className="font-body text-xs" style={{ color: '#e0b36a' }}>
+                <p className="font-body text-xs text-amber-300" >
                   Staff notes are paused until admin_member_notes_upgrade.sql is applied.
                 </p>
               ) : (
@@ -354,7 +355,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                       minLength={3} maxLength={1000} rows={3} required placeholder="Add operational context for staff"
                       className="w-full resize-y bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite placeholder:text-xert-concrete/30 focus:outline-none focus:border-xert-steel" />
                     <div className="flex items-start justify-between gap-3">
-                      <p className="font-body text-[10px] leading-relaxed" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                      <p className="font-body text-[10px] leading-relaxed text-xert-pale/35" >
                         Use factual operational or coaching context. Avoid unnecessary clinical or sensitive personal information.
                       </p>
                       <button type="submit" disabled={!detailMutationsAllowed || noteSaving || noteBody.trim().length < 3}
@@ -367,13 +368,13 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
 
                   <div className="mt-4 space-y-2">
                     {detail.notes.filter(note => showArchivedNotes || !note.archived_at).length === 0 ? (
-                      <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No staff notes yet.</p>
+                      <p className="font-body text-sm text-xert-pale/40" >No staff notes yet.</p>
                     ) : detail.notes.filter(note => showArchivedNotes || !note.archived_at).map(note => (
-                      <article key={note.id} className="p-3" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.12)', opacity: note.archived_at ? 0.55 : 1 }}>
+                      <article key={note.id} className={`p-3 bg-xert-navy/60 border border-xert-steel/10 ${note.archived_at ? 'opacity-55' : ''}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="font-body text-[10px] uppercase tracking-wider" style={{ color: '#7BA7BC' }}>{String(note.category || 'general').replace('_', '-')}</p>
-                            <p className="font-body text-sm whitespace-pre-wrap break-words mt-1" style={{ color: '#D1DDE6' }}>{note.body}</p>
+                            <p className="font-body text-[10px] uppercase tracking-wider text-xert-steel" >{String(note.category || 'general').replace('_', '-')}</p>
+                            <p className="font-body text-sm whitespace-pre-wrap break-words mt-1 text-xert-pale" >{note.body}</p>
                           </div>
                           <button type="button" disabled={noteSaving || !detailMutationsAllowed} onClick={() => note.archived_at ? void handleNoteArchive(note) : setNoteToArchive(note)}
                             title={note.archived_at ? 'Restore staff note' : 'Archive staff note'} aria-label={note.archived_at ? 'Restore staff note' : 'Archive staff note'}
@@ -381,7 +382,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                             {note.archived_at ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
                           </button>
                         </div>
-                        <p className="font-body text-[10px] mt-2" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                        <p className="font-body text-[10px] mt-2 text-xert-pale/35" >
                           {note.author_name || 'Former admin'} · {fmtDateTime(note.created_at)}{note.archived_at ? ' · Archived' : ''}
                         </p>
                       </article>
@@ -394,17 +395,16 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
             {/* Credits */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+                <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >
                   <Ticket className="w-3.5 h-3.5" /> Credits
                 </h4>
                 <button type="button" disabled={!detail.creditAuditAvailable || !detailMutationsAllowed} onClick={onGrant}
-                  className="min-h-11 px-2.5 py-2 border font-body text-[10px] uppercase tracking-wider transition-colors"
-                  style={{ borderColor: 'rgba(123,167,188,0.3)', color: '#7BA7BC', opacity: detail.creditAuditAvailable && detailMutationsAllowed ? 1 : 0.4 }}>
+                  className={`min-h-11 px-2.5 py-2 border font-body text-[10px] uppercase tracking-wider transition-colors border-xert-steel/30 text-xert-steel ${detail.creditAuditAvailable && detailMutationsAllowed ? '' : 'opacity-40'}`}>
                   + Grant
                 </button>
               </div>
               {detail.credits.length === 0 ? (
-                <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No credit packs yet.</p>
+                <p className="font-body text-sm text-xert-pale/40" >No credit packs yet.</p>
               ) : (
                 <div className="space-y-2">
                   {detail.credits.map(c => {
@@ -412,19 +412,18 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                     const active = c.remaining > 0 && !expired;
                     const grant = detail.grants.find(item => item.credit_batch_id === c.id);
                     return (
-                      <div key={c.id} className="flex items-center gap-3 p-3"
-                        style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.12)', opacity: active ? 1 : 0.55 }}>
-                        <p className="font-display text-xl tabular-nums" style={{ color: active ? '#7BA7BC' : 'rgba(209,221,230,0.4)' }}>
-                          {c.remaining}<span className="text-sm" style={{ color: 'rgba(209,221,230,0.35)' }}>/{c.total}</span>
+                      <div key={c.id} className={`flex items-center gap-3 p-3 bg-xert-navy/60 border border-xert-steel/10 ${active ? '' : 'opacity-55'}`}>
+                        <p className={`font-display text-xl tabular-nums ${active ? 'text-xert-steel' : 'text-xert-pale/40'}`}>
+                          {c.remaining}<span className="text-sm text-xert-pale/35" >/{c.total}</span>
                         </p>
                         <div className="flex-1">
-                          <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.6)' }}>
+                          <p className="font-body text-xs text-xert-pale/60" >
                             {expired ? 'Expired' : c.expires_at ? `Expires ${fmtDate(c.expires_at)}` : 'No expiry'}
                           </p>
-                          <p className="font-body text-[10px]" style={{ color: 'rgba(209,221,230,0.3)' }}>
+                          <p className="font-body text-[10px] text-xert-pale/30" >
                             Added {fmtDate(c.created_at)}{c.order_id ? '' : ' · manual grant'}
                           </p>
-                          {grant && <p className="font-body text-[11px] mt-1" style={{ color: 'rgba(123,167,188,0.72)' }}>Reason: {grant.note}</p>}
+                          {grant && <p className="font-body text-[11px] mt-1 text-xert-steel/70" >Reason: {grant.note}</p>}
                         </div>
                       </div>
                     );
@@ -432,29 +431,29 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                 </div>
               )}
               {!detail.creditAuditAvailable && (
-                <p className="font-body text-xs mt-3" style={{ color: '#e0b36a' }}>Credit audit migration is not installed; new manual grants are paused.</p>
+                <p className="font-body text-xs mt-3 text-amber-300" >Credit audit migration is not installed; new manual grants are paused.</p>
               )}
             </section>
 
             {/* Bookings */}
             <section>
-              <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-3" style={{ color: 'rgba(123,167,188,0.6)' }}>
+              <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-3 text-xert-steel/60" >
                 <CalendarDays className="w-3.5 h-3.5" /> Bookings
               </h4>
               {detail.bookings.length === 0 ? (
-                <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No class bookings yet.</p>
+                <p className="font-body text-sm text-xert-pale/40" >No class bookings yet.</p>
               ) : (
                 <div className="space-y-1.5">
                   {detail.bookings.map(b => {
                     const badge = BOOKING_BADGE[b.status] || BOOKING_BADGE.confirmed;
                     return (
-                      <div key={b.id} className="flex items-center gap-3 py-2 px-3"
-                        style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.1)' }}>
+                      <div key={b.id} className="flex items-center gap-3 py-2 px-3 bg-xert-navy/60 border border-xert-steel/10"
+>
                         <div className="flex-1 min-w-0">
-                          <p className="font-body text-sm truncate" style={{ color: '#D1DDE6' }}>
+                          <p className="font-body text-sm truncate text-xert-pale" >
                             {b.class_sessions?.title || b.class_sessions?.class_type || 'Class'}
                           </p>
-                          <p className="font-body text-[11px]" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                          <p className="font-body text-[11px] text-xert-pale/35" >
                             {fmtDateTime(b.class_sessions?.start_time)}
                           </p>
                         </div>
@@ -470,19 +469,19 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
 
             {/* Purchases */}
             <section>
-              <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-3" style={{ color: 'rgba(123,167,188,0.6)' }}>
+              <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-3 text-xert-steel/60" >
                 <Receipt className="w-3.5 h-3.5" /> Purchases
               </h4>
               {detail.orders.length === 0 ? (
-                <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No purchases yet.</p>
+                <p className="font-body text-sm text-xert-pale/40" >No purchases yet.</p>
               ) : (
                 <div className="space-y-1.5">
                   {detail.orders.map(o => (
-                    <div key={o.id} className="flex items-center gap-3 py-2 px-3"
-                      style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.1)' }}>
-                      <p className="font-body text-sm flex-1 truncate" style={{ color: '#D1DDE6' }}>{o.products?.name || 'Session pack'}</p>
-                      <p className="font-body text-[11px] shrink-0" style={{ color: 'rgba(209,221,230,0.35)' }}>{fmtDate(o.paid_at || o.created_at)}</p>
-                      <p className="font-display text-sm tabular-nums shrink-0" style={{ color: '#7BA7BC' }}>
+                    <div key={o.id} className="flex items-center gap-3 py-2 px-3 bg-xert-navy/60 border border-xert-steel/10"
+>
+                      <p className="font-body text-sm flex-1 truncate text-xert-pale" >{o.products?.name || 'Session pack'}</p>
+                      <p className="font-body text-[11px] shrink-0 text-xert-pale/35" >{fmtDate(o.paid_at || o.created_at)}</p>
+                      <p className="font-display text-sm tabular-nums shrink-0 text-xert-steel" >
                         {formatPackPrice(o.amount_cents, o.currency)}
                       </p>
                     </div>
@@ -526,7 +525,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
   );
 }
 
-const inputCls = 'bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
+const inputCls = ADMIN_INPUT_BARE;
 
 const FOLLOW_UP_LABELS = {
   no_first_booking: 'No first booking',
@@ -735,7 +734,7 @@ function FollowUpQueue({ rows, available, error, loading, onRetry, onView, onLog
           <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
         </div>
       ) : !available ? (
-        <p className="font-body text-xs" style={{ color: '#e0b36a' }}>Follow-ups are paused until admin_member_follow_up_upgrade.sql is applied.</p>
+        <p className="font-body text-xs text-amber-300" >Follow-ups are paused until admin_member_follow_up_upgrade.sql is applied.</p>
       ) : rows.length === 0 ? (
         <p className="font-body text-sm text-xert-concrete/40">No follow-ups due.</p>
       ) : (
@@ -797,11 +796,11 @@ function FollowUpModal({ member, onDone, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
       <form onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="follow-up-log-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
-        <div className="p-6 border-b border-xert-steel/20">
+        <div className={`${ADMIN_PAGE} border-b border-xert-steel/20`}>
           <h3 id="follow-up-log-title" className="font-display text-xl text-xert-offwhite uppercase">Log Follow-up</h3>
           <p className="font-body text-xs text-xert-concrete/50 mt-1">{member.full_name || member.email}</p>
         </div>
-        <div className="p-6 space-y-4">
+        <div className={`${ADMIN_PAGE} space-y-4`}>
           <div>
             <label htmlFor="follow-up-channel" className="block font-body text-xs text-xert-concrete/50 uppercase tracking-wider mb-1">Contact method</label>
             <select id="follow-up-channel" value={channel} onChange={event => setChannel(event.target.value)} disabled={saving} className={`${inputCls} w-full min-h-11`}>
@@ -821,7 +820,7 @@ function FollowUpModal({ member, onDone, onCancel }) {
         </div>
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
           <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase disabled:opacity-50">Cancel</button>
-          <button type="submit" disabled={saving} className="flex-1 min-h-11 bg-xert-steel text-xert-navy font-display text-sm uppercase disabled:opacity-50">
+          <button type="submit" disabled={saving} className={`${ADMIN_BUTTON.primary} flex-1`}>
             {saving ? 'Saving...' : 'Mark Contacted'}
           </button>
         </div>
@@ -860,11 +859,11 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="grant-credits-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-xert-steel/20">
+        <div className={`${ADMIN_PAGE} border-b border-xert-steel/20`}>
           <h3 id="grant-credits-title" className="font-display text-xl text-xert-offwhite uppercase">Grant Credits</h3>
           <p className="font-body text-xs text-xert-concrete/50 mt-1">{member.full_name || member.email}</p>
         </div>
-        <div className="p-6 space-y-4">
+        <div className={`${ADMIN_PAGE} space-y-4`}>
           <div>
             <label htmlFor="grant-credit-count" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class credits</label>
             <input id="grant-credit-count" type="number" min="1" max="100" value={sessions} onChange={e => setSessions(+e.target.value)} className={`${inputCls} w-full`} />
@@ -888,7 +887,7 @@ function GrantCreditsModal({ member, onDone, onCancel }) {
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
           <button type="button" disabled={saving} onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
           <button type="button" onClick={handleGrant} disabled={saving}
-            className="flex-1 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+            className={`${ADMIN_BUTTON.primary} flex-1`}>
             {saving ? 'Granting…' : `Grant ${sessions}`}
           </button>
         </div>
@@ -1088,9 +1087,9 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   };
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Members ({total})</h2>
+        <h2 className={ADMIN_TEXT.pageTitle}>Members ({total})</h2>
         <div className="flex flex-wrap items-center gap-2">
           <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search members" placeholder="Search name, email or phone…"
             className={`${inputCls} w-64`} />

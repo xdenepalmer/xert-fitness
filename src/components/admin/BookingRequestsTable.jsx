@@ -10,6 +10,7 @@ import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { downloadCsv } from '@/lib/csv';
 import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
 import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
+import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
@@ -188,9 +189,9 @@ export default function BookingRequestsTable() {
   };
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Booking Operations</h2>
+        <h2 className={ADMIN_TEXT.pageTitle}>Booking Operations</h2>
         <button type="button" onClick={() => downloadCsv(
           `xert-bookings-${new Date().toISOString().slice(0, 10)}.csv`,
           bookingCsvRows(filteredBookings),
@@ -259,7 +260,7 @@ export default function BookingRequestsTable() {
           <option value="">Move selected to...</option>
           {bulkStatusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
         </select>
-        <button type="button" onClick={() => setBulkConfirmationOpen(true)} disabled={!bulkConfirmation || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
+        <button type="button" onClick={() => setBulkConfirmationOpen(true)} disabled={!bulkConfirmation || bulkSaving} className={ADMIN_BUTTON.primary}>
           {bulkSaving ? 'Updating...' : 'Apply'}
         </button>
       </div>
@@ -384,7 +385,7 @@ export default function BookingRequestsTable() {
               <button type="button" disabled={savingNotes} onClick={() => setSelectedBooking(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
               <button type="button" disabled={savingNotes} onClick={saveNotes}
-                className="flex-1 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">{savingNotes ? 'Saving...' : 'Save'}</button>
+                className={`${ADMIN_BUTTON.primary} flex-1`}>{savingNotes ? 'Saving...' : 'Save'}</button>
             </div>
           </div>
         </div>

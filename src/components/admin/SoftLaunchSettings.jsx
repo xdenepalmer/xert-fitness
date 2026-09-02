@@ -4,6 +4,7 @@ import { activateSessionPackPayments, getCommerceConfigurationHealth, getSoftLau
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { countdownVisibility, launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
+import { ADMIN_PAGE } from '@/components/admin/ui';
 
 /** @param {boolean} _dirty */
 const NOOP = _dirty => {};
@@ -143,8 +144,8 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
     }
   };
 
-  if (loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
-  if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
+  if (loading) return <div className={ADMIN_PAGE}><div className="h-40 bg-xert-ink animate-pulse" /></div>;
+  if (loadError) return <div className={ADMIN_PAGE}><AdminLoadError message={loadError} onRetry={load} /></div>;
 
   // Shows staff what the public site is doing right now, so a passed date is
   // visible here instead of only being discovered by members on the website.
@@ -173,7 +174,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   );
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className={`${ADMIN_PAGE} max-w-2xl`}>
       <h2 className="font-display text-xl text-xert-offwhite uppercase mb-6">Soft Launch Settings</h2>
       <p className="font-body text-xs text-xert-concrete/50 mb-4">Every control below updates a live public-site behavior.</p>
       {dirty && (

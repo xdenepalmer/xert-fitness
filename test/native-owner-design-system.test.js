@@ -5,6 +5,15 @@ import test from 'node:test';
 const app = path => new URL(`../ios/XertFitnessApp/XertFitnessApp/${path}`, import.meta.url);
 const read = path => readFile(app(path), 'utf8');
 
+const MEMBER_VIEWS = [
+  'Views/AccountView.swift',
+  'Views/BookingView.swift',
+  'Views/ExploreView.swift',
+  'Views/HomeView.swift',
+  'Views/MemberOnboardingView.swift',
+  'Views/EventsView.swift',
+];
+
 const OWNER_VIEWS = [
   'Views/AdminCommandCentreView.swift',
   'Views/AdminFormsView.swift',
@@ -96,4 +105,22 @@ test('the command centre home leads with the shift, not the dashboard', async ()
   assert.match(view, /@State private var showingBusinessPulse = false/);
   assert.match(view, /@State private var showingAllWorkspaces = false/);
   assert.match(view, /if showingBusinessPulse \{[\s\S]{0,200}LazyVGrid/);
+});
+
+test('member screens follow the same card and backdrop rules as owner screens', async () => {
+  for (const view of MEMBER_VIEWS) {
+    const source = await read(view);
+    assert.equal(
+      source.split('.background(Color.xertNavy)').length - 1,
+      0,
+      `${view} must use the shared backdrop (xertScreenBackground/xertListBackground), not flat navy`,
+    );
+    const lines = source.split('\n');
+    lines.forEach((line, index) => {
+      if (!lines[index + 1]?.includes('.xertCardStyle()')) return;
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('.padding(')) return;
+      assert.match(trimmed, /XertSpace\./, `${view}:${index + 1} pads a card with a raw value; use the XertSpace scale`);
+    });
+  }
 });

@@ -4,6 +4,7 @@ import { toast } from '@/components/ui/use-toast';
 import { getAvailabilityBlocks, createAvailabilityBlock, updateAvailabilityBlock, deleteAvailabilityBlock, getBlackoutPeriods, createBlackoutPeriod, updateBlackoutPeriod, deleteBlackoutPeriod } from '@/lib/adminData';
 import { availabilityBlockEditorForm, blackoutPeriodEditorForm, normalizeAvailabilityBlock, normalizeBlackoutPeriod } from '@/lib/scheduling';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import { ADMIN_BUTTON, ADMIN_PAGE } from '@/components/admin/ui';
 
 const BLOCK_TYPES = ['PT available', 'private session available', 'group class available', 'admin only', 'open gym placeholder', 'workshop placeholder'];
 const AFFECTS = ['all', 'group_classes', 'pt_only', 'facility_only', 'coach_only'];
@@ -128,7 +129,7 @@ export default function AvailabilityManager() {
   };
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex gap-2">
           {['availability', 'blackouts'].map(t => (
@@ -155,7 +156,7 @@ export default function AvailabilityManager() {
         <div>
           <div className="flex justify-end mb-4">
             <button onClick={() => { setEditingBlock(null); setBlockForm(emptyBlock()); setShowBlockForm(true); }} disabled={removingId !== null}
-              className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+              className={ADMIN_BUTTON.primary}>
               + Add block
             </button>
           </div>
@@ -235,7 +236,7 @@ export default function AvailabilityManager() {
                   <button onClick={() => { setShowBlockForm(false); setEditingBlock(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
                   <button onClick={saveBlock} disabled={saving}
-                    className="flex-1 min-h-11 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+                    className={`${ADMIN_BUTTON.primary} flex-1`}>
                     {saving ? 'Saving...' : editingBlock ? 'Update block' : 'Save block'}
                   </button>
                 </div>
@@ -249,7 +250,7 @@ export default function AvailabilityManager() {
         <div>
           <div className="flex justify-end mb-4">
             <button onClick={() => { setEditingBlackout(null); setBlackoutForm(emptyBlackout()); setShowBlackoutForm(true); }} disabled={removingId !== null}
-              className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+              className={ADMIN_BUTTON.primary}>
               + Add blackout
             </button>
           </div>
@@ -327,7 +328,7 @@ export default function AvailabilityManager() {
                   <button onClick={() => { setShowBlackoutForm(false); setEditingBlackout(null); }} disabled={saving}
                     className="flex-1 min-h-11 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase disabled:opacity-50">Cancel</button>
                   <button onClick={saveBlackout} disabled={saving}
-                    className="flex-1 min-h-11 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+                    className={`${ADMIN_BUTTON.primary} flex-1`}>
                     {saving ? 'Saving...' : editingBlackout ? 'Update blackout' : 'Save blackout'}
                   </button>
                 </div>

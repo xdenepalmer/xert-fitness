@@ -11,6 +11,7 @@ import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summari
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import ClassCalendarBoard from '@/components/admin/ClassCalendarBoard';
 import ClassBankManager from '@/components/admin/ClassBankManager';
+import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
@@ -55,7 +56,7 @@ function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onR
           <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
         </div>
       ) : !available ? (
-        <p className="font-body text-xs" style={{ color: '#e0b36a' }}>The waitlist desk becomes available after waitlist_fifo_promotion_upgrade.sql is applied.</p>
+        <p className="font-body text-xs text-amber-300" >The waitlist desk becomes available after waitlist_fifo_promotion_upgrade.sql is applied.</p>
       ) : rows.length === 0 ? (
         <p className="font-body text-sm text-xert-concrete/40">No upcoming class waitlists.</p>
       ) : (
@@ -79,7 +80,7 @@ function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onR
                       Next: {nextMember} · {credits} credit{credits === 1 ? '' : 's'}
                     </p>
                   </div>
-                  <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1" style={{ color: item.can_promote ? '#101820' : '#D1DDE6', backgroundColor: item.can_promote ? '#7BA7BC' : 'rgba(123,167,188,0.14)' }}>
+                  <span className={`font-body text-[10px] uppercase tracking-wider px-2 py-1 ${item.can_promote ? 'bg-xert-steel text-xert-navy' : 'bg-xert-steel/15 text-xert-pale'}`}>
                     {item.can_promote ? 'Place open' : 'Class full'}
                   </span>
                 </div>
@@ -93,7 +94,7 @@ function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onR
                       {promotingSessionId === item.session_id ? 'Promoting...' : 'Promote next'}
                     </button>
                   )}
-                  {item.can_promote && credits === 0 && <span className="font-body text-xs" style={{ color: '#e0b36a' }}>Next member needs a credit</span>}
+                  {item.can_promote && credits === 0 && <span className="font-body text-xs text-amber-300" >Next member needs a credit</span>}
                 </div>
               </article>
             );
@@ -388,7 +389,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) 
             Cancel
           </button>
           <button type="button" onClick={handleSave} disabled={saving}
-            className="flex-1 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+            className={`${ADMIN_BUTTON.primary} flex-1`}>
             {saving ? 'Saving...' : 'Save class'}
           </button>
         </div>
@@ -439,11 +440,11 @@ function RepeatModal({ session, onDone, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="repeat-class-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
-        <div className="p-6 border-b border-xert-steel/20">
+        <div className={`${ADMIN_PAGE} border-b border-xert-steel/20`}>
           <h3 id="repeat-class-title" className="font-display text-xl text-xert-offwhite uppercase">Repeat Class</h3>
           <p className="font-body text-xs text-xert-concrete/50 mt-1">{session.title}</p>
         </div>
-        <div className="p-6 space-y-4">
+        <div className={`${ADMIN_PAGE} space-y-4`}>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="repeat-interval" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Every ... days</label>
@@ -476,7 +477,7 @@ function RepeatModal({ session, onDone, onCancel }) {
         <div className="flex gap-3 p-6 border-t border-xert-steel/20">
           <button type="button" onClick={onCancel} disabled={saving} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
           <button type="button" onClick={handleRepeat} disabled={saving}
-            className="flex-1 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+            className={`${ADMIN_BUTTON.primary} flex-1`}>
             {saving ? 'Creating…' : `Create ${count} copies`}
           </button>
         </div>
@@ -931,23 +932,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const pendingAttendanceRequests = roster.filter(member => member.status === 'requested');
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex flex-wrap items-center gap-4">
-          <h2 className="font-display text-lg text-xert-offwhite uppercase">Class Calendar</h2>
+          <h2 className={ADMIN_TEXT.pageTitle}>Class Calendar</h2>
           <div className="flex" role="group" aria-label="Calendar view">
             {[
               { key: 'calendar', label: 'Calendar', icon: CalendarDays },
               { key: 'list', label: 'List', icon: List },
             ].map(option => (
               <button key={option.key} onClick={() => setView(option.key)} aria-pressed={view === option.key}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
-                style={{
-                  borderColor: view === option.key ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
-                  backgroundColor: view === option.key ? 'rgba(123,167,188,0.12)' : 'transparent',
-                  color: view === option.key ? '#F1F3F4' : 'rgba(209,221,230,0.5)',
-                  marginLeft: '-1px',
-                }}>
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors -ml-px ${view === option.key ? 'border-xert-steel bg-xert-steel/10 text-xert-offwhite' : 'border-xert-steel/20 text-xert-pale/50'}`}>
                 <option.icon className="w-3.5 h-3.5" aria-hidden="true" />
                 {option.label}
               </button>
@@ -961,13 +956,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                 { key: 'all', label: 'All' },
               ].map(t => (
                 <button key={t.key} onClick={() => setTimeFilter(t.key)}
-                  className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors"
-                  style={{
-                    borderColor: timeFilter === t.key ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
-                    backgroundColor: timeFilter === t.key ? 'rgba(123,167,188,0.12)' : 'transparent',
-                    color: timeFilter === t.key ? '#F1F3F4' : 'rgba(209,221,230,0.5)',
-                    marginLeft: '-1px',
-                  }}>
+                  className={`px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors -ml-px ${timeFilter === t.key ? 'border-xert-steel bg-xert-steel/10 text-xert-offwhite' : 'border-xert-steel/20 text-xert-pale/50'}`}>
                   {t.label}
                 </button>
               ))}
@@ -980,7 +969,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             Class bank
           </button>
           <button onClick={() => { setEditingSession(null); setShowEditor(true); }}
-            className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors">
+            className={ADMIN_BUTTON.primary}>
             + New Class
           </button>
         </div>
@@ -1054,7 +1043,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                       {s.beginner_friendly && <span className="font-body text-xs text-xert-concrete/40 uppercase text-xs">Beginner friendly</span>}
                       {s.booking_mode && <span className="font-body text-xs text-xert-concrete/40 uppercase">{s.booking_mode.replaceAll('_', ' ')}</span>}
                     </div>
-                    <h3 className="font-display text-lg text-xert-offwhite uppercase">{s.title}</h3>
+                    <h3 className={ADMIN_TEXT.pageTitle}>{s.title}</h3>
                     <p className="font-body text-xs text-xert-concrete/50">
                       {s.class_type} · {s.start_time ? new Date(s.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'No time set'}
                       {s.coach_name ? ` · ${s.coach_name}` : ''} · Cap: {s.capacity}

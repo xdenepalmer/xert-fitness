@@ -15,6 +15,7 @@ import { ADMIN_OVERVIEW_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/li
 import { orderOperationsHealthChecks } from '@/lib/adminHealth';
 import { resolveLaunchGate } from '@/lib/launchGate';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import { ADMIN_PAGE } from '@/components/admin/ui';
 
 const STATUS_STYLE = {
   ok: {
@@ -217,30 +218,26 @@ export default function OperationsHealth({ onNavigate }) {
   }, [load]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="relative p-6 overflow-hidden"
-        style={{
-          background: 'linear-gradient(120deg, rgba(50,72,90,0.42) 0%, rgba(16,24,32,0.74) 60%)',
-          border: '1px solid rgba(123,167,188,0.2)',
-        }}>
+    <div className={`${ADMIN_PAGE} space-y-6`}>
+      <div className="relative p-6 overflow-hidden bg-gradient-to-r from-xert-deep/40 to-xert-navy/75 border border-xert-steel/20">
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 flex items-center justify-center" style={{ backgroundColor: 'rgba(123,167,188,0.16)' }}>
-              <ShieldCheck className="w-6 h-6" style={{ color: '#7BA7BC' }} />
+            <div className="w-12 h-12 flex items-center justify-center bg-xert-steel/15">
+              <ShieldCheck className="w-6 h-6 text-xert-steel" />
             </div>
             <div>
-              <p className="font-body text-[11px] uppercase tracking-[0.25em] mb-1" style={{ color: '#7BA7BC' }}>
+              <p className="font-body text-[11px] uppercase tracking-[0.25em] mb-1 text-xert-steel" >
                 Operations Health
               </p>
-              <h2 className="font-display text-3xl uppercase leading-none" style={{ color: '#F1F3F4' }}>
+              <h2 className="font-display text-3xl uppercase leading-none text-xert-offwhite" >
                 Launch readiness at a glance.
               </h2>
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
             <button type="button" onClick={() => void load()} disabled={loading || refreshing}
-              className="inline-flex min-h-11 items-center gap-2 px-4 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors disabled:opacity-50"
-              style={{ borderColor: 'rgba(123,167,188,0.28)', color: '#D1DDE6' }}>
+              className="inline-flex min-h-11 items-center gap-2 px-4 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors disabled:opacity-50 border-xert-steel/30 text-xert-pale"
+>
               {loading || refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               {refreshing ? 'Refreshing' : 'Refresh'}
             </button>
@@ -259,11 +256,11 @@ export default function OperationsHealth({ onNavigate }) {
           { label: 'Attention', value: summary.attention, color: '#e0b36a' },
           { label: 'Errors', value: summary.errors, color: '#f87171' },
         ].map(item => (
-          <div key={item.label} className="p-4" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+          <div key={item.label} className="p-4 bg-xert-navy/60 border border-xert-steel/15" >
             <p className="font-display text-3xl tabular-nums leading-none" style={{ color: item.color }}>
               {loading ? '-' : item.value}
             </p>
-            <p className="font-body text-[10px] uppercase tracking-[0.2em] mt-1" style={{ color: 'rgba(209,221,230,0.45)' }}>
+            <p className="font-body text-[10px] uppercase tracking-[0.2em] mt-1 text-xert-pale/45" >
               {item.label}
             </p>
           </div>
@@ -273,11 +270,7 @@ export default function OperationsHealth({ onNavigate }) {
       {!loading && !loadError && (
         <section
           aria-labelledby="launch-gate-title"
-          className="p-5"
-          style={{
-            backgroundColor: launchGateIsStaged ? 'rgba(123,167,188,0.1)' : launchGateIsReady ? 'rgba(126,201,143,0.1)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.08)' : 'rgba(224,179,106,0.1)',
-            border: `1px solid ${launchGateIsStaged ? 'rgba(123,167,188,0.3)' : launchGateIsReady ? 'rgba(126,201,143,0.3)' : launchGate.state === 'blocked' ? 'rgba(248,113,113,0.3)' : 'rgba(224,179,106,0.3)'}`,
-          }}
+          className={`p-5 border ${launchGateIsStaged ? 'bg-xert-steel/10 border-xert-steel/30' : launchGateIsReady ? 'bg-green-400/10 border-green-400/30' : launchGate.state === 'blocked' ? 'bg-red-400/10 border-red-400/30' : 'bg-amber-300/10 border-amber-300/30'}`}
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -292,11 +285,8 @@ export default function OperationsHealth({ onNavigate }) {
           </div>
           <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-xert-navy/70">
             <div
-              className="h-full rounded-full transition-[width]"
-              style={{
-                width: `${Math.round((launchGate.completed / launchGate.total) * 100)}%`,
-                backgroundColor: launchGateIsStaged ? '#7BA7BC' : launchGateIsReady ? '#7ec98f' : launchGate.state === 'blocked' ? '#f87171' : '#e0b36a',
-              }}
+              className={`h-full rounded-full transition-[width] ${launchGateIsStaged ? 'bg-xert-steel' : launchGateIsReady ? 'bg-green-400' : launchGate.state === 'blocked' ? 'bg-red-400' : 'bg-amber-300'}`}
+              style={{ width: `${Math.round((launchGate.completed / launchGate.total) * 100)}%` }}
             />
           </div>
           {launchGate.next && (
@@ -343,7 +333,7 @@ export default function OperationsHealth({ onNavigate }) {
               <article key={check.key} className="p-5 flex flex-col"
                 style={{ backgroundColor: style.bg, border: `1px solid ${style.border}` }}>
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(16,24,32,0.42)' }}>
+                  <div className="w-10 h-10 flex items-center justify-center shrink-0 bg-xert-navy/40">
                     {check.key === 'supabase'
                       ? <Database className="w-5 h-5" style={{ color: style.color }} />
                       : check.key === 'push-notifications'
@@ -357,14 +347,14 @@ export default function OperationsHealth({ onNavigate }) {
                         {style.label}
                       </span>
                     </div>
-                    <p className="font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.68)' }}>
+                    <p className="font-body text-sm leading-relaxed text-xert-pale/70" >
                       {check.detail}
                     </p>
                   </div>
                 </div>
 
                 {check.action && (
-                  <p className="font-body text-xs leading-relaxed mt-auto" style={{ color: 'rgba(209,221,230,0.52)' }}>
+                  <p className="font-body text-xs leading-relaxed mt-auto text-xert-pale/50" >
                     {check.action}
                   </p>
                 )}
@@ -372,12 +362,11 @@ export default function OperationsHealth({ onNavigate }) {
                 {check.incidents?.length > 0 && (
                   <div className="mt-4 space-y-2" aria-label="Unresolved Stripe webhook incidents">
                     {check.incidents.map(incident => (
-                      <div key={incident.event_id} className="p-3"
-                        style={{ backgroundColor: 'rgba(16,24,32,0.48)', border: '1px solid rgba(248,113,113,0.18)' }}>
+                      <div key={incident.event_id} className="p-3 bg-xert-navy/50 border border-red-400/20">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-body text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#f87171' }}>
+                              <span className="font-body text-[10px] font-semibold uppercase tracking-wider text-red-400" >
                                 {incident.status}
                               </span>
                               <span className="font-body text-xs text-xert-pale/70 break-all">{incident.event_type}</span>
@@ -406,7 +395,7 @@ export default function OperationsHealth({ onNavigate }) {
                         </div>
                         {incident.resolution && (
                           <div className="mt-3 space-y-3">
-                            <p className="font-body text-xs leading-relaxed" style={{ color: 'rgba(224,179,106,0.88)' }}>
+                            <p className="font-body text-xs leading-relaxed text-amber-300/90" >
                               {incident.resolution}
                             </p>
                             <button type="button" onClick={() => setPendingResolution(incident)}
@@ -439,8 +428,8 @@ export default function OperationsHealth({ onNavigate }) {
 
                 {target && (
                   <button type="button" onClick={() => onNavigate?.(target)}
-                    className="inline-flex min-h-11 items-center gap-2 self-start mt-4 font-body text-xs uppercase tracking-wider"
-                    style={{ color: '#7BA7BC' }}>
+                    className="inline-flex min-h-11 items-center gap-2 self-start mt-4 font-body text-xs uppercase tracking-wider text-xert-steel"
+>
                     Open section
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>

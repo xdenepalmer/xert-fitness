@@ -359,7 +359,7 @@ export default function ClassCalendarBoard({
               </button>
             </div>
             {!templatesAvailable ? (
-              <p className="font-body text-xs" style={{ color: '#e0b36a' }}>
+              <p className="font-body text-xs text-amber-300" >
                 The class bank becomes available after class_template_bank.sql is applied.
               </p>
             ) : templatesLoading ? (

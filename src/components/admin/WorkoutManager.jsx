@@ -4,6 +4,7 @@ import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { getAdminWorkout, getAdminWorkouts, saveWorkoutOfTheDay } from '@/lib/adminData';
 import { brisbaneDateKey, normalizeWorkoutInput, WORKOUT_BODY_MAX } from '@/lib/workoutOfTheDay';
+import { ADMIN_PAGE } from '@/components/admin/ui';
 
 /** @param {boolean} _dirty */
 const NOOP = _dirty => {};
@@ -92,13 +93,13 @@ export default function WorkoutManager({ onDirtyChange = NOOP }) {
     }
   };
 
-  if (loading) return <div className="p-6"><div className="h-64 bg-xert-ink animate-pulse" /></div>;
-  if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={() => load(workoutDate)} /></div>;
+  if (loading) return <div className={ADMIN_PAGE}><div className="h-64 bg-xert-ink animate-pulse" /></div>;
+  if (loadError) return <div className={ADMIN_PAGE}><AdminLoadError message={loadError} onRetry={() => load(workoutDate)} /></div>;
 
   const quickDays = [addDays(todayKey, -1), todayKey, addDays(todayKey, 1), addDays(todayKey, 2)];
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className={`${ADMIN_PAGE} max-w-3xl`}>
       <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
         <h2 className="font-display text-xl text-xert-offwhite uppercase">Workout Of The Day</h2>
         <a

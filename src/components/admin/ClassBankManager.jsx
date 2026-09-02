@@ -5,12 +5,13 @@ import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { createClassTemplate, deleteClassTemplate, updateClassTemplate } from '@/lib/adminData';
 import { classTemplateEditorForm, classTemplateEditorIsDirty, classTemplateValidationError, formatStartMinute } from '@/lib/classCalendar';
 import { BOOKING_MODE_LABELS } from '@/lib/classSignup';
+import { ADMIN_INPUT } from '@/components/admin/ui';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
 const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 
-const inputClass = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
+const inputClass = ADMIN_INPUT;
 const labelClass = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
 
 function TemplateEditor({ template, onSaved, onCancel, onDirtyChange }) {
@@ -179,7 +180,7 @@ export default function ClassBankManager({ templates, available, loading, onChan
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
           {!available ? (
-            <p className="font-body text-xs" style={{ color: '#e0b36a' }}>
+            <p className="font-body text-xs text-amber-300" >
               The class bank becomes available after class_template_bank.sql is applied.
             </p>
           ) : editing ? (

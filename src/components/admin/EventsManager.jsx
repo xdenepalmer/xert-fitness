@@ -6,11 +6,12 @@ import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { normalizeEventInput } from '@/lib/eventAdmin';
 import { downloadCsv } from '@/lib/csv';
+import { ADMIN_BUTTON, ADMIN_INPUT, ADMIN_LABEL, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const CATEGORIES = ['run', 'marathon', 'triathlon', 'ironman', 'ultra', 'trail', 'cycling', 'fitness', 'hyrox', 'crossfit', 'functional', 'swim', 'spartan', 'adventure', 'games', 'community', 'sport', 'xert', 'other'];
 
-const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
-const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+const inputCls = ADMIN_INPUT;
+const labelCls = ADMIN_LABEL;
 const NOOP = _dirty => {};
 const EMPTY_EVENT = {
   name: '', category: 'run', event_date: '', end_date: '', location: '',
@@ -93,7 +94,7 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className={`${ADMIN_PAGE} space-y-4`}>
           <div>
             <label htmlFor="event-name" className={labelCls}>Event name *</label>
             <input id="event-name" required autoFocus value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} />
@@ -147,7 +148,7 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
           <button type="button" onClick={requestCancel} disabled={saving} className="flex-1 min-h-11 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">
             Cancel
           </button>
-          <button type="button" onClick={handleSave} disabled={saving} className="flex-1 min-h-11 py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+          <button type="button" onClick={handleSave} disabled={saving} className={`${ADMIN_BUTTON.primary} flex-1`}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -386,9 +387,9 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
   });
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">SE QLD Event Calendar</h2>
+        <h2 className={ADMIN_TEXT.pageTitle}>SE QLD Event Calendar</h2>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
           <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search events" placeholder="Search events…" className="col-span-2 min-h-11 w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red sm:col-span-1 sm:w-48" />
           <select value={catFilter} onChange={e => setCatFilter(e.target.value)} aria-label="Filter events by category" className="min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
@@ -407,7 +408,7 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
               setShowEditor(true);
             }}
             disabled={deletingId !== null}
-            className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50"
+            className={ADMIN_BUTTON.primary}
           >
             + Add Event
           </button>

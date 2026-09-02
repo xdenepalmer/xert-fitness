@@ -6,6 +6,7 @@ import { downloadCsv } from '@/lib/csv';
 import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '@/lib/orderAnalytics';
 import { formatPackPrice } from '@/lib/products';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const STATUS_COLORS = {
   paid: 'text-green-400 border-green-600/40',
@@ -135,9 +136,9 @@ export default function OrdersManager() {
   };
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Orders &amp; Revenue</h2>
+        <h2 className={ADMIN_TEXT.pageTitle}>Orders &amp; Revenue</h2>
         <button
           onClick={() => downloadCsv(`xert-orders-${new Date().toISOString().slice(0, 10)}.csv`,
             orderCsvRows(filteredOrders), [
@@ -195,8 +196,8 @@ export default function OrdersManager() {
 
       {/* 30-day revenue chart */}
       {!loading && stats.currencies.length <= 1 && filteredOrders.some(o => o.status === 'paid') && (
-        <div className="mb-8 p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
-          <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>
+        <div className="mb-8 p-5 bg-xert-navy/60 border border-xert-steel/15" >
+          <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4 text-xert-steel/60" >
             Revenue — last 30 days
           </h3>
           <div role="img" aria-label="Daily paid revenue for the last 30 days" className="relative h-44 pt-3 pb-6 border-b border-xert-steel/20">

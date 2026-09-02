@@ -6,6 +6,7 @@ import { downloadCsv } from '@/lib/csv';
 import { collectLeadPages, leadExportColumns, leadExportRows, selectedLeadIds } from '@/lib/adminLeads';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import FitboxLeadHandoff from '@/components/admin/FitboxLeadHandoff';
+import { ADMIN_BUTTON, ADMIN_PAGE } from '@/components/admin/ui';
 
 const MEMBER_STATUSES = ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'];
 const TRAINER_STATUSES = ['new', 'reviewing', 'contacted', 'interview', 'shortlisted', 'not_suitable', 'hired', 'archived'];
@@ -103,7 +104,7 @@ function LeadDetailDrawer({ lead, statuses, table, onClose, onUpdate }) {
         </div>
 
         <button type="button" onClick={save} disabled={saving}
-          className="w-full py-3 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+          className={`${ADMIN_BUTTON.primary} w-full`}>
           {saving ? 'Saving...' : 'Save changes'}
         </button>
       </div>
@@ -220,7 +221,7 @@ export default function LeadTable({ type = 'member' }) {
   const lastResult = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <label htmlFor={`${type}-lead-search`} className="sr-only">Search leads by name or email</label>
@@ -254,7 +255,7 @@ export default function LeadTable({ type = 'member' }) {
             <option value="">Move selected to...</option>
             {statuses.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
           </select>
-          <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedIds.size === 0 || bulkSaving} className="px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
+          <button type="button" onClick={() => void handleBulkUpdate()} disabled={!bulkStatus || selectedIds.size === 0 || bulkSaving} className={ADMIN_BUTTON.primary}>
             {bulkSaving ? 'Updating...' : 'Apply'}
           </button>
         </div>

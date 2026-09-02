@@ -6749,9 +6749,9 @@ final class OwnerDesignSystemTests: XCTestCase {
             .deletingLastPathComponent()      // XertFitnessApp (project root)
             .appendingPathComponent("XertFitnessApp/Views")
         let names = try FileManager.default.contentsOfDirectory(atPath: viewsDirectory.path)
-            .filter { $0.hasPrefix("Admin") && $0.hasSuffix(".swift") }
+            .filter { $0.hasSuffix(".swift") }
             .sorted()
-        XCTAssertGreaterThanOrEqual(names.count, 6, "owner view files should be discoverable")
+        XCTAssertGreaterThanOrEqual(names.count, 12, "view files should be discoverable")
         return try names.map { name in
             (name, try String(contentsOf: viewsDirectory.appendingPathComponent(name), encoding: .utf8))
         }

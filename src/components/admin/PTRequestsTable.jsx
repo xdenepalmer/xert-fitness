@@ -8,6 +8,7 @@ import { downloadCsv } from '@/lib/csv';
 import { bulkPTRequestStatusOptions, isPendingPTRequest, PT_SESSION_TYPES, ptRequestCsvRows, selectedPTRequestIds } from '@/lib/ptRequestAnalytics';
 import { collectAdminPages } from '@/lib/adminPagination';
 import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
+import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {
@@ -180,9 +181,9 @@ export default function PTRequestsTable() {
   };
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">PT Request Operations</h2>
+        <h2 className={ADMIN_TEXT.pageTitle}>PT Request Operations</h2>
         <button type="button" onClick={() => void handleExport()} disabled={total === 0 || exporting || loading}
           className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
           <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting...' : 'CSV'}
@@ -238,7 +239,7 @@ export default function PTRequestsTable() {
           <option value="">Move selected to...</option>
           {bulkStatusOptions.map(status => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}
         </select>
-        <button type="button" onClick={() => setBulkConfirmationOpen(true)} disabled={!bulkConfirmation || bulkSaving} className="min-h-11 px-4 py-2 bg-xert-steel text-xert-navy font-display text-xs uppercase disabled:opacity-40">
+        <button type="button" onClick={() => setBulkConfirmationOpen(true)} disabled={!bulkConfirmation || bulkSaving} className={ADMIN_BUTTON.primary}>
           {bulkSaving ? 'Updating...' : 'Apply'}
         </button>
       </div>
@@ -334,7 +335,7 @@ export default function PTRequestsTable() {
               <button type="button" disabled={updatingId === notesModal.id} onClick={() => setNotesModal(null)}
                 className="flex-1 py-2.5 border border-xert-steel/40 font-display text-xs text-xert-concrete/60 uppercase">Cancel</button>
               <button type="button" disabled={updatingId === notesModal.id} onClick={() => void handleUpdate(notesModal.id, notesModal.status, notes)}
-                className="flex-1 py-2.5 bg-xert-steel text-xert-navy font-display text-xs uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">{updatingId === notesModal.id ? 'Saving...' : 'Save'}</button>
+                className={`${ADMIN_BUTTON.primary} flex-1`}>{updatingId === notesModal.id ? 'Saving...' : 'Save'}</button>
             </div>
           </div>
         </div>

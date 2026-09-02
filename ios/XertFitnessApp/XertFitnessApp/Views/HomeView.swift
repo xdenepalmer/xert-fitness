@@ -595,7 +595,7 @@ struct HomeView: View {
                     .buttonStyle(.xertPrimary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
+                .padding(XertSpace.lg)
                 .xertCardStyle()
             }
         }
@@ -739,7 +739,7 @@ struct HomeView: View {
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
+                        .padding(XertSpace.md)
                         .xertCardStyle()
                     }
                     Button("Manage today's bookings") {
@@ -841,7 +841,7 @@ private struct MemberLaunchGuideCard: View {
                 expandedContent
             }
         }
-        .padding(state.isCompact ? 12 : 14)
+        .padding(state.isCompact ? XertSpace.md : XertSpace.lg)
         .xertCardStyle()
         .accessibilityElement(children: .contain)
     }
@@ -1546,7 +1546,7 @@ private struct MemberAnnouncementRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
+        .padding(XertSpace.lg)
         .xertCardStyle()
         .accessibilityElement(children: .contain)
     }
@@ -1570,7 +1570,7 @@ private struct QuickActionCard: View {
                     .foregroundStyle(Color.xertOffWhite)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
+            .padding(.vertical, XertSpace.lg)
             .xertCardStyle()
         }
         .buttonStyle(.plain)

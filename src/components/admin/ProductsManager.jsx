@@ -5,9 +5,10 @@ import { createProduct, getAllProducts, provisionProductPrice, updateProduct } f
 import { normalizeProductAdminInput, normalizeProductCreateInput, productStripeReadiness, productStripeTransitionError } from '@/lib/products';
 import AdminLoadError from './AdminLoadError';
 import AdminConfirmDialog from './AdminConfirmDialog';
+import { ADMIN_BUTTON, ADMIN_INPUT, ADMIN_LABEL, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
-const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
-const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+const inputCls = ADMIN_INPUT;
+const labelCls = ADMIN_LABEL;
 const NOOP = (_key, _dirty) => {};
 
 function productEditorForm(product) {
@@ -100,7 +101,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
     <div className="bg-xert-ink border border-xert-steel/20 p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-display text-lg text-xert-offwhite uppercase">{product.name}</h3>
+          <h3 className={ADMIN_TEXT.pageTitle}>{product.name}</h3>
           {dirty && <p role="status" className="mt-1 font-body text-xs text-xert-steel">Unsaved changes</p>}
         </div>
         <div className="flex items-center gap-2">
@@ -179,7 +180,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
           <span className="font-body text-sm text-xert-concrete/80">Active (purchasable)</span>
         </label>
         <button onClick={handleSave} disabled={saving || provisioning || !dirty || Boolean(transitionError) || Boolean(activationError)}
-          className="ml-auto px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+          className={`${ADMIN_BUTTON.primary} ml-auto`}>
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
@@ -286,7 +287,7 @@ function NewProductDialog({ onClose, onCreated, onDirtyChange }) {
         </div>
         <footer className="flex gap-3 p-5 border-t border-xert-steel/20">
           <button type="button" onClick={requestClose} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
-          <button type="button" onClick={save} disabled={saving} className="flex-1 min-h-11 bg-xert-steel text-xert-navy font-display text-sm uppercase disabled:opacity-40">{saving ? 'Creating...' : 'Create pack'}</button>
+          <button type="button" onClick={save} disabled={saving} className={`${ADMIN_BUTTON.primary} flex-1`}>{saving ? 'Creating...' : 'Create pack'}</button>
         </footer>
       </div>
       <AdminConfirmDialog
@@ -367,10 +368,10 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
   }, [initialAction, onIntentHandled]);
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex items-center justify-between gap-4 mb-2">
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Session Packs &amp; Pricing</h2>
-        <button type="button" onClick={() => setShowCreate(true)} className="min-h-11 px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase">+ Add Pack</button>
+        <h2 className={ADMIN_TEXT.pageTitle}>Session Packs &amp; Pricing</h2>
+        <button type="button" onClick={() => setShowCreate(true)} className={ADMIN_BUTTON.primary}>+ Add Pack</button>
       </div>
       <p className="font-body text-xs text-xert-concrete/40 mb-6 max-w-2xl">
         XERT currently sells one-off session packs rather than recurring subscriptions. Price and credit changes apply to new purchases only; existing credits keep their original terms.

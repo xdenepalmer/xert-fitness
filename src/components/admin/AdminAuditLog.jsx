@@ -10,6 +10,7 @@ import {
 } from '@/lib/adminAudit';
 import { downloadCsv } from '@/lib/csv';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import { ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const PAGE_SIZE = 50;
 const RANGE_OPTIONS = [
@@ -118,16 +119,16 @@ export default function AdminAuditLog() {
     ]
   );
 
-  if (!records && loading) return <div className="p-6"><div className="h-40 bg-xert-ink animate-pulse" /></div>;
-  if (!records && loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={() => void load(days)} /></div>;
+  if (!records && loading) return <div className={ADMIN_PAGE}><div className="h-40 bg-xert-ink animate-pulse" /></div>;
+  if (!records && loadError) return <div className={ADMIN_PAGE}><AdminLoadError message={loadError} onRetry={() => void load(days)} /></div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={`${ADMIN_PAGE} space-y-6`}>
       <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <ScrollText className="w-5 h-5 text-xert-steel" />
-            <h2 className="font-display text-lg text-xert-offwhite uppercase">Admin Audit</h2>
+            <h2 className={ADMIN_TEXT.pageTitle}>Admin Audit</h2>
           </div>
           <p className="font-body text-xs text-xert-concrete/40 mt-1">
             Permanent role, credit, lead, booking, schedule, content, request and member notice history

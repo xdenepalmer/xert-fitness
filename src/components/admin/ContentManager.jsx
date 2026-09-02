@@ -9,6 +9,7 @@ import ImageUploader from '@/components/admin/ImageUploader';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { normalizeSiteContent } from '@/lib/siteContentAdmin';
 import { clearSiteContentDraft, readSiteContentDraft, writeSiteContentDraft } from '@/lib/siteContentDraft';
+import { ADMIN_BUTTON, ADMIN_INPUT, ADMIN_LABEL, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 // Schema-driven CMS editor. Add a section here + a useSiteContent() call in the
 // matching public component and it becomes editable — no other wiring needed.
@@ -86,8 +87,8 @@ const SECTIONS = [
   },
 ];
 
-const inputCls = 'w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red';
-const labelCls = 'block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1';
+const inputCls = ADMIN_INPUT;
+const labelCls = ADMIN_LABEL;
 /** @param {boolean} _dirty */
 const NOOP = _dirty => {};
 
@@ -241,11 +242,11 @@ function ImageListEditor({ value, onChange, folder }) {
               <div className="aspect-[3/4] overflow-hidden bg-xert-charcoal">
                 <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
               </div>
-              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity"
-                style={{ backgroundColor: 'rgba(11,18,24,0.85)' }}>
-                <button type="button" aria-label={`Move photo ${i + 1} left`} disabled={i === 0} onClick={() => move(i, -1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30" style={{ color: '#7BA7BC' }}>&#8592;</button>
-                <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="min-w-11 min-h-11 text-xs" style={{ color: '#f0a1a1' }}>&#10005;</button>
-                <button type="button" aria-label={`Move photo ${i + 1} right`} disabled={i === items.length - 1} onClick={() => move(i, 1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30" style={{ color: '#7BA7BC' }}>&#8594;</button>
+              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity bg-[#0b1218]/85"
+>
+                <button type="button" aria-label={`Move photo ${i + 1} left`} disabled={i === 0} onClick={() => move(i, -1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30 text-xert-steel" >&#8592;</button>
+                <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="min-w-11 min-h-11 text-xs text-red-300" >&#10005;</button>
+                <button type="button" aria-label={`Move photo ${i + 1} right`} disabled={i === items.length - 1} onClick={() => move(i, 1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30 text-xert-steel" >&#8594;</button>
               </div>
             </div>
           ))}
@@ -309,22 +310,19 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
   };
 
   return (
-    <div style={{
-      background: 'linear-gradient(145deg, rgba(50,72,90,0.18) 0%, rgba(16,24,32,0.55) 70%)',
-      border: `1px solid ${dirty ? 'rgba(123,167,188,0.5)' : 'rgba(123,167,188,0.16)'}`,
-    }}>
+    <div className={`bg-gradient-to-br from-xert-deep/20 to-xert-navy/55 border ${dirty ? 'border-xert-steel/50' : 'border-xert-steel/15'}`}>
       {/* Section header */}
-      <div className="flex items-center gap-3 p-5" style={{ borderBottom: '1px solid rgba(123,167,188,0.12)' }}>
-        <div className="w-9 h-9 shrink-0 flex items-center justify-center" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
-          <Icon className="w-4 h-4" style={{ color: '#7BA7BC' }} />
+      <div className="flex items-center gap-3 p-5 border-b border-xert-steel/10">
+        <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-xert-steel/15" >
+          <Icon className="w-4 h-4 text-xert-steel" />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-display text-lg text-xert-offwhite uppercase leading-none">{section.title}</h3>
           <p className="font-body text-xs text-xert-concrete/40 mt-1">{section.description}</p>
         </div>
         <Link to={section.viewPath} target="_blank"
-          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider border transition-colors shrink-0"
-          style={{ borderColor: 'rgba(123,167,188,0.25)', color: 'rgba(123,167,188,0.7)' }}>
+          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider border transition-colors shrink-0 border-xert-steel/25 text-xert-steel/70"
+>
           <ExternalLink className="w-3 h-3" /> View
         </Link>
       </div>
@@ -359,7 +357,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
 
       <div className="flex items-center gap-3 px-5 pb-5">
         <button type="button" onClick={handleSave} disabled={saving || !dirty}
-          className="px-5 py-2.5 bg-xert-steel text-xert-navy font-display text-sm uppercase hover:bg-xert-pale transition-colors disabled:opacity-40">
+          className={ADMIN_BUTTON.primary}>
           {saving ? 'Saving…' : dirty ? 'Save section' : 'Saved'}
         </button>
         <button type="button" onClick={handleRestore} title="Reset the fields below to the original site copy"
@@ -372,7 +370,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
             Discard changes
           </button>
         )}
-        {dirty && <span className="font-body text-xs ml-auto" style={{ color: '#7BA7BC' }}>Unsaved changes</span>}
+        {dirty && <span className="font-body text-xs ml-auto text-xert-steel" >Unsaved changes</span>}
         {!dirty && savedAt && <span className="font-body text-xs text-green-400 ml-auto">Live ✓</span>}
       </div>
     </div>
@@ -413,15 +411,15 @@ export default function ContentManager({ onDirtyChange = NOOP }) {
   useEffect(() => { load(); }, []);
 
   if (content === null) {
-    if (loadError) return <div className="p-6"><AdminLoadError message={loadError} onRetry={load} /></div>;
-    return <div className="p-6 space-y-4">{[1, 2].map(i => <div key={i} className="h-48 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.3)' }} />)}</div>;
+    if (loadError) return <div className={ADMIN_PAGE}><AdminLoadError message={loadError} onRetry={load} /></div>;
+ return <div className={`${ADMIN_PAGE} space-y-4 bg-xert-deep/30`}>{[1, 2].map(i => <div key={i} className="h-48 animate-pulse" />)}</div>;
   }
 
   return (
-    <div className="p-6">
+    <div className={ADMIN_PAGE}>
       <div className="flex items-center gap-3 mb-2">
-        <Image className="w-4 h-4" style={{ color: '#7BA7BC' }} />
-        <h2 className="font-display text-lg text-xert-offwhite uppercase">Site Content</h2>
+        <Image className="w-4 h-4 text-xert-steel" />
+        <h2 className={ADMIN_TEXT.pageTitle}>Site Content</h2>
       </div>
       <p className="font-body text-xs text-xert-concrete/40 mb-6 max-w-2xl">
         Edit the words and photos on the public site. Empty fields fall back to the built-in copy, so you can&rsquo;t

@@ -67,10 +67,10 @@ function TodayOperationsDesk({ rows, available, error, onOpen }) {
     <section aria-labelledby="today-operations-heading">
       <div className="mb-3 flex items-end justify-between gap-3 sm:mb-4 sm:gap-4">
         <div>
-          <h2 id="today-operations-heading" className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+          <h2 id="today-operations-heading" className="font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >
             Today&apos;s Classes
           </h2>
-          <p className="mt-1 font-body text-xs" style={{ color: 'rgba(209,221,230,0.42)' }}>
+          <p className="mt-1 font-body text-xs text-xert-pale/40" >
             Brisbane time · rosters, queues and roll call
           </p>
         </div>
@@ -355,7 +355,7 @@ export default function AdminOverview({ onNavigate }) {
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
               {lastUpdated && (
-                <span className="font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }} aria-live="polite">
+                <span className="font-body text-[10px] uppercase tracking-wider text-xert-pale/40" aria-live="polite">
                   Updated {lastUpdated.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}
                 </span>
               )}
@@ -364,12 +364,12 @@ export default function AdminOverview({ onNavigate }) {
               </button>
             </div>
             {countdown && (
-            <div className="flex min-h-11 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3"
-              style={{ backgroundColor: 'rgba(123,167,188,0.12)', border: '1px solid rgba(123,167,188,0.35)' }}>
-              <Rocket className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+            <div className="flex min-h-11 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3 bg-xert-steel/10 border border-xert-steel/35"
+>
+              <Rocket className="w-5 h-5 text-xert-steel" />
               <div>
-                <p className="font-display text-lg leading-none tabular-nums sm:text-xl" style={{ color: '#F1F3F4' }}>{countdown}</p>
-                <p className="mt-0.5 hidden font-body text-[10px] uppercase tracking-wider min-[380px]:block" style={{ color: 'rgba(209,221,230,0.5)' }}>
+                <p className="font-display text-lg leading-none tabular-nums sm:text-xl text-xert-offwhite" >{countdown}</p>
+                <p className="mt-0.5 hidden font-body text-[10px] uppercase tracking-wider min-[380px]:block text-xert-pale/50" >
                   to launch · {settings.target_launch_date}
                 </p>
               </div>
@@ -383,19 +383,19 @@ export default function AdminOverview({ onNavigate }) {
         <section aria-labelledby="admin-action-queue-heading">
           <div className="flex items-end justify-between gap-4 mb-4">
             <div>
-              <h2 id="admin-action-queue-heading" className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+              <h2 id="admin-action-queue-heading" className="font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >
                 Needs Your Attention
               </h2>
-              <p className="font-body text-xs mt-1" style={{ color: 'rgba(209,221,230,0.42)' }}>
+              <p className="font-body text-xs mt-1 text-xert-pale/40" >
                 {actionQueue.length > 0 ? `${actionQueue.length} active work queue${actionQueue.length === 1 ? '' : 's'}` : 'No outstanding member or applicant work'}
               </p>
             </div>
           </div>
 
           {actionQueue.length === 0 ? (
-            <div className="flex items-center gap-3 p-4" style={{ backgroundColor: 'rgba(126,201,143,0.08)', border: '1px solid rgba(126,201,143,0.22)' }}>
-              <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#7ec98f' }} />
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.72)' }}>All operational queues are caught up.</p>
+            <div className="flex items-center gap-3 p-4 bg-green-400/10 border border-green-400/20">
+              <CheckCircle2 className="w-5 h-5 shrink-0 text-green-400" />
+              <p className="font-body text-sm text-xert-pale/70" >All operational queues are caught up.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -411,15 +411,15 @@ export default function AdminOverview({ onNavigate }) {
                     style={{ backgroundColor: tone.background, border: `1px solid ${tone.border}` }}
                     aria-label={`${action.title}: ${action.detail}`}
                   >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center sm:h-10 sm:w-10" style={{ backgroundColor: 'rgba(11,18,24,0.52)' }}>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center sm:h-10 sm:w-10 bg-[#0b1218]/50">
                       <Icon className="w-5 h-5" style={{ color: tone.color }} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="font-display text-lg uppercase leading-tight" style={{ color: '#F1F3F4' }}>{action.title}</p>
+                        <p className="font-display text-lg uppercase leading-tight text-xert-offwhite" >{action.title}</p>
                         <span className="font-display text-2xl tabular-nums leading-none" style={{ color: tone.color }}>{action.count}</span>
                       </div>
-                      <p className="font-body text-xs leading-relaxed mt-2" style={{ color: 'rgba(209,221,230,0.52)' }}>{action.detail}</p>
+                      <p className="font-body text-xs leading-relaxed mt-2 text-xert-pale/50" >{action.detail}</p>
                     </div>
                     <ArrowRight className="w-4 h-4 self-center shrink-0 transition-transform group-hover:translate-x-0.5" style={{ color: tone.color }} />
                   </button>
@@ -487,15 +487,15 @@ export default function AdminOverview({ onNavigate }) {
             const doneCount = items.filter(i => i.done).length;
             const pct = Math.round((doneCount / items.length) * 100);
             return (
-              <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+              <div className="p-5 bg-xert-navy/60 border border-xert-steel/15" >
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>
+                  <h3 className="font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >
                     Business Milestones
                   </h3>
-                  <span className="font-display text-sm tabular-nums" style={{ color: '#7BA7BC' }}>{doneCount}/{items.length}</span>
+                  <span className="font-display text-sm tabular-nums text-xert-steel" >{doneCount}/{items.length}</span>
                 </div>
-                <div className="h-1 rounded-full overflow-hidden mb-4" style={{ backgroundColor: 'rgba(123,167,188,0.15)' }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: '#7BA7BC' }} />
+                <div className="h-1 rounded-full overflow-hidden mb-4 bg-xert-steel/15" >
+                  <div className="h-full rounded-full transition-all bg-xert-steel" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="space-y-1">
                   {items.map(item => (
@@ -503,18 +503,15 @@ export default function AdminOverview({ onNavigate }) {
                       className="w-full flex items-center gap-2.5 py-1.5 text-left group"
                       style={{ cursor: item.done ? 'default' : 'pointer' }}>
                       {item.done === true
-                        ? <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: '#7ec98f' }} />
+                        ? <CheckCircle2 className="w-4 h-4 shrink-0 text-green-400" />
                         : item.done === null
-                          ? <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: '#e0b36a' }} />
-                          : <Circle className="w-4 h-4 shrink-0" style={{ color: 'rgba(123,167,188,0.4)' }} />}
-                      <span className="font-body text-sm" style={{
-                        color: item.done === true ? 'rgba(209,221,230,0.35)' : item.done === null ? '#e0b36a' : '#D1DDE6',
-                        textDecoration: item.done === true ? 'line-through' : 'none',
-                      }}>
+                          ? <AlertTriangle className="w-4 h-4 shrink-0 text-amber-300" />
+                          : <Circle className="w-4 h-4 shrink-0 text-xert-steel/40" />}
+                      <span className={`font-body text-sm ${item.done === true ? 'line-through text-xert-pale/35' : item.done === null ? 'text-amber-300' : 'text-xert-pale'}`}>
                         {item.label}
                       </span>
                       {item.done === false && (
-                        <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />
+                        <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-xert-steel" />
                       )}
                     </button>
                   ))}
@@ -529,14 +526,14 @@ export default function AdminOverview({ onNavigate }) {
           })()}
 
           {/* Fill rate */}
-          <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
-            <h3 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>
+          <div className="p-5 bg-xert-navy/60 border border-xert-steel/15" >
+            <h3 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-4 text-xert-steel/60" >
               <Gauge className="w-3.5 h-3.5" /> Upcoming Class Fill
             </h3>
             {fillRates === null ? (
-              <p className="font-body text-sm" style={{ color: '#e0b36a' }}>Class fill data is unavailable. Retry launch data above.</p>
+              <p className="font-body text-sm text-amber-300" >Class fill data is unavailable. Retry launch data above.</p>
             ) : fillRates.length === 0 ? (
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>
+              <p className="font-body text-sm text-xert-pale/40" >
                 No published upcoming classes yet — publish classes and live booking numbers appear here.
               </p>
             ) : (
@@ -547,18 +544,18 @@ export default function AdminOverview({ onNavigate }) {
                   return (
                     <div key={s.id}>
                       <div className="flex items-center justify-between mb-1">
-                        <p className="font-body text-sm truncate" style={{ color: '#D1DDE6' }}>
+                        <p className="font-body text-sm truncate text-xert-pale" >
                           {s.title || s.class_type}
-                          <span className="text-[11px] ml-2" style={{ color: 'rgba(209,221,230,0.35)' }}>
+                          <span className="text-[11px] ml-2 text-xert-pale/35" >
                             {new Date(s.start_time).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
                           </span>
                         </p>
-                        <span className="font-display text-xs tabular-nums shrink-0" style={{ color: pct >= 100 ? '#e0b36a' : '#7BA7BC' }}>
+                        <span className={`font-display text-xs tabular-nums shrink-0 ${pct >= 100 ? 'text-amber-300' : 'text-xert-steel'}`}>
                           {s.booked_count}/{cap || '∞'}
                         </span>
                       </div>
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(123,167,188,0.15)' }}>
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#e0b36a' : '#7BA7BC' }} />
+                      <div className="h-1.5 rounded-full overflow-hidden bg-xert-steel/15" >
+                        <div className={`h-full rounded-full ${pct >= 100 ? 'bg-amber-300' : 'bg-xert-steel'}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -578,20 +575,19 @@ export default function AdminOverview({ onNavigate }) {
           const Icon = a.icon;
           return (
             <button key={a.key} onClick={() => onNavigate?.(a.key, a.params)}
-              className="group flex min-h-16 items-center gap-3 p-3 text-left transition-all sm:p-4"
-              style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}
+              className="group flex min-h-16 items-center gap-3 p-3 text-left transition-all sm:p-4 bg-xert-navy/60 border border-xert-steel/15"
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.16)'}>
-              <div className="w-9 h-9 shrink-0 flex items-center justify-center transition-colors"
-                style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
-                <Icon className="w-4 h-4" style={{ color: '#7BA7BC' }} />
+              <div className="w-9 h-9 shrink-0 flex items-center justify-center transition-colors bg-xert-steel/15"
+>
+                <Icon className="w-4 h-4 text-xert-steel" />
               </div>
               <div className="min-w-0">
-                <p className="font-display text-sm uppercase leading-none flex items-center gap-1.5" style={{ color: '#F1F3F4' }}>
+                <p className="font-display text-sm uppercase leading-none flex items-center gap-1.5 text-xert-offwhite" >
                   {a.label}
-                  <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />
+                  <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-xert-steel" />
                 </p>
-                <p className="font-body text-[11px] mt-1 truncate" style={{ color: 'rgba(209,221,230,0.4)' }}>{a.hint}</p>
+                <p className="font-body text-[11px] mt-1 truncate text-xert-pale/40" >{a.hint}</p>
               </div>
             </button>
           );
@@ -601,7 +597,7 @@ export default function AdminOverview({ onNavigate }) {
 
       {/* ── Business ── */}
       <div>
-        <h2 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>Business</h2>
+        <h2 className="font-display text-xs uppercase tracking-[0.2em] mb-4 text-xert-steel/60" >Business</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <AdminStatCard icon={DollarSign} label="Revenue (total)" value={biz ? `$${(biz.totalRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} accent />
           <AdminStatCard icon={DollarSign} label="Revenue this month" value={biz ? `$${(biz.monthRevenueCents / 100).toFixed(0)}` : undefined} loading={loading} />
@@ -630,9 +626,9 @@ export default function AdminOverview({ onNavigate }) {
       )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent activity */}
-        <div className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
+        <div className="p-5 bg-xert-navy/60 border border-xert-steel/15" >
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="font-display text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(123,167,188,0.6)' }}>Recent Activity</h3>
+            <h3 className="font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >Recent Activity</h3>
             <button type="button" onClick={() => void loadActivity({ force: true })} disabled={activityLoading}
               className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/20 text-xert-steel disabled:opacity-40"
               aria-label="Refresh recent activity" title="Refresh recent activity">
@@ -640,28 +636,27 @@ export default function AdminOverview({ onNavigate }) {
             </button>
           </div>
           {activityLoading && !activityLoaded ? (
-            <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-10 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.4)' }} />)}</div>
+            <div className="space-y-2 bg-xert-deep/40">{[1, 2, 3].map(i => <div key={i} className="h-10 animate-pulse" />)}</div>
           ) : !activityLoaded ? (
-            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>Recent activity needs a retry.</p>
+            <p className="font-body text-sm text-xert-pale/40" >Recent activity needs a retry.</p>
           ) : !activity || activity.length === 0 ? (
-            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>
+            <p className="font-body text-sm text-xert-pale/40" >
               Nothing yet — purchases and new members will appear here.
             </p>
           ) : (
             <div className="space-y-1">
               {activity.map((a, i) => (
-                <div key={i} className="flex items-center gap-3 py-2" style={{ borderBottom: i < activity.length - 1 ? '1px solid rgba(123,167,188,0.08)' : 'none' }}>
-                  <div className="w-7 h-7 shrink-0 flex items-center justify-center"
-                    style={{ backgroundColor: a.type === 'order' ? 'rgba(123,167,188,0.18)' : 'rgba(50,72,90,0.4)' }}>
+                <div key={i} className={`flex items-center gap-3 py-2 ${i < activity.length - 1 ? 'border-b border-xert-steel/10' : ''}`}>
+                  <div className={`w-7 h-7 shrink-0 flex items-center justify-center ${a.type === 'order' ? 'bg-xert-steel/20' : 'bg-xert-deep/40'}`}>
                     {a.type === 'order'
-                      ? <Receipt className="w-3.5 h-3.5" style={{ color: '#7BA7BC' }} />
-                      : <UserPlus className="w-3.5 h-3.5" style={{ color: 'rgba(209,221,230,0.6)' }} />}
+                      ? <Receipt className="w-3.5 h-3.5 text-xert-steel" />
+                      : <UserPlus className="w-3.5 h-3.5 text-xert-pale/60" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-body text-sm truncate" style={{ color: '#D1DDE6' }}>{a.title}</p>
-                    <p className="font-body text-[11px] truncate" style={{ color: 'rgba(209,221,230,0.35)' }}>{a.sub}</p>
+                    <p className="font-body text-sm truncate text-xert-pale" >{a.title}</p>
+                    <p className="font-body text-[11px] truncate text-xert-pale/35" >{a.sub}</p>
                   </div>
-                  <span className="font-body text-[11px] shrink-0 tabular-nums" style={{ color: 'rgba(123,167,188,0.5)' }}>{timeAgo(a.at)}</span>
+                  <span className="font-body text-[11px] shrink-0 tabular-nums text-xert-steel/50" >{timeAgo(a.at)}</span>
                 </div>
               ))}
             </div>
@@ -686,14 +681,13 @@ export default function AdminOverview({ onNavigate }) {
             />
           </div>
           <button onClick={() => onNavigate?.('members')}
-            className="w-full flex items-center justify-between px-4 py-3 transition-colors"
-            style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}
+            className="w-full flex items-center justify-between px-4 py-3 transition-colors bg-xert-navy/60 border border-xert-steel/15"
             onMouseEnter={e => e.currentTarget.style.borderColor = '#7BA7BC'}
             onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.16)'}>
-            <span className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.6)' }}>
+            <span className="font-body text-xs uppercase tracking-wider text-xert-pale/60" >
               Review all leads & interest breakdown
             </span>
-            <ArrowRight className="w-4 h-4" style={{ color: '#7BA7BC' }} />
+            <ArrowRight className="w-4 h-4 text-xert-steel" />
           </button>
         </div>
       </div>
@@ -704,28 +698,27 @@ export default function AdminOverview({ onNavigate }) {
           { title: 'Most Requested Training Times', rows: stats?.topTimes, keyName: 'time' },
           { title: 'Most Common Training Goals', rows: stats?.topGoals, keyName: 'goal' },
         ].map(panel => (
-          <div key={panel.title} className="p-5" style={{ backgroundColor: 'rgba(16,24,32,0.6)', border: '1px solid rgba(123,167,188,0.16)' }}>
-            <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4" style={{ color: 'rgba(123,167,188,0.6)' }}>{panel.title}</h3>
+          <div key={panel.title} className="p-5 bg-xert-navy/60 border border-xert-steel/15" >
+            <h3 className="font-display text-xs uppercase tracking-[0.2em] mb-4 text-xert-steel/60" >{panel.title}</h3>
             {loading ? (
-              <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-8 animate-pulse" style={{ backgroundColor: 'rgba(50,72,90,0.4)' }} />)}</div>
+              <div className="space-y-2 bg-xert-deep/40">{[1, 2, 3].map(i => <div key={i} className="h-8 animate-pulse" />)}</div>
             ) : panel.rows?.length > 0 ? (
               <div className="space-y-3">
                 {panel.rows.map((r, i) => (
                   <div key={i} className="flex items-center justify-between">
-                    <span className="font-body text-sm" style={{ color: '#D1DDE6' }}>{r[panel.keyName]}</span>
+                    <span className="font-body text-sm text-xert-pale" >{r[panel.keyName]}</span>
                     <div className="flex items-center gap-3">
-                      <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(123,167,188,0.15)' }}>
-                        <div className="h-full rounded-full" style={{
-                          backgroundColor: '#7BA7BC',
+                      <div className="w-24 h-1.5 rounded-full overflow-hidden bg-xert-steel/15" >
+                        <div className="h-full rounded-full bg-xert-steel" style={{
                           width: `${Math.min(100, (r.count / (panel.rows[0]?.count || 1)) * 100)}%`,
                         }} />
                       </div>
-                      <span className="font-display text-sm tabular-nums w-6 text-right" style={{ color: 'rgba(209,221,230,0.5)' }}>{r.count}</span>
+                      <span className="font-display text-sm tabular-nums w-6 text-right text-xert-pale/50" >{r.count}</span>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.4)' }}>No data yet.</p>}
+            ) : <p className="font-body text-sm text-xert-pale/40" >No data yet.</p>}
           </div>
         ))}
       </div>

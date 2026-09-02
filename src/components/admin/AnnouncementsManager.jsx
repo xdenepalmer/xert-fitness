@@ -11,6 +11,7 @@ import {
 } from '@/lib/adminData';
 import { announcementState, ANNOUNCEMENT_TONES, normalizeAnnouncementInput } from '@/lib/memberAnnouncements';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
+import { ADMIN_INPUT, ADMIN_PAGE } from '@/components/admin/ui';
 
 const EMPTY_FORM = { title: '', body: '', tone: 'info', expires_at: '', cta_label: '', cta_url: '' };
 const NOOP = _dirty => {};
@@ -22,7 +23,7 @@ const STATE_STYLES = {
   expired: 'border-xert-pale/15 text-xert-pale/35',
   archived: 'border-amber-500/30 text-amber-300/70',
 };
-const inputClass = 'w-full min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-steel disabled:opacity-50';
+const inputClass = ADMIN_INPUT;
 
 function localDateTimeValue(value) {
   if (!value) return '';
@@ -218,7 +219,7 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={`${ADMIN_PAGE} space-y-6`}>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xert-steel">
