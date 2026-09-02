@@ -28,12 +28,13 @@ test('admin client degrades only when the daily RPC is absent', () => {
 });
 
 test('command centre opens the exact daily roster or roll call', () => {
-  const overview = read('../src/components/admin/AdminOverview.jsx');
+  const today = read('../src/components/admin/AdminToday.jsx');
   const commandCentre = read('../src/pages/AdminCommandCentre.jsx');
   const calendar = read('../src/components/admin/ClassCalendarAdmin.jsx');
 
-  assert.match(overview, /TodayOperationsDesk/);
-  assert.match(overview, /onNavigate\?\.\('calendar', \{ session, action \}\)/);
+  assert.match(today, /getAdminDailyOperations\(\)/);
+  assert.match(today, /onNavigate\?\.\('calendar', \{ session: focus\.session_id, action: 'roster' \}\)/);
+  assert.match(today, /onNavigate\?\.\('calendar', \{ session: focus\.session_id, action: 'attendance' \}\)/);
   assert.match(commandCentre, /initialSessionId=\{intent\.get\('session'\)\}/);
   assert.match(calendar, /\['roster', 'attendance'\]\.includes\(initialAction\)/);
   assert.match(calendar, /setAttendanceSession\(target\)/);

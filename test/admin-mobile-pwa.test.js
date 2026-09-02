@@ -20,7 +20,7 @@ test('mobile command centre has a safe-area owner dock and thumb-reachable works
   assert.match(workspaces, /ADMIN_MOBILE_WORKSPACES/);
   assert.match(layout, /data-admin-mobile-dock/);
   assert.match(layout, /aria-label="Owner shortcuts"/);
-  assert.match(layout, /grid grid-cols-4/);
+  assert.match(layout, /grid grid-cols-5/);
   assert.match(layout, /pb-\[max\(0\.35rem,env\(safe-area-inset-bottom\)\)\]/);
   assert.match(layout, /pt-\[max\(0\.625rem,env\(safe-area-inset-top\)\)\]/);
   assert.match(layout, /translate-y-full/);
@@ -51,33 +51,18 @@ test('badge polling survives workspace switches without launching five new count
   assert.doesNotMatch(badgeEffect, /\[activeSection\]/);
 });
 
-test('collapsed overview bundles load only when the owner opens their disclosure', async () => {
-  const overview = await source('../src/components/admin/AdminOverview.jsx');
-  const criticalLoad = overview.slice(
-    overview.indexOf('const load = useCallback'),
-    overview.indexOf('const loadActivity = useCallback'),
+test('the owner home loads three small calls and nothing heavier', async () => {
+  const today = await source('../src/components/admin/AdminToday.jsx');
+  const load = today.slice(today.indexOf('const load = useCallback'), today.indexOf('useEffect(() => { void load(); }'));
+  for (const call of ['getDashboardStats()', 'getAdminDailyOperations()', 'getSoftLaunchSettings()']) {
+    assert.ok(load.includes(call), `${call} is one of the three home calls`);
+  }
+  assert.doesNotMatch(
+    load,
+    /getRecentOrders|adminRecentMembers|getAllCoaches|getAllEvents|getAllSiteContent|getAvailableSessions|getAllOrders|adminListMembers/,
+    'the home never pulls a directory, ledger or catalogue',
   );
-  const activityLoad = overview.slice(
-    overview.indexOf('const loadActivity = useCallback'),
-    overview.indexOf('const loadReadiness = useCallback'),
-  );
-  const readinessLoad = overview.slice(
-    overview.indexOf('const loadReadiness = useCallback'),
-    overview.indexOf('useEffect(() => {'),
-  );
-
-  assert.doesNotMatch(criticalLoad, /getRecentOrders|adminRecentMembers|getAllCoaches|getAllEvents|getAllSiteContent|getAvailableSessions/);
-  assert.match(activityLoad, /getRecentOrders\(6\)/);
-  assert.match(activityLoad, /adminRecentMembers\(6\)/);
-  assert.match(readinessLoad, /getAllCoaches\(\)/);
-  assert.match(readinessLoad, /getAvailableSessions\(\)/);
-  assert.match(overview, /if \(event\.currentTarget\.open\) void loadActivity\(\)/);
-  assert.match(overview, /if \(event\.currentTarget\.open\) void loadReadiness\(\)/);
-  assert.match(overview, /loadActivity\(\{ force: true \}\)/);
-  assert.match(overview, /loadReadiness\(\{ force: true \}\)/);
-  assert.match(activityLoad, /Date\.now\(\) - activityLoadedAtRef\.current < ADMIN_OVERVIEW_REFRESH_INTERVAL_MS/);
-  assert.match(readinessLoad, /Date\.now\(\) - readinessLoadedAtRef\.current < ADMIN_OVERVIEW_REFRESH_INTERVAL_MS/);
-  assert.match(overview, /Refresh planning/);
+  assert.match(load, /Promise\.allSettled/, 'one failing source must not blank the whole screen');
 });
 
 test('command search does not query the member directory for ordinary task searches', async () => {

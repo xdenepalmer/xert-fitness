@@ -1,86 +1,106 @@
 import {
-  BarChart3, BellRing, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, DollarSign,
-  Dumbbell, Handshake, Inbox, LayoutDashboard, ListChecks, MessageSquareText, PenSquare, ScrollText,
-  Settings, ShieldCheck, Ticket, Trophy, Tv, UserCog, Users, UserSquare2,
+  BarChart3, BellRing, Briefcase, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, DollarSign,
+  Dumbbell, Handshake, Inbox, ListChecks, MessageSquareText, PenSquare, ScrollText,
+  Settings, ShieldCheck, Sun, Ticket, Trophy, Tv, UserCog, Users, UserSquare2,
 } from 'lucide-react';
 
-// One information architecture powers the desktop sidebar and command palette.
-// The labels mirror the native owner workspace so Byron never has to learn two
-// different admin products.
-export const ADMIN_WORKSPACE_GROUPS = Object.freeze([
+// ─── Owner information architecture ─────────────────────────────────────────
+// Five hubs in the words a gym owner uses. Every screen keeps its existing
+// route key, so nothing deep-links or bookmarks differently; only the way the
+// owner reaches it changes. The native app mirrors these hubs one-for-one.
+//
+//   Today     what's on and what needs you
+//   Classes   the timetable and everything attached to a class
+//   People    members, enquiries and applicants
+//   Messages  every way XERT talks to people
+//   Business  money, settings and the system itself
+
+export const ADMIN_HUBS = Object.freeze([
   {
     key: 'today',
-    label: null,
+    label: 'Today',
+    icon: Sun,
+    detail: "What's on and what needs you",
     items: [
-      { key: 'overview', label: 'Today', mobileLabel: 'Today', detail: 'Priorities, classes and business pulse', icon: LayoutDashboard },
+      { key: 'overview', label: 'Today', detail: "Next class, what needs you, quick actions", icon: Sun },
     ],
   },
   {
-    key: 'operate',
-    label: 'Operate',
+    key: 'classes',
+    label: 'Classes',
+    icon: CalendarDays,
+    detail: 'Timetable, requests and roll call',
     items: [
-      { key: 'gym-members', label: 'Members', mobileLabel: 'Members', detail: 'Accounts, credits and member records', icon: Users },
-      { key: 'calendar', label: 'Class Calendar', mobileLabel: 'Classes', detail: 'Schedule, rosters and attendance', icon: CalendarDays },
-      { key: 'workouts', label: 'Workout of the Day', detail: 'Program the in-club display', icon: Tv },
-      { key: 'bookings', label: 'Booking Requests', detail: 'Resolve public and member requests', icon: Inbox },
-      { key: 'pt-requests', label: 'PT Requests', detail: 'Approve and complete private training', icon: Dumbbell },
-      { key: 'availability', label: 'Availability', detail: 'Bookable windows and blackouts', icon: CalendarRange },
+      { key: 'calendar', label: 'Class calendar', detail: 'Add, publish and run classes', icon: CalendarDays },
+      { key: 'bookings', label: 'Class requests', detail: 'People asking for a spot', icon: Inbox },
+      { key: 'pt-requests', label: 'Personal training', detail: 'PT enquiries to approve', icon: Dumbbell },
+      { key: 'availability', label: 'Opening hours', detail: 'Bookable times and closures', icon: CalendarRange },
+      { key: 'workouts', label: 'Club TV workout', detail: 'What the in-club screen shows', icon: Tv },
     ],
   },
   {
-    key: 'grow',
-    label: 'Grow',
+    key: 'people',
+    label: 'People',
+    icon: Users,
+    detail: 'Members and enquiries',
     items: [
-      { key: 'members', label: 'Member Leads', detail: 'New member opportunities', icon: ClipboardList },
-      { key: 'trainers', label: 'Trainer Applicants', detail: 'Coach and trainer intake', icon: UserCog },
-      { key: 'partners', label: 'Partner Enquiries', detail: 'Local partner opportunities', icon: Handshake },
-      { key: 'campaigns', label: 'Campaign Attribution', detail: 'Acquisition sources and campaigns', icon: BarChart3 },
+      { key: 'gym-members', label: 'Members', detail: 'Accounts, credits and notes', icon: Users },
+      { key: 'members', label: 'New enquiries', detail: 'People interested in joining', icon: ClipboardList },
+      { key: 'trainers', label: 'Trainer applicants', detail: 'Coaches applying to work here', icon: UserCog },
+      { key: 'partners', label: 'Partner enquiries', detail: 'Local businesses reaching out', icon: Handshake },
+      { key: 'campaigns', label: 'Where members come from', detail: 'Which channels bring people in', icon: BarChart3 },
     ],
   },
   {
-    key: 'publish',
-    label: 'Publish',
+    key: 'messages',
+    label: 'Messages',
+    icon: MessageSquareText,
+    detail: 'Texts, notices and website',
     items: [
-      { key: 'forms', label: 'Forms & Surveys', detail: 'Build, publish and analyse forms', icon: ListChecks },
-      { key: 'announcements', label: 'Member Notices', detail: 'Reach web and iOS members', icon: BellRing },
-      { key: 'sms', label: 'Text Members', detail: 'SMS any group with a mobile on file', icon: MessageSquareText },
-      { key: 'content', label: 'Site Content', detail: 'Public copy, FAQs and media', icon: PenSquare },
-      { key: 'coaches', label: 'Team Directory', detail: 'Coaches and practitioners', icon: UserSquare2 },
-      { key: 'events', label: 'Event Calendar', detail: 'Training and competition calendar', icon: Trophy },
+      { key: 'sms', label: 'Text members', detail: 'SMS any group with a mobile', icon: MessageSquareText },
+      { key: 'announcements', label: 'App notices', detail: 'Push a notice to the member app', icon: BellRing },
+      { key: 'forms', label: 'Forms & surveys', detail: 'Waivers, sign-ups and feedback', icon: ListChecks },
+      { key: 'content', label: 'Website content', detail: 'Homepage, FAQs and terms', icon: PenSquare },
+      { key: 'coaches', label: 'Coaches page', detail: 'Who appears on the website', icon: UserSquare2 },
+      { key: 'events', label: 'Events page', detail: 'The public events calendar', icon: Trophy },
     ],
   },
   {
-    key: 'commerce',
-    label: 'Commerce',
+    key: 'business',
+    label: 'Business',
+    icon: Briefcase,
+    detail: 'Money, settings, status',
     items: [
-      { key: 'orders', label: 'Orders & Revenue', detail: 'Payments, refunds and recovery', icon: DollarSign },
-      { key: 'products', label: 'Session Packs & Pricing', detail: 'Credits, pricing and Stripe links', icon: Ticket },
-    ],
-  },
-  {
-    key: 'platform',
-    label: 'Platform',
-    items: [
-      { key: 'settings', label: 'Member App Controls', detail: 'Launch, booking and payment switches', icon: Settings },
-      { key: 'health', label: 'Operations Health', detail: 'Stripe, schema and push readiness', icon: ShieldCheck },
-      { key: 'fitbox', label: 'FitBox Review', detail: 'Review provider signals without changing XERT records', icon: ClipboardCheck },
-      { key: 'audit', label: 'Admin Audit', detail: 'Protected operational history', icon: ScrollText },
+      { key: 'orders', label: 'Orders & revenue', detail: 'Payments, refunds and totals', icon: DollarSign },
+      { key: 'products', label: 'Pricing', detail: 'Session packs and prices', icon: Ticket },
+      { key: 'settings', label: 'Settings', detail: 'Launch date, bookings and payments', icon: Settings },
+      { key: 'health', label: 'System status', detail: 'Is everything connected and working', icon: ShieldCheck },
+      { key: 'fitbox', label: 'FitBox review', detail: 'Provider signals, read-only', icon: ClipboardCheck },
+      { key: 'audit', label: 'Activity log', detail: 'Who changed what, and when', icon: ScrollText },
     ],
   },
 ]);
 
-export const ADMIN_WORKSPACES = Object.freeze(ADMIN_WORKSPACE_GROUPS.flatMap(group => group.items));
+/** Back-compat name: the palette and tests iterate groups; hubs are the groups now. */
+export const ADMIN_WORKSPACE_GROUPS = ADMIN_HUBS;
 
-// The three owner jobs used throughout a normal shift stay one tap away on
-// small screens. They are selected from the same catalogue as the desktop
-// sidebar so routes, labels and icons cannot drift between layouts.
-export const ADMIN_MOBILE_WORKSPACES = Object.freeze(ADMIN_WORKSPACES.filter(item => item.mobileLabel));
+export const ADMIN_WORKSPACES = Object.freeze(
+  ADMIN_HUBS.flatMap(hub => hub.items.map(item => ({ ...item, hub: hub.key, hubLabel: hub.label }))),
+);
 
+export function hubForSection(sectionKey) {
+  return ADMIN_HUBS.find(hub => hub.items.some(item => item.key === sectionKey)) || ADMIN_HUBS[0];
+}
+
+/** The phone dock is the five hubs; tapping one opens its first screen. */
+export const ADMIN_MOBILE_WORKSPACES = Object.freeze(
+  ADMIN_HUBS.map(hub => ({ key: hub.items[0].key, hub: hub.key, label: hub.label, mobileLabel: hub.label, icon: hub.icon, detail: hub.detail })),
+);
+
+/** The four things an owner does most, as one-tap buttons on Today. */
 export const ADMIN_QUICK_ACTIONS = Object.freeze([
-  { key: 'calendar', label: 'Create a class', icon: CalendarDays, params: { action: 'create' } },
+  { key: 'calendar', label: 'Add a class', icon: CalendarDays, params: { action: 'create' } },
+  { key: 'sms', label: 'Text members', icon: MessageSquareText },
+  { key: 'announcements', label: 'Publish a notice', icon: BellRing, params: { action: 'create' } },
   { key: 'workouts', label: "Set today's workout", icon: Tv },
-  { key: 'forms', label: 'Create a form or survey', icon: ListChecks, params: { action: 'create' } },
-  { key: 'announcements', label: 'Publish a member notice', icon: BellRing, params: { action: 'create' } },
-  { key: 'products', label: 'Create a session pack', icon: Ticket, params: { action: 'create' } },
-  { key: 'coaches', label: 'Add a team member', icon: UserSquare2, params: { action: 'create' } },
 ]);

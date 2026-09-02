@@ -8,7 +8,7 @@ import { UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
 
 // Admin tools are independently code-split. Most staff sessions only need one
 // operational surface at a time, so there is no reason to preload the rest.
-const AdminOverview = lazy(() => import('@/components/admin/AdminOverview'));
+const AdminToday = lazy(() => import('@/components/admin/AdminToday'));
 const LeadTable = lazy(() => import('@/components/admin/LeadTable'));
 const ClassCalendarAdmin = lazy(() => import('@/components/admin/ClassCalendarAdmin'));
 const WorkoutManager = lazy(() => import('@/components/admin/WorkoutManager'));
@@ -126,7 +126,7 @@ export default function AdminCommandCentre() {
 
   const renderSection = () => {
     switch (section) {
-      case 'overview': return <AdminOverview onNavigate={setSection} />;
+      case 'overview': return <AdminToday onNavigate={setSection} />;
       case 'health': return <OperationsHealth onNavigate={setSection} />;
       case 'fitbox': return <FitboxReconciliation />;
       case 'audit': return <AdminAuditLog />;
@@ -150,7 +150,7 @@ export default function AdminCommandCentre() {
       case 'sms': return <SmsManager />;
       case 'settings': return <SoftLaunchSettings onDirtyChange={setHasUnsavedChanges} />;
       case 'campaigns': return <CampaignStats />;
-      default: return <AdminOverview onNavigate={setSection} />;
+      default: return <AdminToday onNavigate={setSection} />;
     }
   };
 

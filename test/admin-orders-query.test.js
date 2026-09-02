@@ -13,10 +13,9 @@ test('loads the complete order ledger in deterministic bounded server pages', as
   assert.match(getAllOrders, /select\('\*, products\(name\)/);
 });
 
-test('keeps the dashboard activity feed on a small dedicated query', async () => {
-  const source = await readFile(new URL('../src/components/admin/AdminOverview.jsx', import.meta.url), 'utf8');
-  assert.match(source, /getRecentOrders\(6\)/);
-  assert.doesNotMatch(source, /getAllOrders\(/);
+test('the owner home is not an order ledger', async () => {
+  const source = await readFile(new URL('../src/components/admin/AdminToday.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /getAllOrders\(|getRecentOrders\(/);
 });
 
 test('web and native finance expose the immutable terms purchased on each order', async () => {

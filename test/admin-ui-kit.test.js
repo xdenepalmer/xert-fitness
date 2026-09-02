@@ -15,13 +15,13 @@ test('the kit is the single source for buttons, inputs, titles and gutters', asy
     assert.match(kit, new RegExp(`export const ${symbol}`), `${symbol} is exported`);
   }
   assert.match(kit, /ADMIN_INPUT_BARE = 'min-h-11[^']*text-base[^']*sm:text-sm/, 'inputs are 16px on phones so iOS does not zoom');
-  assert.match(kit, /primary: `\$\{BUTTON_BASE\} bg-xert-steel text-xert-navy hover:bg-xert-pale`/);
-  assert.match(kit, /pageTitle: 'font-display text-2xl uppercase tracking-wide text-xert-offwhite sm:text-3xl'/);
-  assert.equal(ADMIN_PAGE_IS_PHONE_FIRST(kit), true, 'gutters are px-4 on phones and p-6 on desktop');
+  assert.match(kit, /primary: `\$\{BUTTON_BASE\} bg-xert-steel text-xert-navy shadow-lg shadow-xert-steel\/20 hover:bg-xert-pale`/);
+  assert.match(kit, /pageTitle: 'font-display text-3xl tracking-wide text-xert-offwhite sm:text-4xl'/);
+  assert.equal(ADMIN_PAGE_IS_PHONE_FIRST(kit), true, 'gutters are px-4 on phones and wider, centred on desktop');
 });
 
 function ADMIN_PAGE_IS_PHONE_FIRST(kit) {
-  return /ADMIN_PAGE = 'px-4 py-5 sm:p-6'/.test(kit);
+  return /ADMIN_PAGE = 'px-4 py-5 sm:px-8 sm:py-7 mx-auto w-full max-w-6xl'/.test(kit);
 }
 
 test('no workspace hand-rolls a primary button, an input class or a page title', async () => {

@@ -34,14 +34,16 @@ test('shows a caught-up state when no reliable queue has work', () => {
 });
 
 test('dashboard action counts query only actionable lead and PT statuses', async () => {
-  const [source, overview] = await Promise.all([
+  const [source, today] = await Promise.all([
     readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/admin/AdminOverview.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/admin/AdminToday.jsx', import.meta.url), 'utf8'),
   ]);
   const dashboard = source.slice(source.indexOf('export async function getDashboardStats'), source.indexOf('// ─── Coaches'));
 
   assert.match(dashboard, /from\('trainer_interest'\)[\s\S]*?\.eq\('status', 'new'\)/);
   assert.match(dashboard, /from\('partner_interest'\)[\s\S]*?\.eq\('status', 'new'\)/);
   assert.match(dashboard, /from\('private_session_requests'\)[\s\S]*?\.eq\('status', 'requested'\)/);
-  assert.match(overview, /!loading && stats && \(/);
+  // Today shows a skeleton until the counts exist, then only actionable queues.
+  assert.match(today, /buildAdminActionQueue\(stats\)/);
+  assert.match(today, /loading && !stats/);
 });

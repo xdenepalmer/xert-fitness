@@ -16,6 +16,8 @@ const TrainerInterest = lazy(() => import('./pages/TrainerInterest'));
 const PartnerInterest = lazy(() => import('./pages/PartnerInterest'));
 const SoftLaunchTimetable = lazy(() => import('./pages/SoftLaunchTimetable'));
 const AdminCommandCentre = lazy(() => import('./pages/AdminCommandCentre'));
+// Dev-only owner shell preview with fixture data; never routed in production builds.
+const AdminPreview = import.meta.env.DEV ? lazy(() => import('./pages/AdminPreview')) : null;
 const About = lazy(() => import('./pages/About'));
 const Contact = lazy(() => import('./pages/Contact'));
 const TrainingGuide = lazy(() => import('./pages/TrainingGuide'));
@@ -73,6 +75,7 @@ const AppRoutes = () => (
       <Route path="/training-guide" element={<TrainingGuide />} />
       {/* ADMIN — requires a signed-in user whose profiles.role = 'admin'.
           Promote an admin with the SQL noted in src/supabase/booking_schema.sql. */}
+      {AdminPreview && <Route path="/admin/__preview" element={<AdminPreview />} />}
       <Route path="/admin" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
       <Route path="/admin/*" element={<AdminRoute><AdminCommandCentre /></AdminRoute>} />
       <Route path="*" element={<PageNotFound />} />
