@@ -3386,7 +3386,6 @@ private struct AdminOwnerTaskSheet: View {
     let session: AuthSession
     let task: XertOwnerTask
     @State private var confirmingDiscard = false
-    @State private var confirmingFitboxSend = false
 
     var body: some View {
         NavigationStack {
@@ -11302,6 +11301,7 @@ private struct AdminLeadDetailView: View {
     @State private var hasEditedDuringPresentation = false
     @State private var hasCommitted = false
     @State private var confirmingDiscard = false
+    @State private var confirmingFitboxSend = false
     @State private var exitStateID = UUID()
     @FocusState private var notesFocused: Bool
 
