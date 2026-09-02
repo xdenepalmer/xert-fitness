@@ -28,7 +28,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+    <div className="min-h-screen bg-xert-navy">
       <ScrollProgress />
       <PublicNav />
 
@@ -62,27 +62,18 @@ export default function Home() {
 
         {/* Final CTA */}
         <Reveal>
-          <section className="py-20 px-6 text-center relative overflow-hidden" style={{ backgroundColor: '#101820', borderTop: '1px solid rgba(123,167,188,0.1)' }}>
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                backgroundImage:
-                  'linear-gradient(rgba(123,167,188,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(123,167,188,0.05) 1px, transparent 1px)',
-                backgroundSize: '64px 64px',
-                maskImage: 'radial-gradient(ellipse at center, black 20%, transparent 75%)',
-                WebkitMaskImage: 'radial-gradient(ellipse at center, black 20%, transparent 75%)',
-              }}
-            />
-            <div className="max-w-xl mx-auto relative">
-              <h2 className="font-display uppercase mb-4 text-xert-offwhite" style={{ fontSize: 'clamp(2rem,5vw,3rem)' }}>
+          <section className="xert-glow-center relative overflow-hidden bg-xert-navy px-6 py-14 text-center sm:py-20">
+            <div aria-hidden="true" className="xert-divider absolute top-0 left-0 right-0" />
+            <div aria-hidden="true" className="xert-grid-faint absolute inset-0 pointer-events-none" />
+            <div className="relative mx-auto max-w-xl">
+              <h2 className="mb-4 font-display uppercase text-xert-offwhite" style={{ fontSize: 'clamp(2rem,5vw,3rem)' }}>
                 Book your first session.
               </h2>
-              <p className="font-body leading-relaxed mb-8" style={{ color: 'rgba(209,221,230,0.65)', fontSize: '1rem' }}>
+              <p className="mx-auto mb-8 max-w-[40ch] font-body text-base leading-relaxed text-xert-pale/65">
                 Contact XERT to learn more about the coaching system, class packs and the training block that fits your next goal.
               </p>
               <a href="/booking"
-                className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase transition-all active:scale-[0.98]"
-                style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                className="xert-btn-primary inline-flex min-h-[52px] w-full items-center justify-center px-8 py-4 font-display text-lg uppercase sm:w-auto">
                 Book Your First Session
               </a>
             </div>

@@ -4,15 +4,6 @@ import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 
 const LOGO = '/assets/xert-logo-horizontal-light.png';
 
-/* Blueprint grid backdrop shared with PageHeader/home hero. */
-const GRID_BACKDROP = {
-  backgroundImage:
-    'linear-gradient(rgba(123,167,188,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(123,167,188,0.05) 1px, transparent 1px)',
-  backgroundSize: '48px 48px',
-  maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 40%, transparent)',
-  WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 40%, transparent)',
-};
-
 export default function PublicNav() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -96,24 +87,23 @@ export default function PublicNav() {
   ];
 
   const solid = scrolled || menuOpen;
-  const navBg = solid
-    ? 'bg-xert-navy border-b'
-    : 'bg-transparent border-b border-transparent';
 
   // No backdrop-filter on the nav: a non-none backdrop-filter makes it a
   // containing block for fixed descendants, which collapses the mobile sheet
-  // to zero height — and the bar is fully opaque when solid anyway. z-index
-  // rises above StickyMobileCTA (z-40) while the sheet is open.
+  // to zero height — so the solid bar is a near-opaque navy with a hairline
+  // instead of frosted glass. z-index rises above StickyMobileCTA (z-40)
+  // while the sheet is open.
   return (
     <nav ref={navRef}
-      className={`fixed top-0 left-0 right-0 ${menuOpen ? 'z-50' : 'z-40'} transition-all duration-300 ${navBg}`}
+      className={`fixed top-0 left-0 right-0 ${menuOpen ? 'z-50' : 'z-40'} border-b transition-[background-color,border-color] duration-300`}
       style={{
-        borderColor: solid ? 'rgba(123,167,188,0.15)' : 'transparent',
+        backgroundColor: solid ? 'rgba(16,24,32,0.9)' : 'transparent',
+        borderColor: solid ? 'rgba(123,167,188,0.14)' : 'transparent',
         paddingTop: 'env(safe-area-inset-top)',
       }}>
       {/* Skip link: invisible until keyboard focus, jumps past the nav. */}
       <a href="#main"
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:px-5 focus-visible:py-3 focus-visible:bg-xert-steel focus-visible:text-xert-navy font-display text-sm uppercase tracking-wide">
+        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded-xl focus-visible:px-5 focus-visible:py-3 focus-visible:bg-xert-steel focus-visible:text-xert-navy font-display text-sm uppercase tracking-wide">
         Skip to content
       </a>
 
@@ -146,7 +136,7 @@ export default function PublicNav() {
             {session ? 'Account' : 'Log In'}
           </Link>
           <Link to="/booking"
-            className="xert-btn-primary px-5 py-2 font-display text-sm uppercase tracking-wide">
+            className="xert-btn-primary inline-flex min-h-11 items-center px-5 py-2 font-display text-sm uppercase tracking-wide">
             Book Now
           </Link>
         </div>
@@ -159,50 +149,69 @@ export default function PublicNav() {
           aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
           aria-expanded={menuOpen}
           aria-controls="mobile-navigation"
-          className="md:hidden min-w-11 min-h-11 p-2 flex flex-col items-center justify-center text-xert-pale/70">
-          <div className={`w-5 h-0.5 bg-current transition-all mb-1.5 ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
-          <div className={`w-5 h-0.5 bg-current transition-all mb-1.5 ${menuOpen ? 'opacity-0' : ''}`} />
-          <div className={`w-5 h-0.5 bg-current transition-all ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+          className="md:hidden min-w-11 min-h-11 p-2 flex flex-col items-center justify-center rounded-xl text-xert-pale/70">
+          <div className={`w-5 h-0.5 rounded-full bg-current transition-all mb-1.5 ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+          <div className={`w-5 h-0.5 rounded-full bg-current transition-all mb-1.5 ${menuOpen ? 'opacity-0' : ''}`} />
+          <div className={`w-5 h-0.5 rounded-full bg-current transition-all ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
         </button>
       </div>
 
-      {/* Mobile menu: full-screen sheet below the bar */}
+      {/* Mobile menu: full-screen sheet below the bar. The link list scrolls;
+          the account + booking actions stay pinned in a glass panel at the
+          bottom, inside the safe area. */}
       {menuOpen && (
         <div id="mobile-navigation"
-          className="md:hidden fixed inset-x-0 bottom-0 overflow-y-auto bg-xert-navy"
+          className="xert-glow-top md:hidden fixed inset-x-0 bottom-0 flex flex-col bg-xert-navy"
           style={{ top: 'calc(3.5rem + env(safe-area-inset-top))' }}>
-          <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={GRID_BACKDROP} />
-          <div className="relative flex flex-col gap-1 px-6 py-8"
-            style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}>
+          <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
             {navLinks.map((l, i) => {
               const active = l.to && location.pathname === l.to;
-              const itemClass = `xert-enter xert-enter-up flex min-h-11 items-center font-display text-3xl uppercase py-1.5 ${
+              const itemClass = `xert-enter xert-enter-up flex min-h-[4.25rem] items-center justify-between gap-4 py-3 font-display text-[2.375rem] uppercase leading-none ${
                 active ? 'text-xert-steel' : 'text-xert-pale'
               }`;
               const itemStyle = { animationDelay: `${i * 55}ms` };
+              const chevron = (
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  className={`h-5 w-5 shrink-0 ${active ? 'text-xert-steel' : 'text-xert-steel/50'}`}>
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              );
 
-              return l.to ? (
-                <Link key={l.to} to={l.to} onClick={() => setMenuOpen(false)}
-                  className={itemClass} style={itemStyle}>
-                  {l.label}
-                </Link>
-              ) : (
-                <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
-                  className={itemClass} style={itemStyle}>
-                  {l.label}
-                </a>
+              return (
+                <React.Fragment key={l.to || l.href}>
+                  {i > 0 && <div aria-hidden="true" className="xert-divider" />}
+                  {l.to ? (
+                    <Link to={l.to} onClick={() => setMenuOpen(false)}
+                      className={itemClass} style={itemStyle}>
+                      {l.label}
+                      {chevron}
+                    </Link>
+                  ) : (
+                    <a href={l.href} onClick={() => setMenuOpen(false)}
+                      className={itemClass} style={itemStyle}>
+                      {l.label}
+                      {chevron}
+                    </a>
+                  )}
+                </React.Fragment>
               );
             })}
-            <Link to={session ? '/account' : '/login'} onClick={() => setMenuOpen(false)}
-              className="xert-enter xert-enter-up flex min-h-11 items-center font-display text-3xl uppercase py-1.5 text-xert-pale"
+          </div>
+
+          <div className="shrink-0 px-4 pt-2"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+            <div className="xert-glass xert-enter xert-enter-up grid grid-cols-1 gap-3 rounded-2xl p-3 shadow-[0_20px_50px_-18px_rgba(0,0,0,0.85)]"
               style={{ animationDelay: `${navLinks.length * 55}ms` }}>
-              {session ? 'Account' : 'Log In'}
-            </Link>
-            <Link to="/booking" onClick={() => setMenuOpen(false)}
-              className="xert-btn-primary xert-enter xert-enter-up mt-6 flex min-h-12 items-center justify-center font-display text-lg uppercase tracking-wide"
-              style={{ animationDelay: `${(navLinks.length + 1) * 55}ms` }}>
-              Book Now
-            </Link>
+              <Link to={session ? '/account' : '/login'} onClick={() => setMenuOpen(false)}
+                className="xert-btn-ghost flex min-h-[52px] w-full items-center justify-center font-display text-lg uppercase tracking-wide">
+                {session ? 'Account' : 'Log In'}
+              </Link>
+              <Link to="/booking" onClick={() => setMenuOpen(false)}
+                className="xert-btn-primary flex min-h-[52px] w-full items-center justify-center font-display text-lg uppercase tracking-wide">
+                Book Now
+              </Link>
+            </div>
           </div>
         </div>
       )}

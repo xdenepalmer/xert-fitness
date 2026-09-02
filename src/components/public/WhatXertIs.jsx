@@ -22,52 +22,52 @@ const trainingSystem = [
 
 export default function WhatXertIs() {
   return (
-    <section className="py-20 px-6" style={{ backgroundColor: '#101820' }}>
-      <div className="max-w-5xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start mb-16">
+    <section className="bg-xert-navy px-6 py-14 sm:py-20">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-10 grid grid-cols-1 items-start gap-8 sm:mb-14 lg:grid-cols-2 lg:gap-12">
           <div>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-              <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>The XERT Training System</span>
+            <div className="mb-5 flex items-center gap-3">
+              <div className="h-px w-6 bg-xert-steel" />
+              <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">The XERT Training System</span>
             </div>
-            <h2 className="font-display text-xert-offwhite uppercase mb-6"
+            <h2 className="mb-6 font-display uppercase text-xert-offwhite"
               style={{ fontSize: 'clamp(2.5rem,6vw,4.5rem)', lineHeight: 0.95 }}>
               Purposeful.<br />
-              <span style={{ color: '#7BA7BC' }}>Progressive.</span><br />
+              <span className="text-xert-steel">Progressive.</span><br />
               Sustainable.
             </h2>
             {/* Horizontal rule with icon */}
-            <div className="flex items-center gap-4 mb-6">
-              <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }} />
+            <div className="flex items-center gap-4">
+              <div aria-hidden="true" className="xert-divider flex-1" />
               <img src={LOGO_ICON} alt="" loading="lazy" decoding="async" width="712" height="412" className="h-6 w-auto opacity-60" />
-              <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.2)' }} />
+              <div aria-hidden="true" className="xert-divider flex-1" />
             </div>
           </div>
 
-          <div>
-            <p className="font-body leading-relaxed mb-4" style={{ color: '#D1DDE6', fontSize: '1rem' }}>
+          <div className="max-w-[44ch]">
+            <p className="mb-4 font-body text-base leading-relaxed text-xert-pale">
               XERT Fitness was created to provide structured, coach-led functional fitness training in a supportive, performance-focused environment.
             </p>
-            <p className="font-body leading-relaxed mb-4" style={{ color: 'rgba(209,221,230,0.7)', fontSize: '0.9375rem' }}>
+            <p className="mb-4 font-body text-[0.9375rem] leading-relaxed text-xert-pale/70">
               Every session is programmed with intent and delivered through a booking-based semi-private coaching model designed to help members train consistently, move better and improve performance over time.
             </p>
-            <p className="font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.6)', fontSize: '0.9375rem' }}>
+            <p className="font-body text-[0.9375rem] leading-relaxed text-xert-pale/60">
               Whether you are starting your fitness journey or preparing for your next event, XERT provides coaching that meets you where you are.
             </p>
           </div>
         </div>
 
         {/* Training system grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
           {trainingSystem.map((p, i) => (
-            <div key={i} className="p-6 border transition-colors flex flex-col"
-              style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: 'rgba(50,72,90,0.2)' }}>
-              <span className="font-display text-sm tabular-nums mb-5" style={{ color: 'rgba(123,167,188,0.55)' }}>
+            <div key={i} className="xert-card flex flex-col p-5 sm:p-6">
+              <span className="xert-chip mb-5 self-start tabular-nums">
                 {String(i + 1).padStart(2, '0')}
               </span>
-              <p className="font-display text-xert-offwhite uppercase text-xl leading-tight mb-3">{p.label}</p>
-              <p className="font-body text-sm leading-relaxed flex-1" style={{ color: 'rgba(209,221,230,0.66)' }}>{p.desc}</p>
-              <p className="font-body text-xs uppercase tracking-wider mt-5 pt-4 border-t" style={{ borderColor: 'rgba(123,167,188,0.16)', color: '#7BA7BC' }}>
+              <p className="mb-3 font-display text-xl uppercase leading-tight text-xert-offwhite">{p.label}</p>
+              <p className="flex-1 font-body text-sm leading-relaxed text-xert-pale/70">{p.desc}</p>
+              <div aria-hidden="true" className="xert-divider mt-5" />
+              <p className="pt-4 font-body text-xs uppercase tracking-wider text-xert-steel">
                 {p.note}
               </p>
             </div>

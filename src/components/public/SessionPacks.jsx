@@ -12,6 +12,8 @@ const steps = [
   'Train with expert coaching in a structured semi-private environment.',
 ];
 
+const SOLID_TILE = { backgroundColor: '#7BA7BC', color: '#101820' };
+
 export default function SessionPacks() {
   const [packs, setPacks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,38 +44,38 @@ export default function SessionPacks() {
   }, []);
 
   return (
-    <section id="booking" className="py-20 px-6" style={{ backgroundColor: '#0d1720' }}>
-      <div className="max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.15fr] gap-12 items-start mb-12">
+    <section id="booking" className="bg-xert-ink px-6 py-14 sm:py-20">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8 grid grid-cols-1 items-start gap-8 sm:mb-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12">
           <div>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-              <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Classes, Programs, Products</span>
+            <div className="mb-5 flex items-center gap-3">
+              <div className="h-px w-6 bg-xert-steel" />
+              <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Classes, Programs, Products</span>
             </div>
-            <h2 className="font-display uppercase mb-6" style={{ fontSize: 'clamp(2.5rem,6vw,4rem)', lineHeight: 0.95, color: '#F1F3F4' }}>
+            <h2 className="mb-6 font-display uppercase text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,6vw,4rem)', lineHeight: 0.95 }}>
               Simple booking.<br />
-              <span style={{ color: '#7BA7BC' }}>Structured training.</span>
+              <span className="text-xert-steel">Structured training.</span>
             </h2>
-            <p className="font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.7)' }}>
+            <p className="max-w-[44ch] font-body leading-relaxed text-xert-pale/70">
               XERT operates through a booking-based system to maintain coaching quality and controlled class sizes. Initial class sizes are set to 8 people and will gradually increase as the business launches.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
             {steps.map((step, i) => (
-              <div key={step} className="border p-5" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' }}>
-                <p className="font-display text-sm tabular-nums mb-4" style={{ color: '#7BA7BC' }}>
+              <div key={step} className="xert-card-flat p-4 sm:p-5">
+                <p className="xert-chip mb-4 tabular-nums">
                   STEP {i + 1}
                 </p>
-                <p className="font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.72)' }}>{step}</p>
+                <p className="font-body text-sm leading-relaxed text-xert-pale/75">{step}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
           {loading && [1, 2, 3].map(index => (
-            <div key={index} className="h-[29rem] border animate-pulse" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(16,24,32,0.64)' }} />
+            <div key={index} className="xert-card h-[29rem] animate-pulse" />
           ))}
           {!loading && packs.map(pack => {
             const benefits = [
@@ -84,44 +86,39 @@ export default function SessionPacks() {
             return (
             <article
               key={pack.id}
-              className="relative border p-6 flex flex-col"
-              style={{
-                borderColor: pack.featured ? '#7BA7BC' : 'rgba(123,167,188,0.16)',
-                backgroundColor: pack.featured ? 'rgba(123,167,188,0.12)' : 'rgba(16,24,32,0.64)',
-              }}
+              className={`${pack.featured ? 'xert-card-accent' : 'xert-card'} relative flex flex-col p-5 sm:p-6`}
             >
               {pack.featured && (
-                <span className="absolute top-4 right-4 font-body text-[10px] uppercase tracking-wider px-2 py-1" style={{ backgroundColor: '#D1DDE6', color: '#101820' }}>
+                <span className="xert-chip xert-chip-solid absolute right-4 top-4">
                   Most Popular
                 </span>
               )}
 
-              <div className="w-11 h-11 flex items-center justify-center mb-5" style={{ backgroundColor: pack.featured ? '#7BA7BC' : 'rgba(123,167,188,0.14)' }}>
-                <Ticket className="w-5 h-5" style={{ color: pack.featured ? '#101820' : '#7BA7BC' }} />
+              <div className="xert-icon-tile mb-5" style={pack.featured ? SOLID_TILE : undefined}>
+                <Ticket className="w-5 h-5" />
               </div>
 
-              <h3 className="font-display text-3xl uppercase text-xert-offwhite leading-none mb-2">{pack.name}</h3>
+              <h3 className="mb-2 font-display text-3xl uppercase leading-none text-xert-offwhite">{pack.name}</h3>
               {comingSoon ? (
-                <p className="font-display text-2xl uppercase mb-2" style={{ color: '#7BA7BC' }}>{PRICES_COMING_SOON_LABEL}</p>
+                <p className="mb-2 font-display text-2xl uppercase text-xert-steel">{PRICES_COMING_SOON_LABEL}</p>
               ) : (
-                <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>{formatPackPrice(pack.price_cents, pack.currency)}</p>
+                <p className="mb-2 font-display text-[2.75rem] uppercase leading-none text-xert-steel">{formatPackPrice(pack.price_cents, pack.currency)}</p>
               )}
-              <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'rgba(209,221,230,0.45)' }}>{formatPackValidity(pack.validity_days)}</p>
-              <p className="font-body text-sm leading-relaxed mb-5" style={{ color: 'rgba(209,221,230,0.68)' }}>{pack.description}</p>
+              <p className="mb-5 font-body text-xs uppercase tracking-wider text-xert-pale/50">{formatPackValidity(pack.validity_days)}</p>
+              <p className="mb-5 font-body text-sm leading-relaxed text-xert-pale/70">{pack.description}</p>
 
-              <div className="space-y-3 mb-6 flex-1">
+              <div className="mb-6 flex-1 space-y-3">
                 {benefits.map(item => (
                   <div key={item} className="flex items-start gap-3">
-                    <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
-                    <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.62)' }}>{item}</p>
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-xert-steel" />
+                    <p className="font-body text-sm text-xert-pale/65">{item}</p>
                   </div>
                 ))}
               </div>
 
               <Link
                 to="/booking"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98]"
-                style={{ backgroundColor: pack.featured ? '#7BA7BC' : 'transparent', color: pack.featured ? '#101820' : '#D1DDE6', border: pack.featured ? '1px solid #7BA7BC' : '1px solid rgba(123,167,188,0.35)' }}
+                className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex min-h-[52px] w-full items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide`}
               >
                 {packCta(pack.slug)}
                 <ArrowRight className="w-4 h-4" />
@@ -131,11 +128,11 @@ export default function SessionPacks() {
           })}
         </div>
         {!loading && (error || packs.length === 0) && (
-          <div className="mt-6 border p-5 text-center" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' }}>
-            <p className="font-body text-sm mb-4" style={{ color: 'rgba(209,221,230,0.68)' }}>
+          <div className="xert-card-flat mt-4 p-5 text-center sm:mt-6">
+            <p className="mb-4 font-body text-sm text-xert-pale/70">
               Session packs are available from the live booking page.
             </p>
-            <Link to="/booking#packs" className="inline-flex items-center gap-2 font-display text-sm uppercase" style={{ color: '#7BA7BC' }}>
+            <Link to="/booking#packs" className="inline-flex min-h-11 items-center gap-2 font-display text-sm uppercase text-xert-steel">
               View session packs <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

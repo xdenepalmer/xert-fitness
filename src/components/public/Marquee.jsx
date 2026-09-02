@@ -10,10 +10,7 @@ export default function Marquee() {
   const items = [...WORDS, ...WORDS];
 
   return (
-    <div
-      className="relative overflow-hidden border-y py-5"
-      style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: '#0d1720' }}
-    >
+    <div className="relative overflow-hidden border-y border-xert-steel/10 bg-xert-ink py-4 sm:py-5">
       <div className="xert-marquee-track flex whitespace-nowrap">
         {items.map((w, i) => (
           <span key={i} className="flex items-center shrink-0">
@@ -23,7 +20,7 @@ export default function Marquee() {
             >
               {w}
             </span>
-            <span className="w-1.5 h-1.5 rounded-full mx-2" style={{ backgroundColor: '#7BA7BC' }} />
+            <span className="w-1.5 h-1.5 rounded-full mx-2 bg-xert-steel" />
           </span>
         ))}
       </div>

@@ -11,42 +11,39 @@ const audiences = [
 
 export default function AudienceRows() {
   return (
-    <section className="py-20 px-6" style={{ backgroundColor: '#0d1720' }}>
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Who It's For</span>
+    <section className="bg-xert-ink px-6 py-14 sm:py-20">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="h-px w-6 bg-xert-steel" />
+          <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Who It's For</span>
         </div>
 
-        <h2 className="font-display uppercase mb-10"
-          style={{ fontSize: 'clamp(2rem,5vw,3rem)', lineHeight: 0.95, color: '#F1F3F4' }}>
+        <h2 className="mb-8 font-display uppercase text-xert-offwhite sm:mb-10"
+          style={{ fontSize: 'clamp(2rem,5vw,3rem)', lineHeight: 0.95 }}>
           Training for everyday people<br />
-          <span style={{ color: 'rgba(209,221,230,0.45)' }}>through to athletes.</span>
+          <span className="text-xert-pale/45">through to athletes.</span>
         </h2>
 
-        <div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           {audiences.map((a, i) => (
             <div key={i}
-              className="flex items-center gap-6 py-4 border-b transition-colors group"
-              style={{ borderColor: 'rgba(123,167,188,0.12)' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.35)'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.12)'}>
-              <span className="font-display text-xs tabular-nums w-6 shrink-0" style={{ color: 'rgba(123,167,188,0.4)' }}>
+              className="xert-card-flat group flex items-center gap-4 px-4 py-4 transition-colors hover:border-xert-steel/40 sm:px-5">
+              <span className="w-6 shrink-0 font-display text-xs tabular-nums text-xert-steel/40">
                 {String(i + 1).padStart(2, '0')}
               </span>
-              <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                <span className="font-display text-xl uppercase text-xert-offwhite transition-colors group-hover:text-xert-pale"
+              <div className="min-w-0 flex-1">
+                <span className="block font-display text-xl uppercase text-xert-offwhite transition-colors group-hover:text-xert-pale"
                   style={{ letterSpacing: '0.01em' }}>
                   {a.group}
                 </span>
-                <span className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.45)' }}>
+                <span className="mt-0.5 block font-body text-sm text-xert-pale/55">
                   {a.descriptor}
                 </span>
               </div>
             </div>
           ))}
         </div>
-        <p className="font-body text-sm leading-relaxed mt-8 max-w-2xl" style={{ color: 'rgba(209,221,230,0.62)' }}>
+        <p className="mt-6 max-w-2xl font-body text-sm leading-relaxed text-xert-pale/65 sm:mt-8">
           All sessions are scalable and designed to meet members at their current fitness level.
         </p>
       </div>

@@ -39,23 +39,23 @@ export default function StickyMobileCTA() {
 
   const visible = scrolled && !footerInView;
 
+  // A floating glass pill inset from the screen edges. The outer track never
+  // catches taps (so the gutters stay live); only the pill does, and only
+  // while it is on screen.
   return (
     <div
       aria-hidden={!visible}
-      className={`fixed bottom-0 left-0 right-0 z-40 md:hidden px-4 pt-3 transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}
-      style={{
-        backgroundColor: 'rgba(16,24,32,0.97)',
-        borderTop: '1px solid rgba(123,167,188,0.2)',
-        backdropFilter: 'blur(10px)',
-        paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
-      }}
+      className={`fixed bottom-0 left-0 right-0 z-40 md:hidden px-4 pointer-events-none transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}
+      style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
     >
-      <Link to="/booking"
-        tabIndex={visible ? 0 : -1}
-        className="xert-btn-primary flex items-center justify-center gap-2 w-full text-center py-3.5 font-display text-base uppercase tracking-wide">
-        Book Your First Session
-        <ArrowRight className="w-4 h-4" aria-hidden="true" />
-      </Link>
+      <div className={`xert-glass rounded-2xl p-2 shadow-[0_20px_50px_-18px_rgba(0,0,0,0.85)] ${visible ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        <Link to="/booking"
+          tabIndex={visible ? 0 : -1}
+          className="xert-btn-primary flex min-h-[52px] w-full items-center justify-center gap-2 py-3 text-center font-display text-base uppercase tracking-wide">
+          Book Your First Session
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
+        </Link>
+      </div>
     </div>
   );
 }

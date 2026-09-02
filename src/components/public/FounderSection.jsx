@@ -5,54 +5,49 @@ const PHOTO = '/assets/training-philosophy.jpg';
 
 export default function FounderSection() {
   return (
-    <section className="relative py-20 px-6 overflow-hidden" style={{ backgroundColor: '#101820' }}>
-      {/* Left accent line */}
-      <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: '#32485A' }} />
-
-      <div className="max-w-5xl mx-auto pl-8">
-        <div className="flex items-center gap-3 mb-8">
-          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Philosophy</span>
+    <section className="xert-glow-center relative overflow-hidden bg-xert-navy px-6 py-14 sm:py-20">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-6 flex items-center gap-3 sm:mb-8">
+          <div className="h-px w-6 bg-xert-steel" />
+          <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Philosophy</span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-12">
           <div>
-            <h2 className="font-display uppercase mb-6"
-              style={{ fontSize: 'clamp(2rem,5vw,3.5rem)', lineHeight: 0.95, color: '#F1F3F4' }}>
+            <h2 className="mb-6 font-display uppercase text-xert-offwhite"
+              style={{ fontSize: 'clamp(2rem,5vw,3.5rem)', lineHeight: 0.95 }}>
               Train for life.<br />
-              <span style={{ color: 'rgba(209,221,230,0.5)' }}>Compete for fun.</span>
+              <span className="text-xert-pale/50">Compete for fun.</span>
             </h2>
 
             {/* Badges */}
-            <div className="flex flex-wrap gap-2 mb-8 lg:mb-0">
+            <div className="flex flex-wrap gap-2">
               {['Real-world events', 'Sustainable progress', 'Community accountability'].map(b => (
-                <span key={b} className="px-3 py-1.5 font-body text-xs uppercase tracking-wider border"
-                  style={{ borderColor: 'rgba(123,167,188,0.3)', color: '#7BA7BC' }}>
+                <span key={b} className="xert-chip">
                   {b}
                 </span>
               ))}
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="relative aspect-video overflow-hidden mb-6">
+          <div>
+            <div className="relative mb-6 aspect-video overflow-hidden rounded-2xl border border-xert-steel/15 shadow-[0_30px_70px_-30px_rgba(0,0,0,0.8)]">
               <FadeImage src={PHOTO} alt="Training at XERT" className="w-full h-full object-cover"
                 style={{ filter: 'saturate(0.6) brightness(0.7)' }} />
-              {/* Frame ticks */}
-              <div className="absolute top-4 left-4 w-8 h-8 border-t border-l" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
-              <div className="absolute bottom-4 right-4 w-8 h-8 border-b border-r" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
+              <div className="absolute inset-0"
+                style={{ background: 'linear-gradient(180deg, transparent 55%, rgba(16,24,32,0.55) 100%)' }} />
             </div>
 
-            <p className="font-body leading-relaxed" style={{ color: '#D1DDE6', fontSize: '1rem' }}>
+            <p className="max-w-[44ch] font-body text-base leading-relaxed text-xert-pale">
               XERT is built around preparing members for real-world events, from local sport to endurance racing, functional fitness competitions and personal challenges.
             </p>
-            <p className="font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.7)', fontSize: '0.9375rem' }}>
+            <p className="mt-4 max-w-[44ch] font-body text-[0.9375rem] leading-relaxed text-xert-pale/70">
               Training is purposeful, progressive and sustainable. Members choose the events that matter to them, train together and build toward shared goals throughout the year.
             </p>
-            <div className="pt-4 border-t" style={{ borderColor: 'rgba(123,167,188,0.2)' }}>
-              <p className="font-display text-sm uppercase tracking-widest" style={{ color: 'rgba(209,221,230,0.35)' }}>
-                Beat Your Best.
-              </p>
-            </div>
+            <div aria-hidden="true" className="xert-divider mt-6" />
+            <p className="pt-4 font-display text-sm uppercase tracking-widest text-xert-pale/35">
+              Beat Your Best.
+            </p>
           </div>
         </div>
       </div>

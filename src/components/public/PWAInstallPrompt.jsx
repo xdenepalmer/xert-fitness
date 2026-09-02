@@ -61,28 +61,21 @@ export default function PWAInstallPrompt({ context = 'member' }) {
 
   return (
     visible ? (
-        // Below md the StickyMobileCTA docks to the bottom edge, so the sheet
+        // Below md the StickyMobileCTA floats at the bottom edge, so the sheet
         // sits above its height (incl. safe area) instead of overlapping it.
-        <div className={`xert-sheet-enter fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-0 right-0 p-3 sm:left-auto sm:right-4 sm:max-w-sm sm:p-4 md:bottom-4 ${context === 'owner' ? 'z-[45]' : 'z-[60]'}`}>
+        <div className={`xert-sheet-enter fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-0 right-0 px-4 sm:left-auto sm:right-4 sm:max-w-sm sm:px-0 md:bottom-4 ${context === 'owner' ? 'z-[45]' : 'z-[60]'}`}>
           <div
-            className="flex items-center gap-4 p-4 border"
-            style={{
-              backgroundColor: 'rgba(16,24,32,0.96)',
-              borderColor: 'rgba(123,167,188,0.35)',
-              backdropFilter: 'blur(12px)',
-            }}
+            className="xert-glass flex items-center gap-3 rounded-2xl p-3 shadow-[0_20px_50px_-18px_rgba(0,0,0,0.85)] sm:gap-4 sm:p-4"
+            style={{ backgroundColor: 'rgba(16,24,32,0.94)' }}
           >
-            <div
-              className="shrink-0 w-11 h-11 flex items-center justify-center"
-              style={{ backgroundColor: '#7BA7BC' }}
-            >
-              <Download className="w-5 h-5" style={{ color: '#101820' }} />
+            <div className="xert-icon-tile" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+              <Download className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-display text-base uppercase leading-none text-xert-offwhite">
                 {context === 'owner' ? 'Install Command Centre' : 'Install XERT'}
               </p>
-              <p className="font-body text-xs mt-1" style={{ color: 'rgba(209,221,230,0.6)' }}>
+              <p className="mt-1 font-body text-xs text-xert-pale/60">
                 {showIosInstructions
                   ? 'Tap Share, then Add to Home Screen for one-tap access.'
                   : context === 'owner'
@@ -100,7 +93,7 @@ export default function PWAInstallPrompt({ context = 'member' }) {
             )}
             <button
               onClick={dismiss}
-              className="shrink-0 -my-2 -mr-2 flex h-11 w-11 items-center justify-center"
+              className="-my-2 -mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
               aria-label="Dismiss install prompt"
             >
               <X className="w-4 h-4 text-xert-pale/70" aria-hidden="true" />

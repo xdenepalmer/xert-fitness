@@ -7,6 +7,12 @@ const LOGO_FULL_WHITE = '/assets/xert-logo-horizontal-light.png';
 
 const VALUES = ['Discipline', 'Structure', 'Purpose', 'Performance', 'Movement Quality', 'Longevity', 'Community', 'Preparation'];
 
+const STATS = [
+  { label: 'Coached Model', value: 'Semi-private' },
+  { label: 'Programming', value: '12-week blocks' },
+  { label: 'Location', value: 'Kingaroy QLD' },
+];
+
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
 export default function Hero() {
@@ -83,27 +89,22 @@ export default function Hero() {
         ))}
       </div>
 
-      {/* Steel-blue gradient overlay */}
-      <div
-        ref={overlayRef}
-        className="absolute inset-0"
-        style={{
-          opacity: 1,
-          background: 'linear-gradient(160deg, rgba(16,24,32,0.92) 0%, rgba(50,72,90,0.6) 50%, rgba(16,24,32,0.97) 100%)',
-        }}
-      />
+      {/* Grade overlays — one node so the parallax fades them together. On
+          phones the darkness pools at the bottom so copy and CTAs sit on ink;
+          desktop keeps the diagonal steel grade. */}
+      <div ref={overlayRef} className="absolute inset-0" style={{ opacity: 1 }}>
+        <div
+          className="absolute inset-0 lg:hidden"
+          style={{ background: 'linear-gradient(180deg, rgba(16,24,32,0.5) 0%, rgba(16,24,32,0.6) 28%, rgba(16,24,32,0.9) 58%, rgba(16,24,32,0.99) 100%)' }}
+        />
+        <div
+          className="absolute inset-0 hidden lg:block"
+          style={{ background: 'linear-gradient(160deg, rgba(16,24,32,0.92) 0%, rgba(50,72,90,0.6) 50%, rgba(16,24,32,0.97) 100%)' }}
+        />
+      </div>
 
-      {/* Architectural blueprint grid */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(123,167,188,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(123,167,188,0.05) 1px, transparent 1px)',
-          backgroundSize: '80px 80px',
-          maskImage: 'linear-gradient(180deg, transparent, black 30%, black 70%, transparent)',
-          WebkitMaskImage: 'linear-gradient(180deg, transparent, black 30%, black 70%, transparent)',
-        }}
-      />
+      {/* Soft steel atmosphere */}
+      <div aria-hidden="true" className="xert-glow-top absolute inset-0 pointer-events-none" />
 
       {/* Top fine animated line */}
       <div
@@ -115,7 +116,7 @@ export default function Hero() {
       <div className="relative z-10 h-14" />
 
       {/* Main hero content */}
-      <div ref={contentRef} className="relative z-10 flex-1 flex flex-col justify-center px-6 pt-5 pb-8 sm:px-10 sm:pt-8 sm:pb-20 lg:px-16 will-change-transform" style={{ transform: 'translate3d(0,0,0)' }}>
+      <div ref={contentRef} className="relative z-10 flex-1 flex flex-col justify-center px-6 pt-4 pb-8 sm:px-10 sm:pt-8 sm:pb-16 lg:px-16 will-change-transform" style={{ transform: 'translate3d(0,0,0)' }}>
         <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
 
           {/* Left — brand + copy */}
@@ -124,13 +125,13 @@ export default function Hero() {
               <img
                 src={LOGO_FULL_WHITE}
                 alt="XERT Fitness"
-                className="h-14 w-auto object-contain sm:h-20"
+                className="h-12 w-auto object-contain sm:h-20"
               />
             </div>
 
             <div className="xert-enter xert-enter-left mb-4 flex min-w-0 items-start gap-3 sm:mb-6" style={{ animationDelay: '150ms' }}>
-              <div className="mt-2 h-px w-6 shrink-0" style={{ backgroundColor: '#7BA7BC' }} />
-              <span className="min-w-0 font-body text-xs uppercase leading-relaxed tracking-[0.2em] sm:tracking-[0.25em]" style={{ color: '#7BA7BC' }}>Functional Fitness Training Facility</span>
+              <div className="mt-2 h-px w-6 shrink-0 bg-xert-steel" />
+              <span className="min-w-0 font-body text-xs uppercase leading-relaxed tracking-[0.2em] text-xert-steel sm:tracking-[0.25em]">Functional Fitness Training Facility</span>
             </div>
 
             {/* Headline — line-by-line reveal */}
@@ -145,28 +146,28 @@ export default function Hero() {
             </h1>
 
             <div className="xert-enter xert-enter-up" style={{ animationDelay: '600ms' }}>
-              <p className="font-body text-base sm:text-lg leading-relaxed mb-3" style={{ color: '#D1DDE6', maxWidth: '42ch' }}>
+              <p className="mb-3 font-body text-base leading-relaxed text-xert-pale sm:text-lg" style={{ maxWidth: '40ch' }}>
                 {content.subheading}
               </p>
-              <p className="mb-5 font-body text-sm leading-relaxed sm:mb-8" style={{ color: '#7BA7BC', maxWidth: '38ch' }}>
+              <p className="mb-5 font-body text-sm leading-relaxed text-xert-steel sm:mb-7" style={{ maxWidth: '38ch' }}>
                 {content.supporting}
               </p>
 
-              <div className="mb-5 flex flex-col items-start gap-2 sm:mb-8 sm:flex-row sm:items-center sm:gap-3">
-                <div className="flex max-w-full items-start gap-2 border px-3 py-1.5" style={{ borderColor: 'rgba(123,167,188,0.4)' }}>
-                  <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full animate-pulse" style={{ backgroundColor: '#7BA7BC' }} />
-                  <span className="font-body text-xs uppercase leading-relaxed tracking-wider" style={{ color: '#7BA7BC' }}>Booking-based semi-private classes</span>
-                </div>
-                <span className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.4)' }}>Initial classes capped at 8</span>
+              <div className="mb-6 flex flex-col items-start gap-2.5 sm:mb-8 sm:flex-row sm:items-center sm:gap-4">
+                <span className="xert-chip max-w-full" style={{ letterSpacing: '0.1em' }}>
+                  <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-xert-steel animate-pulse" />
+                  <span className="min-w-0 leading-snug">Booking-based semi-private classes</span>
+                </span>
+                <span className="font-body text-xs text-xert-pale/50">Initial classes capped at 8</span>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <Link to="/booking"
-                  className="xert-btn-primary inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
+                  className="xert-btn-primary inline-flex min-h-[52px] w-full items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:w-auto sm:py-4">
                   Book Your First Session
                 </Link>
                 <Link to="/timetable"
-                  className="xert-btn-ghost inline-flex min-h-[52px] items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:py-4">
+                  className="xert-btn-ghost inline-flex min-h-[52px] w-full items-center justify-center px-8 py-3.5 font-display text-lg uppercase tracking-wide sm:w-auto sm:py-4">
                   View Timetable
                 </Link>
               </div>
@@ -176,7 +177,7 @@ export default function Hero() {
           {/* Right — feature photo (desktop only; not rendered on mobile so it never downloads there) */}
           {isDesktop && (
             <div className="xert-feature-enter hidden lg:block relative" style={{ animationDelay: '300ms' }}>
-              <div className="relative aspect-[3/4] overflow-hidden">
+              <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-xert-steel/20 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.8)]">
                 <img
                   src={photos[idx]}
                   alt="XERT Training"
@@ -187,17 +188,14 @@ export default function Hero() {
                 <div className="absolute inset-0"
                   style={{ background: 'linear-gradient(180deg, rgba(16,24,32,0.3) 0%, transparent 40%, rgba(16,24,32,0.7) 100%)' }}
                 />
-                {/* Frame ticks */}
-                <div className="absolute top-4 left-4 w-8 h-8 border-t border-l" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
-                <div className="absolute bottom-4 right-4 w-8 h-8 border-b border-r" style={{ borderColor: 'rgba(123,167,188,0.5)' }} />
-                <div className="absolute bottom-4 left-4 right-16">
+                <div className="absolute bottom-5 left-5 right-16">
                   <div className="flex items-center gap-2">
-                    <div className="h-px flex-1" style={{ backgroundColor: 'rgba(123,167,188,0.4)' }} />
-                    <span className="font-body text-xs uppercase tracking-widest" style={{ color: '#7BA7BC' }}>Kingaroy, QLD</span>
+                    <div className="h-px flex-1 bg-xert-steel/40" />
+                    <span className="font-body text-xs uppercase tracking-widest text-xert-steel">Kingaroy, QLD</span>
                   </div>
                 </div>
                 {/* Photo index dots */}
-                <div className="absolute top-4 right-4 flex flex-col gap-1.5">
+                <div className="absolute top-5 right-5 flex flex-col gap-1.5">
                   {photos.map((_, i) => (
                     <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-500"
                       style={{ backgroundColor: i === idx ? '#7BA7BC' : 'rgba(123,167,188,0.25)' }} />
@@ -213,51 +211,49 @@ export default function Hero() {
         </div>
       </div>
 
-      {/* Values strip — infinite marquee */}
-      <div className="relative z-10 border-t" style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: 'rgba(16,24,32,0.85)', backdropFilter: 'blur(8px)' }}>
-        <div
-          className="overflow-hidden py-4"
-          style={{
-            maskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
-            WebkitMaskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
-          }}
-        >
-          <div className="xert-marquee-track flex whitespace-nowrap">
-            {[0, 1].map(dup => (
-              <div key={dup} className="flex items-center shrink-0" aria-hidden={dup === 1 ? 'true' : undefined}>
-                {/* VALUES twice per half so each half outruns wide viewports —
-                    the -50% loop is only seamless when half-width >= container. */}
-                {[...VALUES, ...VALUES].map((v, i) => (
-                  <React.Fragment key={`${v}-${i}`}>
-                    <span className="font-display text-sm uppercase tracking-[0.15em] py-1" style={{ color: i % 2 === 0 ? '#D1DDE6' : '#7BA7BC' }}>{v}</span>
-                    <span className="mx-4" style={{ color: 'rgba(123,167,188,0.25)' }}>·</span>
-                  </React.Fragment>
-                ))}
+      {/* Values marquee + stats: one rounded glass strip */}
+      <div className="relative z-10 px-4 pb-4 sm:px-6 sm:pb-6">
+        <div className="xert-glass mx-auto max-w-6xl overflow-hidden rounded-2xl shadow-[0_24px_60px_-30px_rgba(0,0,0,0.85)]">
+          <div
+            className="overflow-hidden py-3"
+            style={{
+              maskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
+              WebkitMaskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
+            }}
+          >
+            <div className="xert-marquee-track flex whitespace-nowrap">
+              {[0, 1].map(dup => (
+                <div key={dup} className="flex items-center shrink-0" aria-hidden={dup === 1 ? 'true' : undefined}>
+                  {/* VALUES twice per half so each half outruns wide viewports —
+                      the -50% loop is only seamless when half-width >= container. */}
+                  {[...VALUES, ...VALUES].map((v, i) => (
+                    <React.Fragment key={`${v}-${i}`}>
+                      <span className="font-display text-sm uppercase tracking-[0.15em] py-1" style={{ color: i % 2 === 0 ? '#D1DDE6' : '#7BA7BC' }}>{v}</span>
+                      <span className="mx-4 text-xert-steel/25">·</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div aria-hidden="true" className="xert-divider" />
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 divide-x divide-[rgba(123,167,188,0.16)] px-4 py-4 sm:px-6 sm:py-5">
+            {STATS.map((stat, i) => (
+              <div key={i} className={`px-3 sm:px-6 ${i === 0 ? 'pl-0 sm:pl-0' : ''} ${i === 2 ? 'pr-0 sm:pr-0' : ''}`}>
+                <p className="mb-1 font-body text-[10px] uppercase tracking-wider text-xert-steel sm:text-xs">{stat.label}</p>
+                <p className="font-display text-base uppercase leading-tight text-xert-offwhite sm:text-xl">{stat.value}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Stats bar */}
-      <div className="relative z-10" style={{ backgroundColor: 'rgba(50,72,90,0.6)', backdropFilter: 'blur(8px)' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-3 gap-0 divide-x" style={{ borderColor: 'rgba(123,167,188,0.2)' }}>
-          {[
-            { label: 'Coached Model', value: 'Semi-private' },
-            { label: 'Programming', value: '12-week blocks' },
-            { label: 'Location', value: 'Kingaroy QLD' },
-          ].map((stat, i) => (
-            <div key={i} className={`px-3 sm:px-6 ${i === 0 ? 'pl-0 sm:pl-0' : ''} ${i === 2 ? 'pr-0 sm:pr-0' : ''}`}>
-              <p className="font-body text-[10px] sm:text-xs uppercase tracking-wider mb-0.5 sm:mb-1" style={{ color: '#7BA7BC' }}>{stat.label}</p>
-              <p className="font-display text-base sm:text-xl leading-tight text-xert-offwhite uppercase">{stat.value}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Scroll cue */}
-      <div className="xert-scroll-cue absolute bottom-[8.5rem] left-1/2 -translate-x-1/2 z-10 hidden sm:flex flex-col items-center gap-2">
-        <span className="font-body text-[10px] uppercase tracking-[0.3em]" style={{ color: 'rgba(123,167,188,0.6)' }}>Scroll</span>
+      <div className="xert-scroll-cue absolute bottom-[11.5rem] left-1/2 -translate-x-1/2 z-10 hidden sm:flex flex-col items-center gap-2">
+        <span className="font-body text-[10px] uppercase tracking-[0.3em] text-xert-steel/60">Scroll</span>
         <div
           className="xert-scroll-pulse w-px h-8 origin-top"
           style={{ background: 'linear-gradient(180deg, #7BA7BC, transparent)' }}

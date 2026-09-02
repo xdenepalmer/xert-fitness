@@ -13,46 +13,42 @@ export default function EoiSelector() {
   const [active, setActive] = useState('member');
 
   return (
-    <section id="eoi" className="py-20 px-6" style={{ backgroundColor: '#101820' }}>
-      <div className="max-w-3xl mx-auto">
+    <section id="eoi" className="bg-xert-navy px-6 py-14 sm:py-20">
+      <div className="mx-auto max-w-3xl">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Foundation Interest</span>
+        <div className="mb-5 flex items-center gap-3">
+          <div className="h-px w-6 bg-xert-steel" />
+          <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Foundation Interest</span>
         </div>
 
-        <h2 className="font-display uppercase mb-10"
-          style={{ fontSize: 'clamp(2rem,5vw,3.5rem)', lineHeight: 0.95, color: '#F1F3F4' }}>
+        <h2 className="mb-8 font-display uppercase text-xert-offwhite sm:mb-10"
+          style={{ fontSize: 'clamp(2rem,5vw,3.5rem)', lineHeight: 0.95 }}>
           Register your<br />
-          <span style={{ color: '#7BA7BC' }}>interest.</span>
+          <span className="text-xert-steel">interest.</span>
         </h2>
 
         {/* Tab selector */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:mb-8 sm:grid-cols-3">
           {TABS.map(tab => {
             const isActive = active === tab.key;
             return (
               <button key={tab.key} onClick={() => setActive(tab.key)}
                 aria-pressed={isActive}
-                className="p-4 border text-left transition-all"
-                style={{
-                  borderColor: isActive ? '#7BA7BC' : 'rgba(123,167,188,0.2)',
-                  backgroundColor: isActive ? 'rgba(123,167,188,0.1)' : 'transparent',
-                }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="font-display text-base uppercase"
-                    style={{ color: isActive ? '#F1F3F4' : 'rgba(209,221,230,0.6)' }}>
+                className={`min-h-11 p-4 text-left transition-colors ${
+                  isActive ? 'xert-card-accent' : 'xert-card-flat hover:border-xert-steel/40'
+                }`}>
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <p className={`font-display text-base uppercase ${isActive ? 'text-xert-offwhite' : 'text-xert-pale/60'}`}>
                     {tab.label}
                   </p>
                   {tab.tag && (
-                    <span className="font-body text-xs px-1.5 py-0.5 uppercase"
-                      style={{ backgroundColor: 'rgba(123,167,188,0.2)', color: '#7BA7BC' }}>
+                    <span className="xert-chip xert-chip-solid" style={{ padding: '0.2rem 0.55rem', fontSize: '0.625rem' }}>
                       {tab.tag}
                     </span>
                   )}
                 </div>
-                <p className="font-body text-xs" style={{ color: 'rgba(123,167,188,0.6)' }}>{tab.desc}</p>
-                <span aria-hidden="true" className="mt-3 block h-0.5 w-8 transition-all"
+                <p className="font-body text-xs text-xert-steel/70">{tab.desc}</p>
+                <span aria-hidden="true" className="mt-3 block h-0.5 w-8 rounded-full transition-all"
                   style={{ backgroundColor: isActive ? '#7BA7BC' : 'transparent' }} />
               </button>
             );
@@ -60,7 +56,7 @@ export default function EoiSelector() {
         </div>
 
         {/* Form panel */}
-        <div className="p-6 sm:p-8 border" style={{ borderColor: 'rgba(123,167,188,0.15)', backgroundColor: '#0d1720' }}>
+        <div className="xert-card p-5 sm:p-8">
           {active === 'member' && <MemberInterestForm />}
           {active === 'trainer' && <TrainerInterestForm />}
           {active === 'partner' && <PartnerInterestForm />}
