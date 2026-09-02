@@ -81,10 +81,10 @@ credit, payment, Stripe or attendance record was changed.
 `XERT → FitBox — Register Approved Prospect` and `XERT → FitBox — Get User —
 Read Only` were published on 2 September 2026 after owner confirmation. Their
 approved synthetic callback tests validate the FitBox-to-XERT result contract.
-A fresh post-publication synthetic end-to-end run remains required before
-declaring final launch acceptance; it must use the approved synthetic record,
-not a real member. Register sends only the approved prospect contact fields;
-Get User refreshes only the explicitly allowed read-only profile fields.
+The post-publication end-to-end acceptance run below was completed with one
+newly created synthetic record only; no real member was used. Register sends
+only the approved prospect contact fields; Get User refreshes only the
+explicitly allowed read-only profile fields.
 
 ### Live revalidation evidence — 2 September 2026 (AEST)
 
@@ -105,9 +105,40 @@ that record for the outstanding fresh Get User check. FitBox admin access was
 also confirmed, read-only.
 
 This is evidence that publication and guardrails are live, not evidence that
-the outstanding fresh post-publication Get User acceptance has passed. That
-test needs either a recoverable original XERT lead or a separately authorised,
-new synthetic XERT/FitBox pair.
+an inbound event may alter an XERT domain record. The fresh outbound acceptance
+evidence follows.
+
+### Post-publication synthetic acceptance — 2 September 2026 (AEST)
+
+One isolated synthetic XERT foundation-interest lead was created through the
+normal public registration flow. With the owner’s action-time approval, Command
+Centre sent that one test name, email and phone through the published Register
+Approved Prospect Zap. Zapier accepted the job, FitBox returned one verified
+user ID with provider status `prospect`, and XERT linked that ID only to the
+same synthetic lead.
+
+From that verified link, Command Centre started the published Get User Zap.
+FitBox returned the same user identity and the allowed name, email, phone and
+provider status. XERT recorded a new read-only snapshot timestamp. The owner
+view confirmed that no date of birth was exposed, and no XERT identity,
+membership, access, booking, credit, Stripe or billing field was changed.
+No real member data, raw callback token, provider ID, Zap run ID or test
+contact value is recorded in this runbook.
+
+The live Operations Health result after the run recorded one successful
+read-only profile result and one read-only profile refresh in the last 24 hours.
+It intentionally remained an attention state because the seven inbound
+evidence receipts are still awaiting owner review and the historic orphaned
+provider link remains visible. Neither condition was cleared, repaired or
+re-registered during the acceptance test.
+
+Current inbound trigger samples do not carry a stable `delivery_id`, so a
+fabricated live retry was not created. The production duplicate-delivery guard
+is instead covered by the database unique constraint and API automated test:
+when a provider supplies a stable delivery ID, a replay returns the accepted
+duplicate receipt without inserting a second review event. This is not a claim
+of logical-event deduplication; that remains unsupported until FitBox supplies
+stable event identity and ordering semantics.
 
 ## Server configuration
 
