@@ -230,6 +230,8 @@ test('FitBox reconciliation is bounded, admin-only and acknowledges evidence wit
   assert.match(admin, /function publicFitboxEvent\(event\)/);
   assert.match(admin, /async function fitboxLinkIntegrity\(admin\)/);
   assert.match(admin, /link_integrity: linkIntegrity/);
+  assert.match(admin, /FitBox admin read failed/);
+  assert.match(admin, /errorCode: typeof error\?\.code === 'string'/);
   assert.match(admin, /action === 'review_event'/);
   assert.match(admin, /\.eq\('processing_state', 'needs_review'\)/);
   assert.match(client, /getFitboxReconciliationEvents/);

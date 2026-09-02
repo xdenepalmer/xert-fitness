@@ -514,6 +514,13 @@ export default async function handler(request, response) {
         profile_refresh_issue: getUserEnvironment.ready ? null : 'FitBox read-only profile refresh is not configured.',
       });
     } catch (error) {
+      // Keep production diagnostics useful without writing provider payloads,
+      // member data, or raw database messages to the function log.
+      console.error('FitBox admin read failed.', {
+        requestId: trace.requestId,
+        operation: wantsHealth ? 'health' : wantsEvents ? 'events' : 'lead_state',
+        errorCode: typeof error?.code === 'string' ? error.code.slice(0, 64) : 'UNKNOWN',
+      });
       if (error.message === 'INVALID_FITBOX_EVENT_STATE') return json({ error: 'FitBox event state is invalid.' }, 400);
       if (error.message === 'INVALID_FITBOX_LEAD_ID') return json({ error: 'Lead selection is invalid.' }, 400);
       if (['42P01', 'PGRST205'].includes(error.code)) return json({ error: 'FitBox integration storage is not installed.' }, 503);
