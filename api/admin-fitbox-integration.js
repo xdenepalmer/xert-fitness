@@ -497,9 +497,9 @@ export default async function handler(request, response) {
   if (access.error) return json({ error: access.error }, access.status);
 
   if (request.method === 'GET') {
+    const wantsHealth = requestQuery(request, 'health') === '1';
+    const wantsEvents = requestQuery(request, 'events') === '1';
     try {
-      const wantsHealth = requestQuery(request, 'health') === '1';
-      const wantsEvents = requestQuery(request, 'events') === '1';
       if (wantsHealth) return json(await integrationHealth(admin));
       if (wantsEvents) return json(await fitboxReconciliationEvents(admin, fitboxEventState(requestQuery(request, 'state'))));
       const leadId = requestLeadID(request);
