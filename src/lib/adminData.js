@@ -1826,6 +1826,7 @@ export async function getOperationsHealth() {
       const stale = Number(result.stale || 0);
       const events = Number(result.events_24h || 0);
       const reconciliation = Number(result.reconciliation || 0);
+      const orphanedLinks = Number(result.link_integrity?.orphaned || 0);
       const profileRefreshes = Number(result.profile_refreshes_24h?.completed || 0);
       if (!result.environment?.ready) {
         return {
@@ -1834,12 +1835,14 @@ export async function getOperationsHealth() {
           action: 'Complete the Zapier catch-hook configuration in Vercel, redeploy, then refresh.',
         };
       }
-      if (failed > 0 || stale > 0) {
+      if (failed > 0 || stale > 0 || orphanedLinks > 0) {
         return {
           status: 'attention',
-          count: failed + stale,
-          detail: `${completed} completed, ${failed} failed and ${stale} stale handoff${failed + stale === 1 ? '' : 's'}; ${profileRefreshes} read-only profile refresh${profileRefreshes === 1 ? '' : 'es'}, ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
-          action: 'Open Member Leads, review the affected lead and retry only after correcting its details or provider issue.',
+          count: failed + stale + orphanedLinks,
+          detail: `${completed} completed, ${failed} failed, ${stale} stale and ${orphanedLinks} link${orphanedLinks === 1 ? '' : 's'} without an XERT lead; ${profileRefreshes} read-only profile refresh${profileRefreshes === 1 ? '' : 'es'}, ${events} FitBox event${events === 1 ? '' : 's'} received and ${reconciliation} awaiting review.`,
+          action: orphanedLinks > 0
+            ? 'Open FitBox Review, preserve the orphaned evidence and investigate the deleted XERT source before any provider action.'
+            : 'Open Member Leads, review the affected lead and retry only after correcting its details or provider issue.',
         };
       }
       return {

@@ -39,6 +39,7 @@ function eventScope(event) {
 export default function FitboxReconciliation() {
   const [state, setState] = useState('needs_review');
   const [events, setEvents] = useState([]);
+  const [linkIntegrity, setLinkIntegrity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -53,6 +54,7 @@ export default function FitboxReconciliation() {
     try {
       const result = await getFitboxReconciliationEvents(state);
       setEvents(Array.isArray(result.events) ? result.events : []);
+      setLinkIntegrity(result.link_integrity || null);
       setLastUpdated(new Date());
     } catch (loadError) {
       setError(loadError.message || 'FitBox reconciliation queue could not be loaded.');
@@ -81,6 +83,8 @@ export default function FitboxReconciliation() {
       setAcknowledging(false);
     }
   };
+
+  const orphanedLinks = Number(linkIntegrity?.orphaned || 0);
 
   return (
     <div className={`${ADMIN_PAGE} space-y-5`}>
@@ -118,6 +122,18 @@ export default function FitboxReconciliation() {
           </p>
         </div>
       </header>
+
+      {orphanedLinks > 0 && (
+        <section className="flex items-start gap-3 border border-amber-300/35 bg-amber-300/10 p-4" role="status">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-200" />
+          <div>
+            <h3 className="font-display text-sm uppercase text-amber-100">FitBox link needs source review</h3>
+            <p className="mt-1 font-body text-sm leading-relaxed text-amber-100/75">
+              {orphanedLinks} FitBox link{orphanedLinks === 1 ? '' : 's'} {orphanedLinks === 1 ? 'has' : 'have'} no matching XERT lead. Preserve the provider evidence and investigate the original XERT source; do not create a replacement lead or register the same FitBox user again.
+            </p>
+          </div>
+        </section>
+      )}
 
       {error ? <AdminLoadError message={error} onRetry={() => void load()} /> : loading ? (
         <div className="space-y-3" role="status" aria-label="Loading FitBox reconciliation queue">

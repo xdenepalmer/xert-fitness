@@ -221,6 +221,7 @@ check reports reconciliation work. The FitBox check must show:
 - Configuration ready with no missing environment names.
 - No failed prospect handoffs in the last 24 hours.
 - No queued, dispatched or uncertain handoff older than 15 minutes.
+- No FitBox link whose originating XERT lead is missing.
 - Expected completed handoff and received-event counts.
 - The latest event type and receipt time when trigger traffic exists.
 - Zero unresolved reconciliation items for a green state.

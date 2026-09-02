@@ -228,11 +228,14 @@ test('FitBox reconciliation is bounded, admin-only and acknowledges evidence wit
 
   assert.match(admin, /const EVENT_PAGE_LIMIT = 50/);
   assert.match(admin, /function publicFitboxEvent\(event\)/);
+  assert.match(admin, /async function fitboxLinkIntegrity\(admin\)/);
+  assert.match(admin, /link_integrity: linkIntegrity/);
   assert.match(admin, /action === 'review_event'/);
   assert.match(admin, /\.eq\('processing_state', 'needs_review'\)/);
   assert.match(client, /getFitboxReconciliationEvents/);
   assert.match(client, /acknowledgeFitboxReconciliationEvent/);
   assert.match(queue, /protected XERT review ledger/);
+  assert.match(queue, /FitBox link needs source review/);
   assert.match(queue, /does not contact FitBox or change any booking, credit, membership, payment or member profile/);
   assert.match(navigation, /'fitbox'/);
 });

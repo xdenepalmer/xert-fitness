@@ -267,13 +267,16 @@ function publicFitboxEvent(event) {
 }
 
 async function fitboxReconciliationEvents(admin, state) {
-  const { data, error } = await admin.from('fitbox_integration_events')
+  const [{ data, error }, linkIntegrity] = await Promise.all([
+    admin.from('fitbox_integration_events')
     .select(FITBOX_EVENT_SELECT)
     .eq('processing_state', state)
     .order('received_at', { ascending: false })
-    .limit(EVENT_PAGE_LIMIT);
+    .limit(EVENT_PAGE_LIMIT),
+    fitboxLinkIntegrity(admin),
+  ]);
   if (error) throw error;
-  return { events: (data || []).map(publicFitboxEvent), state, limit: EVENT_PAGE_LIMIT };
+  return { events: (data || []).map(publicFitboxEvent), state, limit: EVENT_PAGE_LIMIT, link_integrity: linkIntegrity };
 }
 
 async function reviewFitboxEvent(admin, eventId, reviewerId) {
@@ -324,10 +327,24 @@ async function leadIntegrationState(admin, leadId) {
   };
 }
 
+async function fitboxLinkIntegrity(admin) {
+  const { data: links, error: linkError } = await admin.from('fitbox_member_links')
+    .select('lead_id')
+    .eq('lead_type', 'member_interest')
+    .limit(200);
+  if (linkError) throw linkError;
+  const leadIds = [...new Set((links || []).map(link => link.lead_id).filter(Boolean))];
+  if (!leadIds.length) return { checked: 0, orphaned: 0 };
+  const { data: leads, error: leadError } = await admin.from('member_interest').select('id').in('id', leadIds);
+  if (leadError) throw leadError;
+  const found = new Set((leads || []).map(lead => lead.id));
+  return { checked: leadIds.length, orphaned: leadIds.filter(id => !found.has(id)).length };
+}
+
 async function integrationHealth(admin) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString();
   const staleBefore = new Date(Date.now() - 15 * 60 * 1_000).toISOString();
-  const [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, active, stale, latest, eventTypes] = await Promise.all([
+  const [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, active, stale, latest, eventTypes, linkIntegrity] = await Promise.all([
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'completed').gte('updated_at', since),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('updated_at', since),
     admin.from('fitbox_integration_jobs').select('id', { count: 'exact', head: true }).eq('job_type', 'get_user').eq('status', 'completed').gte('updated_at', since),
@@ -357,6 +374,7 @@ async function integrationHealth(admin) {
         latest_review_reason: latestEvent.data?.review_reason || null,
       };
     })),
+    fitboxLinkIntegrity(admin),
   ]);
   for (const result of [completed, failed, profileRefreshes, profileRefreshFailures, profileRefreshReviews, active, stale, latest]) if (result.error) throw result.error;
   const events = eventTypes.reduce((sum, event) => sum + event.events_24h, 0);
@@ -369,7 +387,7 @@ async function integrationHealth(admin) {
   const eventEnvironment = fitboxEventEnvironment(process.env);
   const reconciliation = reviews + Number(profileRefreshReviews.count || 0);
   return {
-    ready: environment.ready && getUserEnvironment.ready && eventEnvironment.ready && Number(failed.count || 0) === 0 && Number(stale.count || 0) === 0,
+    ready: environment.ready && getUserEnvironment.ready && eventEnvironment.ready && Number(failed.count || 0) === 0 && Number(stale.count || 0) === 0 && linkIntegrity.orphaned === 0,
     environment: {
       ready: environment.ready && getUserEnvironment.ready && eventEnvironment.ready,
       missing: [...new Set([...environment.missing, ...getUserEnvironment.missing, ...eventEnvironment.missing])],
@@ -381,6 +399,7 @@ async function integrationHealth(admin) {
     last_job: latest.data || null,
     events_24h: events,
     reconciliation,
+    link_integrity: linkIntegrity,
     event_types: eventTypes,
     last_event: lastEvent ? {
       event_type: lastEvent.event_type,
