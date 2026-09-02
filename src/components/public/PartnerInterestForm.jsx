@@ -6,19 +6,25 @@ import FormCheckbox from '@/components/public/FormCheckbox';
 const STEPS = ['Contact', 'Practice', 'Confirm'];
 const SERVICES = ['Physiotherapy', 'Nutrition / dietetics', 'Psychology / mental performance', 'Massage therapy', 'Strength & conditioning education', 'Medical / GP', 'Podiatry', 'Occupational therapy', 'Other allied health'];
 
+const chipClasses = 'min-h-11 px-3 py-2 text-sm font-body rounded-full border transition-colors';
+const chipActive = 'border-xert-steel bg-xert-steel text-xert-navy';
+const chipIdle = 'border-xert-steel/30 bg-white/[0.03] text-xert-pale/75 hover:border-xert-steel';
+const errorStyle = { color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' };
+const backButtonClasses = 'xert-btn-ghost inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-5 font-display text-sm uppercase tracking-wide';
+const nextButtonClasses = 'xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-8 font-display text-base uppercase tracking-wide';
+
 function FieldLabel({ children, required = false, htmlFor = undefined, as = undefined }) {
   const Component = as || (htmlFor ? 'label' : 'span');
   return (
-    <Component htmlFor={htmlFor} className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
-      {children}{required && <span className="text-xert-red ml-1" aria-hidden="true">*</span>}
+    <Component htmlFor={htmlFor} className="xert-label">
+      {children}{required && <span className="text-xert-steel ml-1" aria-hidden="true">*</span>}
     </Component>
   );
 }
 
 function Input({ ...props }) {
   return (
-    <input {...props}
-      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red transition-colors" />
+    <input {...props} className="xert-input" />
   );
 }
 
@@ -33,9 +39,7 @@ function MultiSelect({ options, value = [], onChange }) {
         <button type="button" key={opt}
           onClick={() => toggle(opt)}
           aria-pressed={value.includes(opt)}
-          className={`min-h-11 px-3 py-2 text-sm font-body border transition-all ${value.includes(opt)
-            ? 'border-xert-red bg-xert-steel/10 text-xert-red'
-            : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+          className={`${chipClasses} ${value.includes(opt) ? chipActive : chipIdle}`}>
           {opt}
         </button>
       ))}
@@ -106,13 +110,13 @@ export default function PartnerInterestForm() {
       <div className="flex items-center gap-2 mb-8">
         {STEPS.map((s, i) => (
           <React.Fragment key={i}>
-            <div className={`flex items-center gap-1.5 ${i <= step ? 'opacity-100' : 'opacity-30'}`}>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-steel text-xert-navy' : i === step ? 'border-2 border-xert-red text-xert-red' : 'border border-xert-steel/50 text-xert-steel'}`}>
+            <div className={`flex items-center gap-1.5 ${i <= step ? 'opacity-100' : 'opacity-40'}`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-display ${i < step ? 'bg-xert-steel text-xert-navy' : i === step ? 'border-2 border-xert-steel text-xert-steel' : 'border border-xert-steel/50 text-xert-steel'}`}>
                 {i < step ? '✓' : i + 1}
               </div>
-              <span className="hidden sm:block font-body text-xs text-xert-concrete/60">{s}</span>
+              <span className="hidden sm:block font-body text-xs text-xert-pale/65">{s}</span>
             </div>
-            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-steel' : 'bg-xert-steel/30'}`} />}
+            {i < STEPS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-xert-steel' : 'bg-xert-steel/25'}`} />}
           </React.Fragment>
         ))}
       </div>
@@ -149,7 +153,7 @@ export default function PartnerInterestForm() {
           <div>
             <FieldLabel htmlFor="partner-preferred-model">Preferred partnership model</FieldLabel>
             <select id="partner-preferred-model" name="preferred_model" value={form.preferred_model} onChange={e => set('preferred_model', e.target.value)}
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite focus:border-xert-red">
+              className="xert-input">
               <option value="">Select (optional)</option>
               {['Referral partner', 'Regular sessions at XERT', 'Workshops only', 'Online services', 'Flexible / open to discussion'].map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -166,17 +170,17 @@ export default function PartnerInterestForm() {
             <FieldLabel htmlFor="partner-short-intro">Short intro</FieldLabel>
             <textarea id="partner-short-intro" name="short_intro" value={form.short_intro} onChange={e => set('short_intro', e.target.value)}
               rows={3} placeholder="Tell us about your practice and what you'd bring to XERT"
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:border-xert-red resize-none" />
+              className="xert-input resize-none" />
           </div>
         </div>
       )}
 
       {step === 2 && (
         <div className="space-y-5">
-          <div className="bg-xert-charcoal p-4 border-l-2 border-xert-red space-y-1">
-            <p className="font-body text-sm text-xert-concrete/80"><strong className="text-xert-offwhite">Name:</strong> {form.full_name}</p>
-            <p className="font-body text-sm text-xert-concrete/80"><strong className="text-xert-offwhite">Business:</strong> {form.business_name}</p>
-            <p className="font-body text-sm text-xert-concrete/80"><strong className="text-xert-offwhite">Services:</strong> {form.services_offered.join(', ') || '—'}</p>
+          <div className="xert-card-flat p-4 space-y-1">
+            <p className="font-body text-sm text-xert-pale/80"><strong className="text-xert-offwhite">Name:</strong> {form.full_name}</p>
+            <p className="font-body text-sm text-xert-pale/80"><strong className="text-xert-offwhite">Business:</strong> {form.business_name}</p>
+            <p className="font-body text-sm text-xert-pale/80"><strong className="text-xert-offwhite">Services:</strong> {form.services_offered.join(', ') || '—'}</p>
           </div>
           <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
             I consent to XERT Fitness contacting me about this enquiry.
@@ -186,27 +190,24 @@ export default function PartnerInterestForm() {
 
       <div role="alert" aria-live="assertive">
         {error && (
-          <div className="mt-4 p-3 border border-xert-red/50 bg-xert-steel/10">
-            <p className="font-body text-sm text-xert-red">{error}</p>
+          <div className="mt-4 rounded-xl border p-3" style={errorStyle}>
+            <p className="font-body text-sm">{error}</p>
           </div>
         )}
       </div>
 
-      <div className="flex justify-between mt-8">
+      <div className="flex flex-col-reverse gap-3 mt-8 sm:flex-row sm:justify-between">
         {step > 0 ? (
-          <button type="button" onClick={() => { setError(''); setStep(s => s - 1); }}
-            className="px-5 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
+          <button type="button" onClick={() => { setError(''); setStep(s => s - 1); }} className={backButtonClasses}>
             Back
           </button>
         ) : <div />}
         {step < STEPS.length - 1 ? (
-          <button type="button" onClick={next}
-            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors">
+          <button type="button" onClick={next} className={nextButtonClasses}>
             Continue
           </button>
         ) : (
-          <button type="submit" disabled={loading}
-            className="px-8 py-3 bg-xert-steel text-xert-navy font-display text-base uppercase hover:bg-xert-pale transition-colors disabled:opacity-50">
+          <button type="submit" disabled={loading} className={`${nextButtonClasses} disabled:opacity-50`}>
             {loading ? 'Submitting...' : 'Submit enquiry'}
           </button>
         )}

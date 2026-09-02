@@ -55,10 +55,13 @@ function privateSessionStatus(status) {
   return labels[status] || String(status || 'requested').replace(/_/g, ' ');
 }
 
-const cardStyle = {
-  borderColor: 'rgba(123,167,188,0.16)',
-  backgroundColor: 'rgba(50,72,90,0.14)'
-};
+const ghostButtonClasses = 'xert-btn-ghost inline-flex min-h-11 items-center justify-center gap-1.5 px-4 font-body text-xs uppercase tracking-wider';
+const primaryButtonClasses = 'xert-btn-primary inline-flex min-h-[52px] items-center justify-center px-5 font-display text-base uppercase tracking-wide';
+const inlineLinkClasses = 'inline-flex min-h-11 items-center font-body text-xs uppercase tracking-wider text-xert-steel hover:text-xert-pale transition-colors';
+const warningBoxClasses = 'rounded-2xl border border-[#e0b36a]/40 bg-[#e0b36a]/10';
+const warningButtonClasses = 'inline-flex min-h-11 items-center justify-center rounded-[0.875rem] border border-[#e0b36a]/60 px-4 font-display text-sm uppercase tracking-wide text-xert-offwhite transition-colors hover:bg-[#e0b36a]/10';
+const fieldLabelClasses = 'xert-label';
+const fieldInputClasses = 'xert-input mt-2 block normal-case tracking-normal';
 
 const emptyReadinessForm = {
   fullName: '',
@@ -586,8 +589,8 @@ export default function Account() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#101820' }}>
-        <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#7BA7BC' }} />
+      <div className="min-h-screen flex items-center justify-center bg-xert-navy">
+        <Loader2 className="w-6 h-6 animate-spin text-xert-steel" />
       </div>
     );
   }
@@ -595,27 +598,26 @@ export default function Account() {
   if (!session) {
     const accountReturnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
-      <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+      <div className="min-h-screen bg-xert-navy">
         <PublicNav />
-        <main id="main" className="max-w-md mx-auto px-6 pt-40 pb-20 text-center">
-          <h1 className="font-display text-3xl uppercase text-xert-offwhite mb-3">Sign in to your account</h1>
-          <p className="font-body text-sm mb-8" style={{ color: 'rgba(209,221,230,0.6)' }}>
-            View your class credits, bookings and purchases.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link to={authPathWithNext('/login', accountReturnPath)} className="px-6 py-3 font-display text-base uppercase tracking-wide" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-              Log In
-            </Link>
-            <Link
-              to={authPathWithNext('/register', accountReturnPath)}
-              className="px-6 py-3 font-display text-base uppercase tracking-wide border"
-              style={{
-                borderColor: 'rgba(123,167,188,0.35)',
-                color: '#D1DDE6'
-              }}
-            >
-              Create Account
-            </Link>
+        <main id="main" className="relative max-w-md mx-auto px-6 pt-36 pb-20 text-center">
+          <div aria-hidden="true" className="absolute inset-x-0 top-0 h-[24rem] pointer-events-none xert-glow-top" />
+          <div className="relative xert-card p-6 sm:p-8">
+            <h1 className="font-display text-3xl uppercase text-xert-offwhite mb-3">Sign in to your account</h1>
+            <p className="font-body text-sm mb-8 text-xert-pale/65">
+              View your class credits, bookings and purchases.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link to={authPathWithNext('/login', accountReturnPath)} className="xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-6 font-display text-base uppercase tracking-wide">
+                Log In
+              </Link>
+              <Link
+                to={authPathWithNext('/register', accountReturnPath)}
+                className="xert-btn-ghost inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-6 font-display text-base uppercase tracking-wide"
+              >
+                Create Account
+              </Link>
+            </div>
           </div>
         </main>
         <PublicFooter />
@@ -650,13 +652,14 @@ export default function Account() {
     && !readinessSaving;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+    <div className="relative min-h-screen bg-xert-navy">
+      <div aria-hidden="true" className="absolute inset-x-0 top-0 h-[28rem] pointer-events-none xert-glow-top" />
       <PublicNav />
 
-      <main id="main" className="max-w-4xl mx-auto px-6 pt-28 pb-20">
+      <main id="main" className="relative max-w-4xl mx-auto px-6 pt-28 pb-20">
         {loadError && (
           <div
-            className="mb-8 flex flex-col gap-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4 sm:flex-row sm:items-center"
+            className={`${warningBoxClasses} mb-8 flex flex-col gap-3 p-4 sm:p-5 sm:flex-row sm:items-center`}
             role="alert"
           >
             <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
@@ -671,7 +674,7 @@ export default function Account() {
               type="button"
               onClick={refresh}
               disabled={loading}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center border border-[#e0b36a]/60 px-4 font-display text-sm uppercase text-xert-offwhite disabled:opacity-50"
+              className={`${warningButtonClasses} shrink-0 disabled:opacity-50`}
             >
               {loading ? 'Retrying…' : 'Retry'}
             </button>
@@ -679,7 +682,7 @@ export default function Account() {
         )}
         {purchaseStatus && (
           <div
-            className="flex flex-wrap items-center gap-3 border p-4 mb-8"
+            className="flex flex-wrap items-center gap-3 rounded-2xl border p-4 sm:p-5 mb-8"
             role="status"
             aria-live="polite"
             style={{
@@ -705,7 +708,7 @@ export default function Account() {
               <button
                 type="button"
                 onClick={() => setPurchaseRefreshKey(value => value + 1)}
-                className="min-h-11 px-4 border border-xert-steel/40 font-display text-sm uppercase text-xert-offwhite"
+                className="xert-btn-ghost inline-flex min-h-11 items-center justify-center px-4 font-display text-sm uppercase tracking-wide"
               >
                 Check again
               </button>
@@ -716,8 +719,8 @@ export default function Account() {
         <div className="flex flex-wrap items-end justify-between gap-4 mb-10">
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-              <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>
+              <div className="h-px w-6 bg-xert-steel" />
+              <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">
                 My Account
               </span>
             </div>
@@ -725,14 +728,7 @@ export default function Account() {
               {displayName}
             </h1>
           </div>
-          <button
-            onClick={signOut}
-            className="font-body text-xs uppercase tracking-wider px-4 py-2 border transition-colors"
-            style={{
-              borderColor: 'rgba(123,167,188,0.3)',
-              color: 'rgba(209,221,230,0.6)'
-            }}
-          >
+          <button onClick={signOut} className={ghostButtonClasses}>
             Sign Out
           </button>
         </div>
@@ -752,9 +748,9 @@ export default function Account() {
                     ? { border: 'rgba(224,179,106,0.5)', label: 'Action requested', color: '#e0b36a' }
                     : { border: 'rgba(123,167,188,0.4)', label: 'Update', color: '#7BA7BC' };
                 return (
-                  <article key={notice.id} className="border bg-xert-ink p-5" style={{ borderColor: tone.border }}>
+                  <article key={notice.id} className="xert-card p-5" style={{ borderColor: tone.border }}>
                     <div className="flex items-start justify-between gap-4">
-                      <p className="font-body text-[10px] uppercase tracking-[0.18em]" style={{ color: tone.color }}>{tone.label}</p>
+                      <p className="xert-chip" style={{ color: tone.color, borderColor: tone.border }}>{tone.label}</p>
                       <button type="button" onClick={() => void handleDismissAnnouncement(notice)} disabled={dismissingAnnouncementId === notice.id} title="Dismiss notice" aria-label={'Dismiss ' + notice.title} className="min-w-11 min-h-11 -mr-2 -mt-2 inline-flex items-center justify-center text-xert-pale/50 hover:text-xert-offwhite disabled:opacity-40">
                         {dismissingAnnouncementId === notice.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                       </button>
@@ -762,9 +758,9 @@ export default function Account() {
                     <h3 className="mt-2 font-display text-xl uppercase text-xert-offwhite">{notice.title}</h3>
                     <p className="mt-2 whitespace-pre-wrap font-body text-sm leading-relaxed text-xert-pale/70">{notice.body}</p>
                     {action && (action.external ? (
-                      <a href={action.href} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-11 items-center bg-xert-steel px-4 font-display text-sm uppercase text-xert-navy">{action.label}</a>
+                      <a href={action.href} target="_blank" rel="noreferrer" className="xert-btn-primary mt-4 inline-flex min-h-11 items-center px-4 font-display text-sm uppercase tracking-wide">{action.label}</a>
                     ) : (
-                      <Link to={action.href} className="mt-4 inline-flex min-h-11 items-center bg-xert-steel px-4 font-display text-sm uppercase text-xert-navy">{action.label}</Link>
+                      <Link to={action.href} className="xert-btn-primary mt-4 inline-flex min-h-11 items-center px-4 font-display text-sm uppercase tracking-wide">{action.label}</Link>
                     ))}
                     {notice.expires_at && <p className="mt-3 font-body text-xs text-xert-pale/40">Available until {formatDateTime(notice.expires_at)}</p>}
                   </article>
@@ -775,10 +771,10 @@ export default function Account() {
         )}
 
         <section id="member-readiness" className="mb-10 scroll-mt-32" aria-labelledby="member-readiness-title">
-          <div className="border border-xert-steel/35 bg-xert-ink p-5 sm:p-7">
+          <div className="xert-card p-5 sm:p-7">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex min-w-0 gap-3">
-                <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center bg-xert-steel/15 text-xert-steel">
+                <span className="xert-icon-tile">
                   <ShieldCheck className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <div>
@@ -790,23 +786,23 @@ export default function Account() {
                 </div>
               </div>
               {memberReadiness && (
-                <span className={`shrink-0 border px-3 py-1.5 font-body text-[10px] uppercase tracking-wider ${readinessDirty ? 'border-[#e0b36a]/50 text-[#e0b36a]' : memberReadiness.is_complete ? 'border-green-500/40 text-green-300' : 'border-[#e0b36a]/50 text-[#e0b36a]'}`}>
+                <span className="xert-chip shrink-0" style={readinessDirty || !memberReadiness.is_complete ? { color: '#e0b36a', borderColor: 'rgba(224,179,106,0.5)' } : { color: '#86efac', borderColor: 'rgba(34,197,94,0.4)' }}>
                   {readinessDirty ? 'Unsaved changes' : memberReadiness.is_complete ? 'On file' : 'Action available'}
                 </span>
               )}
             </div>
 
             {readinessLoading && !memberReadiness ? (
-              <div className="mt-6 flex min-h-28 items-center justify-center border border-xert-steel/20" role="status">
+              <div className="mt-6 flex min-h-28 items-center justify-center rounded-2xl border border-xert-steel/20" role="status">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin text-xert-steel" aria-hidden="true" />
                 <span className="font-body text-sm text-xert-pale/60">Loading member readiness…</span>
               </div>
             ) : readinessError && !memberReadiness ? (
-              <div className="mt-6 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4" role="alert">
+              <div className={`${warningBoxClasses} mt-6 p-4`} role="alert">
                 <p className="font-body text-sm font-semibold text-xert-offwhite">Member readiness is unavailable</p>
                 <p className="mt-1 break-words font-body text-xs text-xert-pale/70">{readinessError}</p>
                 <p className="mt-1 font-body text-xs text-xert-pale/55">Bookings and the rest of your account remain available.</p>
-                <button type="button" onClick={() => void refreshMemberReadiness({ userID: readinessUserID, replaceDraft: true })} disabled={readinessLoading} className="mt-4 inline-flex min-h-11 items-center border border-[#e0b36a]/60 px-4 font-display text-sm uppercase text-xert-offwhite disabled:opacity-50">
+                <button type="button" onClick={() => void refreshMemberReadiness({ userID: readinessUserID, replaceDraft: true })} disabled={readinessLoading} className={`${warningButtonClasses} mt-4 disabled:opacity-50`}>
                   {readinessLoading ? 'Retrying…' : 'Retry readiness'}
                 </button>
               </div>
@@ -820,26 +816,26 @@ export default function Account() {
                 )}
                 <fieldset disabled={readinessSaving || readinessLoading} className="space-y-3 disabled:opacity-70">
                   <legend className="font-display text-lg uppercase text-xert-offwhite">Adult eligibility</legend>
-                  <label className="flex min-h-11 cursor-pointer items-start gap-3 border border-xert-steel/30 bg-xert-steel/5 p-4 font-body text-sm leading-relaxed text-xert-pale/80">
+                  <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-xert-steel/25 bg-white/[0.03] p-4 font-body text-sm leading-relaxed text-xert-pale/80">
                     <input
                       type="checkbox"
                       required
                       checked={adultEligibilityConfirmed}
                       onChange={handleAdultEligibilityChange}
                       aria-describedby={!adultEligibilityConfirmed ? 'under-18-readiness-guidance' : undefined}
-                      className="mt-1 h-4 w-4 shrink-0 accent-xert-steel"
+                      className="mt-0.5 h-5 w-5 shrink-0 rounded accent-xert-steel"
                     />
                     I confirm I am 18 years of age or older and eligible to complete the adult readiness acknowledgement below.
                   </label>
                 </fieldset>
 
                 {!adultEligibilityConfirmed ? (
-                  <div id="under-18-readiness-guidance" className="border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4" role="note">
+                  <div id="under-18-readiness-guidance" className={`${warningBoxClasses} p-4`} role="note">
                     <h3 className="font-display text-lg uppercase text-xert-offwhite">Under 18?</h3>
                     <p className="mt-2 font-body text-sm leading-relaxed text-xert-pale/70">
                       Do not submit this adult form. Ask a parent or guardian to contact XERT so the team can discuss the appropriate next step with them.
                     </p>
-                    <Link to="/contact" className="mt-4 inline-flex min-h-11 items-center border border-[#e0b36a]/60 px-4 font-display text-sm uppercase text-xert-offwhite">
+                    <Link to="/contact" className={`${warningButtonClasses} mt-4`}>
                       Parent or guardian: contact XERT
                     </Link>
                   </div>
@@ -848,13 +844,13 @@ export default function Account() {
                 <fieldset disabled={readinessSaving} className="space-y-4 disabled:opacity-70">
                   <legend className="font-display text-lg uppercase text-xert-offwhite">Your details</legend>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <label className="font-body text-xs uppercase tracking-wider text-xert-pale/60">
+                    <label className={fieldLabelClasses}>
                       Full name
-                      <input required maxLength={100} autoComplete="name" value={readinessForm.fullName} onChange={event => handleReadinessFieldChange('fullName', event.target.value)} className="mt-2 block min-h-11 w-full border border-xert-steel/30 bg-transparent px-3 py-2.5 font-body text-base normal-case tracking-normal text-xert-offwhite focus:border-xert-steel focus:outline-none" />
+                      <input required maxLength={100} autoComplete="name" value={readinessForm.fullName} onChange={event => handleReadinessFieldChange('fullName', event.target.value)} className={fieldInputClasses} />
                     </label>
-                    <label className="font-body text-xs uppercase tracking-wider text-xert-pale/60">
+                    <label className={fieldLabelClasses}>
                       Mobile number
-                      <input required maxLength={32} type="tel" inputMode="tel" autoComplete="tel" value={readinessForm.phone} onChange={event => handleReadinessFieldChange('phone', event.target.value)} className="mt-2 block min-h-11 w-full border border-xert-steel/30 bg-transparent px-3 py-2.5 font-body text-base normal-case tracking-normal text-xert-offwhite focus:border-xert-steel focus:outline-none" />
+                      <input required maxLength={32} type="tel" inputMode="tel" autoComplete="tel" value={readinessForm.phone} onChange={event => handleReadinessFieldChange('phone', event.target.value)} className={fieldInputClasses} />
                     </label>
                   </div>
                 </fieldset>
@@ -863,21 +859,21 @@ export default function Account() {
                   <legend className="font-display text-lg uppercase text-xert-offwhite">Emergency contact</legend>
                   <p className="font-body text-xs leading-relaxed text-xert-pale/55">Used only if XERT reasonably needs to contact someone about your immediate safety. Other members cannot see it.</p>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <label className="font-body text-xs uppercase tracking-wider text-xert-pale/60">
+                    <label className={fieldLabelClasses}>
                       Contact name
-                      <input required maxLength={100} autoComplete="off" value={readinessForm.emergencyContactName} onChange={event => handleReadinessFieldChange('emergencyContactName', event.target.value)} className="mt-2 block min-h-11 w-full border border-xert-steel/30 bg-transparent px-3 py-2.5 font-body text-base normal-case tracking-normal text-xert-offwhite focus:border-xert-steel focus:outline-none" />
+                      <input required maxLength={100} autoComplete="off" value={readinessForm.emergencyContactName} onChange={event => handleReadinessFieldChange('emergencyContactName', event.target.value)} className={fieldInputClasses} />
                     </label>
-                    <label className="font-body text-xs uppercase tracking-wider text-xert-pale/60">
+                    <label className={fieldLabelClasses}>
                       Contact phone
-                      <input required maxLength={32} type="tel" inputMode="tel" autoComplete="off" value={readinessForm.emergencyContactPhone} onChange={event => handleReadinessFieldChange('emergencyContactPhone', event.target.value)} className="mt-2 block min-h-11 w-full border border-xert-steel/30 bg-transparent px-3 py-2.5 font-body text-base normal-case tracking-normal text-xert-offwhite focus:border-xert-steel focus:outline-none" />
+                      <input required maxLength={32} type="tel" inputMode="tel" autoComplete="off" value={readinessForm.emergencyContactPhone} onChange={event => handleReadinessFieldChange('emergencyContactPhone', event.target.value)} className={fieldInputClasses} />
                     </label>
-                    <label className="font-body text-xs uppercase tracking-wider text-xert-pale/60 sm:col-span-2">
+                    <label className={`${fieldLabelClasses} sm:col-span-2`}>
                       Relationship
-                      <input required maxLength={60} autoComplete="off" placeholder="For example: parent, family member or friend" value={readinessForm.emergencyContactRelationship} onChange={event => handleReadinessFieldChange('emergencyContactRelationship', event.target.value)} className="mt-2 block min-h-11 w-full border border-xert-steel/30 bg-transparent px-3 py-2.5 font-body text-base normal-case tracking-normal text-xert-offwhite placeholder:text-xert-pale/30 focus:border-xert-steel focus:outline-none" />
+                      <input required maxLength={60} autoComplete="off" placeholder="For example: parent, family member or friend" value={readinessForm.emergencyContactRelationship} onChange={event => handleReadinessFieldChange('emergencyContactRelationship', event.target.value)} className={fieldInputClasses} />
                     </label>
                   </div>
-                  <label className="flex min-h-11 cursor-pointer items-start gap-3 border border-xert-steel/20 p-3 font-body text-sm leading-relaxed text-xert-pale/75">
-                    <input type="checkbox" required checked={contactIsAware} onChange={handleContactAwarenessChange} className="mt-1 h-4 w-4 shrink-0 accent-xert-steel" />
+                  <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-xert-steel/20 bg-white/[0.02] p-3 font-body text-sm leading-relaxed text-xert-pale/75">
+                    <input type="checkbox" required checked={contactIsAware} onChange={handleContactAwarenessChange} className="mt-0.5 h-5 w-5 shrink-0 rounded accent-xert-steel" />
                     I confirm this person knows I have listed them as my emergency contact and may be contacted by XERT if reasonably needed for my immediate safety.
                   </label>
                 </fieldset>
@@ -889,13 +885,13 @@ export default function Account() {
                     const sourceURL = officialSourceURL(document.source_url);
                     const previouslyAccepted = memberReadiness.accepted_documents.some(receipt => receipt.document_id === document.id);
                     return (
-                      <article key={document.id} className="border border-xert-steel/25 bg-xert-navy/40 p-4">
+                      <article key={document.id} className="xert-card-flat p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <h3 className="font-display text-base uppercase text-xert-offwhite">{document.title}</h3>
                             <p className="mt-1 font-body text-[10px] uppercase tracking-wider text-xert-pale/40">Version {document.version}</p>
                           </div>
-                          {previouslyAccepted && <span className="font-body text-[10px] uppercase tracking-wider text-green-300">Previously accepted</span>}
+                          {previouslyAccepted && <span className="xert-chip" style={{ color: '#86efac', borderColor: 'rgba(34,197,94,0.4)' }}>Previously accepted</span>}
                         </div>
                         <p className="mt-3 whitespace-pre-wrap font-body text-sm leading-relaxed text-xert-pale/70">{document.body}</p>
                         {sourceURL && (
@@ -904,7 +900,7 @@ export default function Account() {
                           </a>
                         )}
                         <label className="mt-3 flex min-h-11 cursor-pointer items-start gap-3 border-t border-xert-steel/15 pt-3 font-body text-sm leading-relaxed text-xert-pale/80">
-                          <input type="checkbox" required checked={documentAcknowledgements[document.id] === true} onChange={event => handleDocumentAcknowledgementChange(document.id, event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-xert-steel" />
+                          <input type="checkbox" required checked={documentAcknowledgements[document.id] === true} onChange={event => handleDocumentAcknowledgementChange(document.id, event.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 rounded accent-xert-steel" />
                           I have read and acknowledge this version.
                         </label>
                       </article>
@@ -918,7 +914,7 @@ export default function Account() {
                   </p>
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="font-body text-xs text-xert-pale/45">Your update is complete only after XERT confirms the save.</p>
-                    <button type="submit" disabled={!canSaveReadiness} className="inline-flex min-h-11 items-center justify-center bg-xert-steel px-5 font-display text-sm uppercase text-xert-navy disabled:cursor-not-allowed disabled:opacity-40">
+                    <button type="submit" disabled={!canSaveReadiness} className="xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-5 font-display text-sm uppercase tracking-wide disabled:cursor-not-allowed disabled:opacity-40">
                       {readinessSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />Saving…</> : 'Save member readiness'}
                     </button>
                   </div>
@@ -935,27 +931,20 @@ export default function Account() {
         {/* Member details */}
         <section className="mb-10">
           <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
+            <h2 className="font-display text-2xl uppercase text-xert-pale/85">
               Account Details
             </h2>
             {!editingProfile && (
-              <button
-                onClick={() => setEditingProfile(true)}
-                className="font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors"
-                style={{
-                  borderColor: 'rgba(123,167,188,0.3)',
-                  color: '#7BA7BC'
-                }}
-              >
+              <button onClick={() => setEditingProfile(true)} className={ghostButtonClasses}>
                 Edit
               </button>
             )}
           </div>
 
           {editingProfile ? (
-            <form onSubmit={handleProfileSave} className="border p-5" style={cardStyle}>
+            <form onSubmit={handleProfileSave} className="xert-card p-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <label className={fieldLabelClasses}>
                   Full name
                   <input
                     value={profileForm.full_name}
@@ -966,11 +955,10 @@ export default function Account() {
                       }))
                     }
                     autoComplete="name"
-                    className="block w-full mt-2 px-3 py-2.5 border bg-transparent font-body text-sm text-xert-offwhite focus:outline-none"
-                    style={{ borderColor: 'rgba(123,167,188,0.3)' }}
+                    className={fieldInputClasses}
                   />
                 </label>
-                <label className="font-body text-xs uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <label className={fieldLabelClasses}>
                   Mobile number
                   <input
                     value={profileForm.phone}
@@ -982,8 +970,7 @@ export default function Account() {
                     }
                     autoComplete="tel"
                     inputMode="tel"
-                    className="block w-full mt-2 px-3 py-2.5 border bg-transparent font-body text-sm text-xert-offwhite focus:outline-none"
-                    style={{ borderColor: 'rgba(123,167,188,0.3)' }}
+                    className={fieldInputClasses}
                   />
                 </label>
               </div>
@@ -997,21 +984,17 @@ export default function Account() {
                       phone: profile?.phone || ''
                     });
                   }}
-                  className="px-4 py-2.5 font-body text-xs uppercase tracking-wider border"
-                  style={{
-                    borderColor: 'rgba(123,167,188,0.3)',
-                    color: 'rgba(209,221,230,0.6)'
-                  }}
+                  className={ghostButtonClasses}
                 >
                   Cancel
                 </button>
-                <button type="submit" disabled={savingProfile} className="px-4 py-2.5 font-display text-sm uppercase disabled:opacity-50" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                <button type="submit" disabled={savingProfile} className="xert-btn-primary inline-flex min-h-11 items-center justify-center px-5 font-display text-sm uppercase tracking-wide disabled:opacity-50">
                   {savingProfile ? 'Saving...' : 'Save details'}
                 </button>
               </div>
             </form>
           ) : (
-            <div className="border p-5 grid grid-cols-1 sm:grid-cols-2 gap-5" style={cardStyle}>
+            <div className="xert-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <p className="font-body text-[11px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }}>
                   Email
@@ -1035,27 +1018,27 @@ export default function Account() {
         {/* Credits */}
         <section className="mb-10">
           {accountReady && creditsUnavailable && (
-            <div className="mb-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4">
+            <div className={`${warningBoxClasses} mb-3 p-4`}>
               <p className="font-body text-sm text-xert-pale" role="status">
                 Credit balance unavailable. {credits ? 'Your last loaded balance is shown below.' : 'Retry before relying on your balance.'}
               </p>
             </div>
           )}
           {accountReady && expiringCredits && (
-            <div role="status" className="mb-3 flex flex-wrap items-center gap-3 border border-[#e0b36a]/50 bg-[#e0b36a]/10 p-4">
+            <div role="status" className={`${warningBoxClasses} mb-3 flex flex-wrap items-center gap-3 p-4`}>
               <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
               <p className="min-w-0 flex-1 font-body text-sm text-xert-pale">
                 {expiringCredits.credits} class credit{expiringCredits.credits === 1 ? '' : 's'} expire{expiringCredits.credits === 1 ? 's' : ''} in {expiringCredits.daysRemaining} day{expiringCredits.daysRemaining === 1 ? '' : 's'}, on {formatDate(expiringCredits.expiresAt)}.
               </p>
-              <Link to="/booking" className="inline-flex min-h-11 items-center px-4 font-display text-sm uppercase text-xert-navy bg-[#e0b36a]">
+              <Link to="/booking" className="inline-flex min-h-11 items-center rounded-[0.875rem] bg-[#e0b36a] px-4 font-display text-sm uppercase tracking-wide text-xert-navy">
                 Book A Class
               </Link>
             </div>
           )}
-          <div className="border p-6 flex flex-col sm:flex-row sm:items-center gap-6" style={cardStyle}>
+          <div className="xert-card-accent p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 flex items-center justify-center shrink-0" style={{ backgroundColor: '#7BA7BC' }}>
-                <Ticket className="w-6 h-6" style={{ color: '#101820' }} />
+              <div className="xert-icon-tile" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+                <Ticket className="w-6 h-6" />
               </div>
               <div>
                 <p className="font-display text-4xl uppercase leading-none text-xert-offwhite">{initialAccountLoad || firstLoadFailed || (creditsUnavailable && !credits) ? '—' : (credits?.total ?? 0)}</p>
@@ -1070,7 +1053,7 @@ export default function Account() {
                   Next expiry: {formatDate(credits.batches.find(batch => batch.expires_at)?.expires_at)}
                 </p>
               )}
-              <Link to="/booking" className="px-5 py-3 font-display text-base uppercase tracking-wide" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+              <Link to="/booking" className={`${primaryButtonClasses} w-full sm:w-auto`}>
                 {accountReady && credits?.total > 0 ? 'Book A Class' : 'Buy A Pack'}
               </Link>
             </div>
@@ -1081,27 +1064,27 @@ export default function Account() {
         <section id="progress" className="mb-10 scroll-mt-32">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
+              <h2 className="font-display text-2xl uppercase text-xert-pale/85">
                 Training Momentum
               </h2>
               <p className="mt-1 font-body text-xs" style={{ color: 'rgba(209,221,230,0.48)' }}>
                 Based only on attendance recorded by XERT.
               </p>
             </div>
-            <Link to="/booking" className="inline-flex min-h-11 items-center font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+            <Link to="/booking" className={inlineLinkClasses}>
               Book next class
             </Link>
           </div>
 
           {initialAccountLoad ? (
-            <div className="flex min-h-28 items-center gap-3 border p-6" style={cardStyle} role="status">
+            <div className="xert-card flex min-h-28 items-center gap-3 p-6" role="status">
               <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#7BA7BC' }} aria-hidden="true" />
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.6)' }}>Loading your progress…</p>
             </div>
           ) : firstLoadFailed || bookingsUnavailable ? (
-            <div className="border p-6" style={cardStyle}>{unavailableMessage}</div>
+            <div className="xert-card p-6">{unavailableMessage}</div>
           ) : trainingProgress.totalAttended === 0 ? (
-            <div className="flex flex-col gap-4 border p-6 sm:flex-row sm:items-center" style={cardStyle}>
+            <div className="xert-card flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
               <CheckCircle2 className="h-8 w-8 shrink-0" style={{ color: '#7BA7BC' }} aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="font-display text-xl uppercase text-xert-offwhite">Your progress starts here</p>
@@ -1111,14 +1094,14 @@ export default function Account() {
               </div>
             </div>
           ) : (
-            <div className="border p-5 sm:p-6" style={cardStyle}>
+            <div className="xert-card p-5 sm:p-6">
               <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-3">
                 {[
                   [trainingProgress.attendedLast30Days, 'Completed · 30 days'],
                   [`${trainingProgress.activeWeeksLastFour}/4`, 'Active weeks'],
                   [trainingProgress.totalAttended, 'Completed · all time'],
                 ].map(([value, label]) => (
-                  <div key={label} className="border border-[#7BA7BC]/15 bg-[#101820]/35 p-4">
+                  <div key={label} className="rounded-xl bg-white/[0.03] p-4">
                     <p className="font-display text-3xl uppercase leading-none text-xert-offwhite">{value}</p>
                     <p className="mt-2 font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.52)' }}>{label}</p>
                   </div>
@@ -1134,10 +1117,10 @@ export default function Account() {
         {/* Event goals */}
         <section id="goals" className="mb-10 scroll-mt-32">
           <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
+            <h2 className="font-display text-2xl uppercase text-xert-pale/85">
               Training Goals
             </h2>
-            <Link to="/events" className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+            <Link to="/events" className={inlineLinkClasses}>
               Explore events
             </Link>
           </div>
@@ -1148,12 +1131,12 @@ export default function Account() {
           ) : firstLoadFailed || accountSourceErrors.eventGoals ? (
             unavailableMessage
           ) : eventGoals.length === 0 ? (
-            <div className="border p-6 flex flex-wrap items-center gap-4" style={cardStyle}>
-              <Target className="w-5 h-5" style={{ color: '#7BA7BC' }} />
-              <p className="font-body text-sm flex-1" style={{ color: 'rgba(209,221,230,0.55)' }}>
+            <div className="xert-card p-6 flex flex-wrap items-center gap-4">
+              <span className="xert-icon-tile"><Target className="w-5 h-5" /></span>
+              <p className="font-body text-sm flex-1 min-w-[12rem] text-xert-pale/60">
                 Choose an event and make it part of your XERT training plan.
               </p>
-              <Link to="/events" className="font-display text-sm uppercase px-4 py-2.5" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+              <Link to="/events" className="xert-btn-primary inline-flex min-h-11 items-center justify-center px-4 font-display text-sm uppercase tracking-wide">
                 Choose an event
               </Link>
             </div>
@@ -1162,9 +1145,9 @@ export default function Account() {
               {eventGoals.map(goal => {
                 const event = goal.events;
                 return (
-                  <div key={goal.event_id} className="border p-5 flex flex-wrap items-center gap-4" style={cardStyle}>
-                    <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
-                      <Target className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+                  <div key={goal.event_id} className="xert-card p-5 flex flex-wrap items-center gap-4">
+                    <div className="xert-icon-tile">
+                      <Target className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-[12rem]">
                       <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{event?.name || 'XERT event'}</p>
@@ -1172,14 +1155,7 @@ export default function Account() {
                         {[formatDate(event?.event_date), event?.location].filter(Boolean).join(' · ')}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleRemoveEventGoal(goal)}
-                      className="font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors"
-                      style={{
-                        borderColor: 'rgba(123,167,188,0.28)',
-                        color: 'rgba(209,221,230,0.65)'
-                      }}
-                    >
+                    <button onClick={() => handleRemoveEventGoal(goal)} className={ghostButtonClasses}>
                       Remove goal
                     </button>
                   </div>
@@ -1192,10 +1168,10 @@ export default function Account() {
         {/* Personal training requests */}
         <section className="mb-10">
           <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="font-display text-2xl uppercase" style={{ color: 'rgba(209,221,230,0.85)' }}>
+            <h2 className="font-display text-2xl uppercase text-xert-pale/85">
               PT Requests
             </h2>
-            <Link to="/timetable" className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
+            <Link to="/timetable" className={inlineLinkClasses}>
               Request a session
             </Link>
           </div>
@@ -1204,21 +1180,21 @@ export default function Account() {
           ) : firstLoadFailed || accountSourceErrors.privateSessions ? (
             unavailableMessage
           ) : privateSessionRequests.length === 0 ? (
-            <div className="border p-6 flex flex-wrap items-center gap-4" style={cardStyle}>
-              <Dumbbell className="w-5 h-5" style={{ color: '#7BA7BC' }} />
-              <p className="font-body text-sm flex-1" style={{ color: 'rgba(209,221,230,0.55)' }}>
+            <div className="xert-card p-6 flex flex-wrap items-center gap-4">
+              <span className="xert-icon-tile"><Dumbbell className="w-5 h-5" /></span>
+              <p className="font-body text-sm flex-1 min-w-[12rem] text-xert-pale/60">
                 No personal training requests yet.
               </p>
-              <Link to="/timetable" className="font-display text-sm uppercase px-4 py-2.5" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+              <Link to="/timetable" className="xert-btn-primary inline-flex min-h-11 items-center justify-center px-4 font-display text-sm uppercase tracking-wide">
                 Request PT
               </Link>
             </div>
           ) : (
             <div className="space-y-3">
               {privateSessionRequests.map(request => (
-                <div key={request.id} className="border p-5 flex flex-wrap items-center gap-4" style={cardStyle}>
-                  <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
-                    <Dumbbell className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+                <div key={request.id} className="xert-card p-5 flex flex-wrap items-center gap-4">
+                  <div className="xert-icon-tile">
+                    <Dumbbell className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-[12rem]">
                     <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{request.requested_session_type}</p>
@@ -1227,7 +1203,7 @@ export default function Account() {
                     </p>
                     {request.training_goal && <p className="font-body text-xs mt-1" style={{ color: 'rgba(209,221,230,0.45)' }}>Goal: {request.training_goal}</p>}
                   </div>
-                  <span className="font-body text-[10px] uppercase tracking-wider px-2 py-1" style={{ backgroundColor: 'rgba(123,167,188,0.14)', color: '#7BA7BC' }}>
+                  <span className="xert-chip">
                     {privateSessionStatus(request.status)}
                   </span>
                 </div>
@@ -1239,14 +1215,14 @@ export default function Account() {
         {/* Pending booking requests */}
         {accountReady && pending.length > 0 && (
           <section className="mb-10">
-            <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
+            <h2 className="font-display text-2xl uppercase mb-4 text-xert-pale/85">
               Requests &amp; Waitlist
             </h2>
             <div className="space-y-3">
               {pending.map(b => (
-                <div key={b.booking_id} className="border p-5 flex flex-wrap items-center gap-4" style={cardStyle}>
-                  <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
-                    <Clock className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+                <div key={b.booking_id} className="xert-card p-5 flex flex-wrap items-center gap-4">
+                  <div className="xert-icon-tile">
+                    <Clock className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-[12rem]">
                     <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{b.title || b.class_type || 'XERT Class'}</p>
@@ -1264,18 +1240,14 @@ export default function Account() {
                     <button
                       onClick={() => setCancellationTarget(b)}
                       disabled={cancellingId === b.booking_id}
-                      className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
-                      style={{
-                        borderColor: 'rgba(123,167,188,0.3)',
-                        color: 'rgba(209,221,230,0.6)'
-                      }}
+                      className={`${ghostButtonClasses} disabled:opacity-50`}
                     >
                       {cancellingId === b.booking_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
                       {b.status === 'waitlisted' ? 'Leave waitlist' : 'Cancel request'}
                     </button>
                   ) : provider.portalUrl ? (
                     <a href={provider.portalUrl} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex min-h-11 items-center gap-1.5 border border-xert-steel/30 px-3 font-body text-xs uppercase tracking-wider text-xert-steel">
+                      className={ghostButtonClasses}>
                       <ExternalLink className="h-3.5 w-3.5" /> Manage in FitBox
                     </a>
                   ) : (
@@ -1289,7 +1261,7 @@ export default function Account() {
 
         {/* Upcoming bookings */}
         <section id="bookings" className="mb-10 scroll-mt-32">
-          <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
+          <h2 className="font-display text-2xl uppercase mb-4 text-xert-pale/85">
             Upcoming Classes
           </h2>
           {initialAccountLoad ? (
@@ -1299,7 +1271,7 @@ export default function Account() {
           ) : firstLoadFailed || bookingsUnavailable ? (
             unavailableMessage
           ) : upcoming.length === 0 ? (
-            <div className="border p-6" style={cardStyle}>
+            <div className="xert-card p-6">
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
                 No upcoming classes booked.{' '}
                 <Link to="/booking" style={{ color: '#7BA7BC' }}>
@@ -1311,9 +1283,9 @@ export default function Account() {
           ) : (
             <div className="space-y-3">
               {upcoming.map(b => (
-                <div key={b.booking_id} className="border p-5 flex flex-wrap items-center gap-4" style={cardStyle}>
-                  <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(123,167,188,0.14)' }}>
-                    <CalendarDays className="w-5 h-5" style={{ color: '#7BA7BC' }} />
+                <div key={b.booking_id} className="xert-card p-5 flex flex-wrap items-center gap-4">
+                  <div className="xert-icon-tile">
+                    <CalendarDays className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-[12rem]">
                     <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{b.title || b.class_type || 'XERT Class'}</p>
@@ -1326,18 +1298,14 @@ export default function Account() {
                     <button
                       onClick={() => setCancellationTarget(b)}
                       disabled={cancellingId === b.booking_id}
-                      className="inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-wider px-3 py-2 border transition-colors disabled:opacity-50"
-                      style={{
-                        borderColor: 'rgba(123,167,188,0.3)',
-                        color: 'rgba(209,221,230,0.6)'
-                      }}
+                      className={`${ghostButtonClasses} disabled:opacity-50`}
                     >
                       {cancellingId === b.booking_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
                       Cancel
                     </button>
                   ) : provider.portalUrl ? (
                     <a href={provider.portalUrl} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex min-h-11 items-center gap-1.5 border border-xert-steel/30 px-3 font-body text-xs uppercase tracking-wider text-xert-steel">
+                      className={ghostButtonClasses}>
                       <ExternalLink className="h-3.5 w-3.5" /> Manage in FitBox
                     </a>
                   ) : (
@@ -1355,7 +1323,7 @@ export default function Account() {
 
         {/* Purchase history */}
         <section className="mb-10">
-          <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
+          <h2 className="font-display text-2xl uppercase mb-4 text-xert-pale/85">
             Purchases
           </h2>
           {initialAccountLoad ? (
@@ -1365,7 +1333,7 @@ export default function Account() {
           ) : firstLoadFailed || ordersUnavailable ? (
             unavailableMessage
           ) : orders.length === 0 ? (
-            <div className="border p-6" style={cardStyle}>
+            <div className="xert-card p-6">
               <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
                 No purchases yet.
               </p>
@@ -1373,9 +1341,9 @@ export default function Account() {
           ) : (
             <div className="space-y-2">
               {orders.map(o => (
-                <div key={o.id} className="border p-4 flex items-center gap-4" style={cardStyle}>
-                  <Receipt className="w-4 h-4 shrink-0" style={{ color: '#7BA7BC' }} />
-                  <p className="font-body text-sm flex-1" style={{ color: 'rgba(209,221,230,0.7)' }}>
+                <div key={o.id} className="xert-card p-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <Receipt className="w-4 h-4 shrink-0 text-xert-steel" />
+                  <p className="font-body text-sm flex-1 min-w-[8rem]" style={{ color: 'rgba(209,221,230,0.7)' }}>
                     {o.products?.name || 'Session pack'}
                   </p>
                   <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.45)' }}>
@@ -1393,25 +1361,19 @@ export default function Account() {
         {/* Past classes */}
         {accountReady && past.length > 0 && (
           <section>
-            <h2 className="font-display text-2xl uppercase mb-4" style={{ color: 'rgba(209,221,230,0.85)' }}>
+            <h2 className="font-display text-2xl uppercase mb-4 text-xert-pale/85">
               Past &amp; Cancelled
             </h2>
             <div className="space-y-2">
               {past.slice(0, 10).map(b => (
-                <div key={b.booking_id} className="border p-4 flex items-center gap-4 opacity-70" style={cardStyle}>
-                  <p className="font-body text-sm flex-1" style={{ color: 'rgba(209,221,230,0.6)' }}>
+                <div key={b.booking_id} className="xert-card p-4 flex flex-wrap items-center gap-x-4 gap-y-2 opacity-70">
+                  <p className="font-body text-sm flex-1 min-w-[10rem]" style={{ color: 'rgba(209,221,230,0.6)' }}>
                     {b.title || b.class_type || 'XERT Class'}
                   </p>
                   <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.4)' }}>
                     {formatDateTime(b.start_time)}
                   </p>
-                  <span
-                    className="font-body text-[10px] uppercase tracking-wider px-2 py-1"
-                    style={{
-                      backgroundColor: 'rgba(123,167,188,0.14)',
-                      color: 'rgba(209,221,230,0.55)'
-                    }}
-                  >
+                  <span className="xert-chip opacity-80">
                     {b.status}
                   </span>
                 </div>
@@ -1420,12 +1382,12 @@ export default function Account() {
           </section>
         )}
 
-        <section className="mt-12 pt-8 border-t" style={{ borderColor: 'rgba(201,78,68,0.25)' }}>
+        <section className="mt-12 pt-8 border-t border-[#c94e44]/25">
           <h2 className="font-display text-xl uppercase text-xert-offwhite">Account Control</h2>
           <p className="font-body text-sm mt-2 max-w-xl" style={{ color: 'rgba(209,221,230,0.55)' }}>
             Permanently remove your profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals. Purchase records are anonymized.
           </p>
-          <button type="button" onClick={() => setShowDeleteAccount(true)} className="mt-4 px-4 py-2.5 border font-body text-xs uppercase tracking-wider" style={{ borderColor: 'rgba(201,78,68,0.55)', color: '#f0a1a1' }}>
+          <button type="button" onClick={() => setShowDeleteAccount(true)} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[0.875rem] border px-4 font-body text-xs uppercase tracking-wider transition-colors hover:bg-[#c94e44]/10" style={{ borderColor: 'rgba(201,78,68,0.55)', color: '#f0a1a1' }}>
             Delete account
           </button>
         </section>
@@ -1443,13 +1405,7 @@ export default function Account() {
             if (event.target === event.currentTarget) setCancellationTarget(null);
           }}
         >
-          <div
-            className="w-full max-w-md border p-6"
-            style={{
-              borderColor: 'rgba(123,167,188,0.3)',
-              backgroundColor: '#101820'
-            }}
-          >
+          <div className="xert-card w-full max-w-md p-6">
             <h2 id="cancel-booking-title" className="font-display text-2xl uppercase text-xert-offwhite">
               Cancel booking?
             </h2>
@@ -1461,15 +1417,11 @@ export default function Account() {
                 type="button"
                 autoFocus
                 onClick={() => setCancellationTarget(null)}
-                className="px-4 py-2.5 border font-body text-xs uppercase tracking-wider transition-colors"
-                style={{
-                  borderColor: 'rgba(123,167,188,0.3)',
-                  color: 'rgba(209,221,230,0.65)'
-                }}
+                className={ghostButtonClasses}
               >
                 Keep booking
               </button>
-              <button type="button" onClick={confirmCancellation} className="px-4 py-2.5 font-body text-xs uppercase tracking-wider transition-colors" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
+              <button type="button" onClick={confirmCancellation} className="inline-flex min-h-11 items-center justify-center rounded-[0.875rem] px-4 font-body text-xs uppercase tracking-wider transition-colors" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
                 Cancel booking
               </button>
             </div>
@@ -1478,14 +1430,14 @@ export default function Account() {
       )}
       {showDeleteAccount && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title" aria-describedby="delete-account-description">
-          <div className="w-full max-w-md border p-6" style={{ borderColor: 'rgba(201,78,68,0.45)', backgroundColor: '#101820' }}>
+          <div className="xert-card w-full max-w-md p-6" style={{ borderColor: 'rgba(201,78,68,0.45)' }}>
             <h2 id="delete-account-title" className="font-display text-2xl uppercase text-xert-offwhite">Delete account permanently?</h2>
             <p id="delete-account-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'rgba(209,221,230,0.68)' }}>
               Your profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals will be removed. Purchase records are anonymized. This cannot be undone.
             </p>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
-              <button type="button" autoFocus disabled={deletingAccount} onClick={() => setShowDeleteAccount(false)} className="px-4 py-2.5 border font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ borderColor: 'rgba(123,167,188,0.3)', color: 'rgba(209,221,230,0.65)' }}>Keep account</button>
-              <button type="button" disabled={deletingAccount} onClick={() => void handleDeleteAccount()} className="px-4 py-2.5 font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
+              <button type="button" autoFocus disabled={deletingAccount} onClick={() => setShowDeleteAccount(false)} className={`${ghostButtonClasses} disabled:opacity-50`}>Keep account</button>
+              <button type="button" disabled={deletingAccount} onClick={() => void handleDeleteAccount()} className="inline-flex min-h-11 items-center justify-center rounded-[0.875rem] px-4 font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
                 {deletingAccount ? 'Deleting...' : 'Delete account'}
               </button>
             </div>

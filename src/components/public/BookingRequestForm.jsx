@@ -3,18 +3,22 @@ import { submitClassSignup } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
 import { friendlySignupError } from '@/lib/classSignup';
 
+const chipClasses = 'min-h-11 px-3 py-2 text-sm font-body rounded-full border transition-colors';
+const chipActive = 'border-xert-steel bg-xert-steel text-xert-navy';
+const chipIdle = 'border-xert-steel/30 bg-white/[0.03] text-xert-pale/75 hover:border-xert-steel';
+const errorStyle = { color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' };
+
 function FieldLabel({ children, required = false, htmlFor = undefined }) {
   const Component = htmlFor ? 'label' : 'span';
   return (
-    <Component htmlFor={htmlFor} className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">
-      {children}{required && <span className="text-xert-red ml-1" aria-hidden="true">*</span>}
+    <Component htmlFor={htmlFor} className="xert-label">
+      {children}{required && <span className="text-xert-steel ml-1" aria-hidden="true">*</span>}
     </Component>
   );
 }
 function Input({ ...props }) {
   return (
-    <input {...props}
-      className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red transition-colors" />
+    <input {...props} className="xert-input" />
   );
 }
 
@@ -66,9 +70,9 @@ export default function BookingRequestForm({
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 
       {session && (
-        <div className="bg-xert-charcoal p-3 border-l-2 border-xert-red mb-6">
-          <p className="font-display text-sm text-xert-offwhite uppercase">{session.title}</p>
-          <p className="font-body text-xs text-xert-concrete/60 mt-1">
+        <div className="xert-card-flat p-4 mb-6">
+          <p className="font-display text-base text-xert-offwhite uppercase">{session.title}</p>
+          <p className="font-body text-xs text-xert-pale/65 mt-1">
             {session.start_time ? new Date(session.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
             {session.coach_name ? ` · ${session.coach_name}` : ''}
           </p>
@@ -80,13 +84,13 @@ export default function BookingRequestForm({
       <div><FieldLabel htmlFor="booking-phone" required>Phone</FieldLabel><Input id="booking-phone" name="phone" autoComplete="tel" aria-required="true" type="tel" placeholder="Mobile number" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
 
       <fieldset>
-        <legend className="block font-body text-xs text-xert-concrete/60 uppercase tracking-wider mb-2">Training level</legend>
+        <legend className="xert-label">Training level</legend>
         <div className="flex flex-wrap gap-2">
           {TRAINING_LEVELS.map(l => (
             <button type="button" key={l}
               onClick={() => set('training_level', l)}
               aria-pressed={form.training_level === l}
-              className={`min-h-11 px-3 py-2 text-sm font-body border transition-all ${form.training_level === l ? 'border-xert-red bg-xert-steel/10 text-xert-red' : 'border-xert-steel/40 text-xert-concrete/70 hover:border-xert-steel'}`}>
+              className={`${chipClasses} ${form.training_level === l ? chipActive : chipIdle}`}>
               {l}
             </button>
           ))}
@@ -97,7 +101,7 @@ export default function BookingRequestForm({
         <FieldLabel htmlFor="booking-notes">Notes</FieldLabel>
         <textarea id="booking-notes" name="notes" value={form.notes} onChange={e => set('notes', e.target.value)}
           rows={2} placeholder="Any questions or information for the coach (optional)"
-          className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-base text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red resize-none" />
+          className="xert-input resize-none" />
       </div>
 
       {takesSpot && (
@@ -111,20 +115,20 @@ export default function BookingRequestForm({
       </FormCheckbox>
 
       {error && (
-        <div role="alert" className="p-3 border border-xert-red/50 bg-xert-steel/10">
-          <p className="font-body text-sm text-xert-red">{error}</p>
+        <div role="alert" className="rounded-xl border p-3" style={errorStyle}>
+          <p className="font-body text-sm">{error}</p>
         </div>
       )}
 
       <div className="flex gap-3 pt-2">
         {onCancel && (
           <button type="button" onClick={onCancel}
-            className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
+            className="xert-btn-ghost flex-1 inline-flex min-h-[52px] items-center justify-center font-display text-sm uppercase tracking-wide">
             Cancel
           </button>
         )}
         <button type="submit" disabled={loading}
-          className="xert-btn-primary flex-1 py-3 font-display text-sm uppercase disabled:opacity-50">
+          className="xert-btn-primary flex-1 inline-flex min-h-[52px] items-center justify-center font-display text-sm uppercase tracking-wide disabled:opacity-50">
           {loading ? busyLabel : submitLabel}
         </button>
       </div>

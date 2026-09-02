@@ -15,6 +15,19 @@ function canTrackEventGoal(event) {
   return Boolean(event?.id && event.source !== 'xert-default');
 }
 
+// The date block sits beside the event in display type; long labels such as
+// "Last Saturday of September" step down so they still fit the column.
+function dateBlockSize(label) {
+  if (label.length <= 6) return 'text-2xl';
+  if (label.length <= 12) return 'text-lg';
+  return 'text-sm leading-tight';
+}
+
+const filterChipClasses = 'rounded-full border px-4 py-2.5 font-body text-xs uppercase tracking-wider transition-colors';
+const filterChipActive = 'border-xert-steel bg-xert-steel text-xert-navy';
+const filterChipIdle = 'border-xert-steel/25 bg-white/[0.03] text-xert-pale/65 hover:border-xert-steel';
+const inlineActionClasses = 'inline-flex items-center gap-2 font-body text-xs uppercase tracking-wider text-xert-steel hover:text-xert-pale transition-colors';
+
 export default function Events() {
   const { session } = useSupabaseAuth();
   const { toast } = useToast();
@@ -111,7 +124,7 @@ export default function Events() {
   const usingDefaultCalendar = events.some(ev => ev.source === 'xert-default');
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+    <div className="min-h-screen bg-xert-navy">
       <PublicNav />
 
       <main id="main" className="pb-20">
@@ -126,9 +139,9 @@ export default function Events() {
         <div id="goals" className="max-w-6xl mx-auto px-6 scroll-mt-32">
           {/* Category filter */}
           {!loading && !error && events.length > 0 && (
-            <div className="mt-8 space-y-5">
+            <div className="mt-8 space-y-6">
               {usingDefaultCalendar && (
-                <p className="font-body text-xs uppercase tracking-[0.18em]" style={{ color: 'rgba(123,167,188,0.72)' }}>
+                <p className="font-body text-xs uppercase tracking-[0.18em] text-xert-steel/75">
                   Showing the XERT 2026 calendar while live Supabase events are being prepared.
                 </p>
               )}
@@ -140,17 +153,13 @@ export default function Events() {
                     return (
                       <article
                         key={`next-${ev.id || ev.name}`}
-                        className="border p-4"
-                        style={{
-                          borderColor: state.key === 'live' ? '#7BA7BC' : 'rgba(123,167,188,0.16)',
-                          backgroundColor: 'rgba(50,72,90,0.16)'
-                        }}
+                        className={`${state.key === 'live' ? 'xert-card-accent' : 'xert-card'} p-5`}
                       >
-                        <p className="font-body text-[10px] uppercase tracking-wider mb-2" style={{ color: '#7BA7BC' }}>
+                        <p className={`${state.key === 'live' ? 'xert-chip xert-chip-solid' : 'xert-chip'} mb-3`}>
                           {state.label}
                         </p>
                         <h2 className="font-display text-xl uppercase leading-tight text-xert-offwhite">{ev.name}</h2>
-                        <p className="font-body text-sm mt-2" style={{ color: 'rgba(209,221,230,0.58)' }}>
+                        <p className="font-body text-sm mt-2 text-xert-pale/60">
                           {formatEventRange(ev)} · {ev.location}
                         </p>
                       </article>
@@ -167,12 +176,7 @@ export default function Events() {
                       key={cat}
                       type="button"
                       onClick={() => setActiveCategory(cat)}
-                      className="min-h-11 px-3 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors"
-                      style={{
-                        borderColor: active ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
-                        backgroundColor: active ? 'rgba(123,167,188,0.14)' : 'transparent',
-                        color: active ? '#F1F3F4' : 'rgba(209,221,230,0.6)'
-                      }}
+                      className={`min-h-11 ${filterChipClasses} ${active ? filterChipActive : filterChipIdle}`}
                     >
                       {cat === 'all' ? 'All events' : cat}
                     </button>
@@ -181,12 +185,7 @@ export default function Events() {
                 <button
                   type="button"
                   onClick={() => setShowPast(v => !v)}
-                  className="min-h-11 ml-0 sm:ml-2 px-3 py-2.5 font-body text-xs uppercase tracking-wider border transition-colors"
-                  style={{
-                    borderColor: showPast ? '#7BA7BC' : 'rgba(123,167,188,0.24)',
-                    backgroundColor: showPast ? 'rgba(123,167,188,0.14)' : 'transparent',
-                    color: showPast ? '#F1F3F4' : 'rgba(209,221,230,0.6)'
-                  }}
+                  className={`min-h-11 ${filterChipClasses} ml-0 sm:ml-2 ${showPast ? filterChipActive : filterChipIdle}`}
                 >
                   {showPast ? 'Hide completed' : 'Show completed'}
                 </button>
@@ -201,8 +200,8 @@ export default function Events() {
                 <span className="sr-only">Loading the 2026 calendar…</span>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
                   {[0, 1, 2].map(i => (
-                    <div key={i} className="border p-4" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.16)' }}>
-                      <Skeleton className="h-3 w-20 mb-3" />
+                    <div key={i} className="xert-card p-5">
+                      <Skeleton className="h-6 w-24 mb-3 rounded-full" />
                       <Skeleton className="h-6 w-3/4 mb-3" />
                       <Skeleton className="h-4 w-1/2" />
                     </div>
@@ -211,13 +210,16 @@ export default function Events() {
                 <Skeleton className="h-8 w-40 mb-4" />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {[0, 1, 2, 3].map(i => (
-                    <div key={i} className="border p-5" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.16)' }}>
-                      <div className="flex items-start justify-between gap-4 mb-3">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-5 w-16" />
+                    <div key={i} className="xert-card p-4 sm:p-5 flex gap-4">
+                      <Skeleton className="h-8 w-14 shrink-0" />
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                          <Skeleton className="h-6 w-24 rounded-full" />
+                          <Skeleton className="h-6 w-16 rounded-full" />
+                        </div>
+                        <Skeleton className="h-7 w-3/4 mb-3" />
+                        <Skeleton className="h-4 w-1/2" />
                       </div>
-                      <Skeleton className="h-7 w-3/4 mb-3" />
-                      <Skeleton className="h-4 w-1/2" />
                     </div>
                   ))}
                 </div>
@@ -229,19 +231,19 @@ export default function Events() {
               </p>
             )}
             {!loading && !error && events.length === 0 && (
-              <div className="border p-10 text-center" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
-                <Trophy className="w-8 h-8 mx-auto mb-4" style={{ color: 'rgba(123,167,188,0.4)' }} />
+              <div className="xert-card p-10 text-center">
+                <span className="xert-icon-tile mx-auto mb-4"><Trophy className="w-5 h-5" /></span>
                 <p className="font-display text-2xl uppercase text-xert-offwhite">Calendar coming soon.</p>
-                <p className="font-body text-sm mt-2" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <p className="font-body text-sm mt-2 text-xert-pale/60">
                   The 2026 South East Queensland event schedule will be published here shortly.
                 </p>
               </div>
             )}
             {!loading && !error && events.length > 0 && visibleEvents.length === 0 && (
-              <div className="border p-10 text-center" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
-                <Trophy className="w-8 h-8 mx-auto mb-4" style={{ color: 'rgba(123,167,188,0.4)' }} />
+              <div className="xert-card p-10 text-center">
+                <span className="xert-icon-tile mx-auto mb-4"><Trophy className="w-5 h-5" /></span>
                 <p className="font-display text-2xl uppercase text-xert-offwhite">No upcoming matches.</p>
-                <p className="font-body text-sm mt-2" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <p className="font-body text-sm mt-2 text-xert-pale/60">
                   Switch on completed events to review the full 2026 calendar.
                 </p>
               </div>
@@ -251,11 +253,13 @@ export default function Events() {
               !error &&
               byMonth.map(({ month, events: list }) => (
                 <section key={month} className="mb-10">
-                  <div className="flex items-baseline gap-4 mb-4">
-                    <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none">{month}</h2>
-                    <span className="font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-                      {list.length} {list.length === 1 ? 'event' : 'events'}
-                    </span>
+                  <div className="sticky top-14 z-10 -mx-6 mb-4 px-6 py-3 bg-xert-navy/85 backdrop-blur-md border-b border-xert-steel/10">
+                    <div className="flex items-baseline gap-3">
+                      <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none">{month}</h2>
+                      <span className="xert-chip">
+                        {list.length} {list.length === 1 ? 'event' : 'events'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -263,80 +267,64 @@ export default function Events() {
                       const state = getEventState(ev);
                       const trackable = canTrackEventGoal(ev);
                       const selectedGoal = trackable && goalEventIds.has(ev.id);
+                      const dateLabel = formatEventRange(ev);
                       return (
                         <article
                           key={ev.id}
-                          className="group border p-5 flex flex-col transition-colors"
-                          style={{
-                            borderColor: 'rgba(123,167,188,0.16)',
-                            backgroundColor: 'rgba(50,72,90,0.16)'
-                          }}
+                          className="group xert-card p-4 sm:p-5 flex gap-4 transition-colors"
                         >
-                          <div className="flex items-start justify-between gap-4 mb-3">
-                            <span className="font-body text-sm uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-                              {formatEventRange(ev)}
+                          <div className="shrink-0 w-[4.5rem] sm:w-20 border-r border-xert-steel/15 pr-3 sm:pr-4">
+                            <span className={`block font-display uppercase tracking-wide text-xert-steel ${dateBlockSize(dateLabel)}`}>
+                              {dateLabel}
                             </span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span
-                                className="font-body text-[10px] uppercase tracking-wider px-2 py-1"
-                                style={{
-                                  color: state.key === 'complete' ? 'rgba(16,24,32,0.64)' : '#101820',
-                                  backgroundColor: state.key === 'complete' ? 'rgba(209,221,230,0.52)' : '#D1DDE6'
-                                }}
-                              >
+                          </div>
+                          <div className="min-w-0 flex-1 flex flex-col">
+                            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                              <span className={state.key === 'complete' ? 'xert-chip opacity-60' : 'xert-chip xert-chip-solid'}>
                                 {state.label}
                               </span>
                               {ev.category && (
-                                <span
-                                  className="font-body text-[10px] uppercase tracking-wider px-2 py-1 hidden sm:inline-block"
-                                  style={{
-                                    color: '#101820',
-                                    backgroundColor: '#D1DDE6'
-                                  }}
-                                >
+                                <span className="xert-chip">
                                   {ev.category}
                                 </span>
                               )}
                             </div>
-                          </div>
-                          <h3 className="font-display text-2xl uppercase leading-tight text-xert-offwhite mb-2 flex items-start gap-2">
-                            {ev.name}
-                            {ev.url && <ExternalLink className="w-4 h-4 mt-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7BA7BC' }} />}
-                          </h3>
-                          {ev.location && (
-                            <p className="font-body text-sm mt-auto flex items-center gap-1.5" style={{ color: 'rgba(209,221,230,0.56)' }}>
-                              <MapPin className="w-3.5 h-3.5" style={{ color: 'rgba(123,167,188,0.6)' }} />
-                              {ev.location}
-                            </p>
-                          )}
-                          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-                            {ev.url && (
-                              <a href={ev.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                Event details
-                              </a>
+                            <h3 className="font-display text-2xl uppercase leading-tight text-xert-offwhite mb-2 flex items-start gap-2">
+                              {ev.name}
+                              {ev.url && <ExternalLink className="w-4 h-4 mt-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-xert-steel" />}
+                            </h3>
+                            {ev.location && (
+                              <p className="font-body text-sm mt-auto flex items-center gap-1.5 text-xert-pale/60">
+                                <MapPin className="w-3.5 h-3.5 text-xert-steel/70" />
+                                {ev.location}
+                              </p>
                             )}
-                            {ev.event_date && (
-                              <button type="button" onClick={() => downloadEventIcs(ev)} className="inline-flex min-h-11 items-center gap-2 font-body text-xs uppercase tracking-wider" style={{ color: '#7BA7BC' }}>
-                                <CalendarPlus className="w-3.5 h-3.5" />
-                                Add to calendar
-                              </button>
-                            )}
-                            {trackable && state.key !== 'complete' && (
-                              <button
-                                type="button"
-                                aria-pressed={selectedGoal}
-                                disabled={savingGoalId === ev.id}
-                                onClick={() => handleGoalToggle(ev)}
-                                className="inline-flex min-h-11 items-center gap-2 font-body text-xs uppercase tracking-wider disabled:opacity-50"
-                                style={{
-                                  color: selectedGoal ? '#D1DDE6' : '#7BA7BC'
-                                }}
-                              >
-                                <Target className="w-3.5 h-3.5" />
-                                {savingGoalId === ev.id ? 'Saving goal...' : selectedGoal ? 'Training goal' : 'Train for this'}
-                              </button>
-                            )}
+                            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-0">
+                              {ev.url && (
+                                <a href={ev.url} target="_blank" rel="noopener noreferrer" className={`min-h-11 ${inlineActionClasses}`}>
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  Event details
+                                </a>
+                              )}
+                              {ev.event_date && (
+                                <button type="button" onClick={() => downloadEventIcs(ev)} className={`min-h-11 ${inlineActionClasses}`}>
+                                  <CalendarPlus className="w-3.5 h-3.5" />
+                                  Add to calendar
+                                </button>
+                              )}
+                              {trackable && state.key !== 'complete' && (
+                                <button
+                                  type="button"
+                                  aria-pressed={selectedGoal}
+                                  disabled={savingGoalId === ev.id}
+                                  onClick={() => handleGoalToggle(ev)}
+                                  className={`min-h-11 ${inlineActionClasses} disabled:opacity-50 ${selectedGoal ? 'text-xert-pale' : ''}`}
+                                >
+                                  <Target className="w-3.5 h-3.5" />
+                                  {savingGoalId === ev.id ? 'Saving goal...' : selectedGoal ? 'Training goal' : 'Train for this'}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </article>
                       );
@@ -347,14 +335,14 @@ export default function Events() {
           </div>
 
           {/* CTA */}
-          <div className="mt-8 pt-8 border-t flex flex-col sm:flex-row sm:items-center gap-4" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
+          <div className="xert-card-accent mt-8 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-3">
-              <CalendarDays className="w-5 h-5" style={{ color: '#7BA7BC' }} />
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.7)' }}>
+              <span className="xert-icon-tile"><CalendarDays className="w-5 h-5" /></span>
+              <p className="font-body text-sm text-xert-pale/80">
                 Training toward one of these? Book a session and prepare with structured coaching.
               </p>
             </div>
-            <a href="/booking" className="xert-btn-primary inline-flex items-center justify-center px-6 py-3 font-display text-base uppercase tracking-wide sm:ml-auto shrink-0">
+            <a href="/booking" className="xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-6 font-display text-base uppercase tracking-wide sm:ml-auto shrink-0">
               Book A Session
             </a>
           </div>

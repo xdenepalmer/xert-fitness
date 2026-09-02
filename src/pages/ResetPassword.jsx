@@ -11,9 +11,14 @@ import { Label } from "@/components/ui/label";
 import { Lock, Loader2, AlertTriangle } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 
+// Icons sit inside the field, so the left padding is set inline: it must win
+// over the shared .xert-input padding regardless of stylesheet order.
 const fieldClasses =
-  "pl-10 h-12 rounded-none border-xert-steel/40 bg-[#0b1218] text-base md:text-base text-xert-offwhite placeholder:text-xert-pale/60 shadow-none focus-visible:ring-0 focus-visible:border-xert-steel";
-const labelClasses = "font-body text-xs uppercase tracking-wider text-xert-pale/70";
+  "xert-input h-12 text-base md:text-base shadow-none focus-visible:ring-[3px] focus-visible:ring-xert-steel/20 focus-visible:border-xert-steel";
+const fieldStyle = { paddingLeft: "2.75rem" };
+const labelClasses = "xert-label";
+const errorClasses = "mb-4 rounded-xl border p-3 font-body text-sm";
+const errorStyle = { color: "#f0a1a1", borderColor: "rgba(240,161,161,0.35)", backgroundColor: "rgba(240,161,161,0.08)" };
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -114,7 +119,7 @@ export default function ResetPassword() {
         ) : null}
       >
         {error && (
-          <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
+          <div className={errorClasses} style={errorStyle}>
             {error}
           </div>
         )}
@@ -135,15 +140,15 @@ export default function ResetPassword() {
       subtitle="Enter your new password below"
     >
       {error && (
-        <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
+        <div className={errorClasses} style={errorStyle}>
           {error}
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="password" className={labelClasses}>New Password</Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60 pointer-events-none" aria-hidden="true" />
             <Input
               id="password"
               type="password"
@@ -153,14 +158,15 @@ export default function ResetPassword() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className={fieldClasses}
+              style={fieldStyle}
               required
             />
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="confirm" className={labelClasses}>Confirm Password</Label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60 pointer-events-none" aria-hidden="true" />
             <Input
               id="confirm"
               type="password"
@@ -169,13 +175,14 @@ export default function ResetPassword() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className={fieldClasses}
+              style={fieldStyle}
               required
             />
           </div>
         </div>
         <button
           type="submit"
-          className="xert-btn-primary w-full py-4 inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
+          className="xert-btn-primary w-full min-h-[52px] inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
           disabled={loading || !supabaseConfigurationReady}
         >
           {loading ? (

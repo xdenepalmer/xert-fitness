@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 
+const actionClasses = 'flex-1 inline-flex min-h-[52px] items-center justify-center px-4 text-center font-display text-sm uppercase tracking-wide';
+
 export default function ThankYou() {
   const shareText = encodeURIComponent("I just registered for XERT Fitness — a new functional training facility opening in Kingaroy. Soft launch August. Check it out.");
   const shareUrl = encodeURIComponent(window.location.origin);
@@ -11,8 +13,9 @@ export default function ThankYou() {
     <div className="min-h-screen flex flex-col bg-xert-navy">
       <PublicNav />
 
-      <main id="main" className="flex-1 flex items-center justify-center px-6 py-24">
-        <div className="max-w-lg w-full">
+      <main id="main" className="relative flex-1 flex items-center justify-center overflow-hidden px-6 py-24">
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none xert-glow-top" />
+        <div className="relative max-w-lg w-full xert-card p-6 sm:p-10 xert-enter xert-enter-up">
           {/* Eyebrow */}
           <div className="flex items-center gap-3 mb-6">
             <div className="h-px w-6 bg-xert-steel" />
@@ -26,36 +29,34 @@ export default function ThankYou() {
           </h1>
 
           {/* Body */}
-          <p className="font-body text-base text-xert-concrete/70 leading-relaxed mb-4">
+          <p className="font-body text-base text-xert-pale/75 leading-relaxed mb-4 max-w-prose">
             Thanks for registering your interest. Your response helps shape the soft launch timetable, class demand, coaching needs and foundation member planning.
           </p>
-          <p className="font-body text-base text-xert-concrete/70 leading-relaxed mb-10">
+          <p className="font-body text-base text-xert-pale/75 leading-relaxed mb-10 max-w-prose">
             We'll share more as the August soft launch gets closer.
           </p>
 
           {/* Divider */}
-          <div className="h-px bg-xert-steel/20 mb-8" />
+          <div className="xert-divider mb-8" />
 
           {/* Action buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <Link to="/"
-              className="xert-btn-ghost flex-1 text-center py-3.5 font-display text-sm uppercase">
+            <Link to="/" className={`xert-btn-ghost ${actionClasses}`}>
               Back to home
             </Link>
-            <Link to="/timetable"
-              className="xert-btn-ghost flex-1 text-center py-3.5 font-display text-sm uppercase">
+            <Link to="/timetable" className={`xert-btn-ghost ${actionClasses}`}>
               View soft launch plan
             </Link>
             <a
               href={`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}&quote=${shareText}`}
               target="_blank" rel="noopener noreferrer"
-              className="xert-btn-primary flex-1 text-center py-3.5 font-display text-sm uppercase">
+              className={`xert-btn-primary ${actionClasses}`}>
               Share with a mate
             </a>
           </div>
 
           {/* Subtle tagline */}
-          <p className="font-display text-xs text-xert-concrete/20 uppercase tracking-widest mt-10 text-center">
+          <p className="font-display text-xs text-xert-pale/25 uppercase tracking-widest mt-10 text-center">
             Train toward something.
           </p>
         </div>

@@ -15,9 +15,14 @@ import GoogleIcon from "@/components/GoogleIcon";
 import { useSupabaseAuth } from "@/lib/SupabaseAuthContext";
 import { authPathWithNext, safeAuthReturnPath } from "@/lib/authRedirect";
 
+// Icons sit inside the field, so the left padding is set inline: it must win
+// over the shared .xert-input padding regardless of stylesheet order.
 const fieldClasses =
-  "pl-10 h-12 rounded-none border-xert-steel/40 bg-[#0b1218] text-base md:text-base text-xert-offwhite placeholder:text-xert-pale/60 shadow-none focus-visible:ring-0 focus-visible:border-xert-steel";
-const labelClasses = "font-body text-xs uppercase tracking-wider text-xert-pale/70";
+  "xert-input h-12 text-base md:text-base shadow-none focus-visible:ring-[3px] focus-visible:ring-xert-steel/20 focus-visible:border-xert-steel";
+const fieldStyle = { paddingLeft: "2.75rem" };
+const labelClasses = "xert-label";
+const errorClasses = "mb-4 rounded-xl border p-3 font-body text-sm";
+const errorStyle = { color: "#f0a1a1", borderColor: "rgba(240,161,161,0.35)", backgroundColor: "rgba(240,161,161,0.08)" };
 
 export default function Login() {
   const { session } = useSupabaseAuth();
@@ -88,7 +93,7 @@ export default function Login() {
     >
       <button
         type="button"
-        className="xert-btn-ghost w-full h-12 inline-flex items-center justify-center font-body text-sm font-medium mb-6"
+        className="xert-btn-ghost w-full min-h-[52px] inline-flex items-center justify-center font-body text-sm font-medium mb-6"
         onClick={handleGoogle}
         disabled={!supabaseConfigurationReady || loading}
       >
@@ -106,16 +111,16 @@ export default function Login() {
       </div>
 
       {visibleError && (
-        <div className="mb-4 p-3 border border-xert-steel/50 bg-xert-steel/10 font-body text-sm text-xert-steel">
+        <div className={errorClasses} style={errorStyle}>
           {visibleError}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="email" className={labelClasses}>Email</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60 pointer-events-none" aria-hidden="true" />
             <Input
               id="email"
               type="email"
@@ -125,11 +130,12 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={fieldClasses}
+              style={fieldStyle}
               required
             />
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <div className="flex items-center justify-between">
             <Label htmlFor="password" className={labelClasses}>Password</Label>
             <Link to="/forgot-password" className="text-xs text-xert-steel hover:text-xert-pale hover:underline">
@@ -137,7 +143,7 @@ export default function Login() {
             </Link>
           </div>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60" aria-hidden="true" />
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-xert-steel/60 pointer-events-none" aria-hidden="true" />
             <Input
               id="password"
               type="password"
@@ -146,13 +152,14 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={fieldClasses}
+              style={fieldStyle}
               required
             />
           </div>
         </div>
         <button
           type="submit"
-          className="xert-btn-primary w-full py-4 inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
+          className="xert-btn-primary w-full min-h-[52px] inline-flex items-center justify-center font-display text-base uppercase tracking-wide disabled:opacity-50 disabled:pointer-events-none"
           disabled={loading || !supabaseConfigurationReady}
         >
           {loading ? (

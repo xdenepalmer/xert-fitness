@@ -37,7 +37,9 @@ const unavailableSteps = [
   'Contact XERT if access is not restored.',
 ];
 
-const cardStyle = { borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' };
+const alertCardClasses = 'rounded-2xl border';
+const alertCardStyle = { borderColor: 'rgba(240,161,161,0.3)', backgroundColor: 'rgba(240,161,161,0.06)' };
+const rowButtonClasses = 'inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center gap-2 px-5 font-display text-base uppercase tracking-wide';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function formatDay(iso) {
@@ -261,7 +263,7 @@ export default function Booking() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+    <div className="min-h-screen bg-xert-navy">
       <PublicNav />
 
       <main id="main" className="pb-20">
@@ -275,13 +277,13 @@ export default function Booking() {
 
         <div className="max-w-6xl mx-auto px-6">
           {loadErrors.length > 0 && (
-            <div role="alert" className="mt-6 border border-xert-red/40 bg-xert-steel/10 p-4 flex flex-wrap items-start gap-3">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-xert-red" />
+            <div role="alert" className={`${alertCardClasses} mt-6 p-4 sm:p-5 flex flex-wrap items-start gap-3`} style={alertCardStyle}>
+              <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: '#f0a1a1' }} />
               <div className="flex-1 min-w-[12rem]">
                 <p className="font-display text-sm uppercase text-xert-offwhite">Some booking information is unavailable</p>
-                <p className="font-body text-xs mt-1 text-xert-concrete/60">{loadErrors.join(' | ')}</p>
+                <p className="font-body text-xs mt-1 text-xert-pale/60">{loadErrors.join(' | ')}</p>
               </div>
-              <button type="button" onClick={() => void refresh()} className="inline-flex min-h-11 items-center gap-2 px-4 border border-xert-red/40 font-display text-xs uppercase text-xert-offwhite">
+              <button type="button" onClick={() => void refresh()} className="xert-btn-ghost inline-flex min-h-11 items-center gap-2 px-4 font-display text-xs uppercase tracking-wide">
                 <RefreshCw className="w-4 h-4" /> Retry
               </button>
             </div>
@@ -290,33 +292,32 @@ export default function Booking() {
           {/* Steps */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-10">
             {bookingSteps.map((step, i) => (
-              <div key={step} className="border p-5" style={cardStyle}>
-                <p className="font-display text-sm tabular-nums mb-3" style={{ color: '#7BA7BC' }}>STEP {i + 1}</p>
-                <p className="font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.72)' }}>{step}</p>
+              <div key={step} className="xert-card p-5">
+                <p className="xert-chip tabular-nums mb-3">STEP {i + 1}</p>
+                <p className="font-body text-sm leading-relaxed text-xert-pale/75">{step}</p>
               </div>
             ))}
           </div>
 
           {provider.blocked && (
-            <div role="alert" className="flex items-start gap-3 border border-xert-red/40 bg-xert-steel/10 p-4 mt-8">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-xert-red" aria-hidden="true" />
+            <div role="alert" className={`${alertCardClasses} flex items-start gap-3 p-4 sm:p-5 mt-8`} style={alertCardStyle}>
+              <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: '#f0a1a1' }} aria-hidden="true" />
               <div>
                 <p className="font-display text-sm uppercase text-xert-offwhite">Booking provider needs attention</p>
-                <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/65">{provider.blockedReason}</p>
+                <p className="mt-1 font-body text-xs leading-relaxed text-xert-pale/65">{provider.blockedReason}</p>
               </div>
             </div>
           )}
 
           {/* FitBox handoff: memberships, billing and bookings live in the provider portal. */}
           {fitboxActive && (
-            <div className="flex flex-wrap items-center gap-3 border p-4 mt-8"
-              style={{ borderColor: '#7BA7BC', backgroundColor: 'rgba(123,167,188,0.08)' }}>
-              <ArrowRight className="w-5 h-5 shrink-0" style={{ color: '#7BA7BC' }} aria-hidden="true" />
-              <p className="min-w-[14rem] flex-1 font-body text-sm" style={{ color: '#D1DDE6' }}>
+            <div className="xert-card-accent flex flex-wrap items-center gap-3 p-4 sm:p-5 mt-8">
+              <span className="xert-icon-tile"><ArrowRight className="w-5 h-5" aria-hidden="true" /></span>
+              <p className="min-w-[14rem] flex-1 font-body text-sm text-xert-pale">
                 Memberships, payments and class bookings are managed securely in FitBox. XERT&rsquo;s own checkout and booking buttons are paused to prevent duplicate records.
               </p>
               <a href={provider.portalUrl} target="_blank" rel="noopener noreferrer"
-                className="xert-btn-primary inline-flex items-center justify-center px-5 py-2.5 font-display text-sm uppercase tracking-wide shrink-0">
+                className={`xert-btn-primary ${rowButtonClasses} shrink-0`}>
                 Continue to FitBox
               </a>
             </div>
@@ -326,15 +327,14 @@ export default function Booking() {
             <>
           {/* Credits banner for signed-in members */}
           {session && credits && (
-            <div className="flex items-center gap-3 border p-4 mt-8"
-              style={{ borderColor: credits.total > 0 ? '#7BA7BC' : 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(123,167,188,0.08)' }}>
-              <Ticket className="w-5 h-5 shrink-0" style={{ color: '#7BA7BC' }} />
-              <p className="font-body text-sm" style={{ color: '#D1DDE6' }}>
+            <div className={`${credits.total > 0 ? 'xert-card-accent' : 'xert-card-flat'} flex flex-wrap items-center gap-3 p-4 sm:p-5 mt-8`}>
+              <span className="xert-icon-tile"><Ticket className="w-5 h-5" /></span>
+              <p className="min-w-[12rem] flex-1 font-body text-sm text-xert-pale">
                 {credits.total > 0
                   ? <>You have <strong>{credits.total}</strong> class credit{credits.total === 1 ? '' : 's'} — pick a class below.</>
                   : <>You have no credits yet — purchase a pack below to start booking.</>}
               </p>
-              <Link to="/account" className="ml-auto font-body text-xs uppercase tracking-wider shrink-0" style={{ color: '#7BA7BC' }}>
+              <Link to="/account" className="xert-chip ml-auto min-h-11 shrink-0 hover:border-xert-steel transition-colors">
                 My Account
               </Link>
             </div>
@@ -343,30 +343,24 @@ export default function Booking() {
           {/* Packs */}
           <section id="packs" className="mt-12">
             {paymentAvailabilityLoaded && !paymentsEnabled && (
-              <div role="status" className="mb-4 flex items-start gap-3 border border-xert-steel/30 bg-xert-steel/10 p-4">
+              <div role="status" className="xert-card-flat mb-4 flex items-start gap-3 p-4 sm:p-5">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-xert-steel" />
                 <div>
                   <p className="font-display text-sm uppercase text-xert-offwhite">Pack purchases are paused</p>
-                  <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/60">You can still explore packs and the timetable. Secure checkout will reopen after XERT completes its payment launch checks.</p>
+                  <p className="mt-1 font-body text-xs leading-relaxed text-xert-pale/60">You can still explore packs and the timetable. Secure checkout will reopen after XERT completes its payment launch checks.</p>
                 </div>
               </div>
             )}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {(loading && products.length === 0 ? [] : products).map(pack => (
-                <article key={pack.id} className="relative border p-6 flex flex-col"
-                  style={{
-                    borderColor: pack.featured ? '#7BA7BC' : 'rgba(123,167,188,0.16)',
-                    backgroundColor: pack.featured ? 'rgba(123,167,188,0.12)' : 'rgba(16,24,32,0.64)',
-                  }}>
+                <article key={pack.id} className={`${pack.featured ? 'xert-card-accent' : 'xert-card'} relative p-6 flex flex-col`}>
                   {pack.featured && (
-                    <span className="absolute top-4 right-4 font-body text-[10px] uppercase tracking-wider px-2 py-1"
-                      style={{ backgroundColor: '#D1DDE6', color: '#101820' }}>
+                    <span className="xert-chip xert-chip-solid absolute top-4 right-4">
                       Most Popular
                     </span>
                   )}
-                  <div className="w-11 h-11 flex items-center justify-center mb-5"
-                    style={{ backgroundColor: pack.featured ? '#7BA7BC' : 'rgba(123,167,188,0.14)' }}>
-                    <Ticket className="w-5 h-5" style={{ color: pack.featured ? '#101820' : '#7BA7BC' }} />
+                  <div className="xert-icon-tile mb-5" style={pack.featured ? { backgroundColor: '#7BA7BC', color: '#101820' } : undefined}>
+                    <Ticket className="w-5 h-5" />
                   </div>
                   <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none mb-2">{pack.name}</h2>
                   {comingSoon ? (
@@ -409,14 +403,14 @@ export default function Booking() {
                   {comingSoon ? (
                     <Link
                       to="/contact"
-                      className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide`}>
+                      className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex min-h-[52px] w-full items-center justify-center gap-2 px-5 font-display text-base uppercase tracking-wide`}>
                       Register Your Interest<ArrowRight className="w-4 h-4" />
                     </Link>
                   ) : (
                     <button
                       onClick={() => handleBuy(pack)}
                       disabled={!paymentsEnabled || buyingSlug === pack.slug}
-                      className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-base uppercase tracking-wide disabled:opacity-60`}>
+                      className={`${pack.featured ? 'xert-btn-primary' : 'xert-btn-ghost'} inline-flex min-h-[52px] w-full items-center justify-center gap-2 px-5 font-display text-base uppercase tracking-wide disabled:opacity-60`}>
                       {!paymentsEnabled
                         ? 'Purchases Paused'
                         : buyingSlug === pack.slug
@@ -431,7 +425,7 @@ export default function Booking() {
               <div role="status" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <span className="sr-only">Loading session packs…</span>
                 {[0, 1, 2].map(i => (
-                  <div key={i} className="border p-6" style={cardStyle}>
+                  <div key={i} className="xert-card p-6">
                     <Skeleton className="w-11 h-11 mb-5" />
                     <Skeleton className="h-8 w-2/3 mb-3" />
                     <Skeleton className="h-10 w-1/2 mb-5" />
@@ -450,7 +444,7 @@ export default function Booking() {
           {/* Timetable */}
           <section id="timetable" className="mt-16">
             <h2 className="font-display text-3xl uppercase text-xert-offwhite mb-2">Book A Class</h2>
-            <p className="font-body text-sm mb-8" style={{ color: 'rgba(209,221,230,0.55)' }}>
+            <p className="font-body text-sm mb-8 text-xert-pale/60">
               Booking uses one class credit per session. All sessions are scalable to your current level.
             </p>
 
@@ -462,7 +456,7 @@ export default function Booking() {
                     <Skeleton className="h-6 w-48 mb-3" />
                     <div className="space-y-2">
                       {[0, 1, 2].map(row => (
-                        <div key={row} className="border p-4 flex flex-wrap items-center gap-4" style={cardStyle}>
+                        <div key={row} className="xert-card p-4 flex flex-wrap items-center gap-4">
                           <Skeleton className="h-6 w-16 shrink-0" />
                           <div className="flex-1 min-w-[12rem] space-y-2">
                             <Skeleton className="h-5 w-1/2" />
@@ -476,12 +470,12 @@ export default function Booking() {
                 ))}
               </div>
             ) : timetableUnavailable ? (
-              <div className="border border-xert-red/30 bg-xert-steel/5 p-8 text-center">
+              <div className={`${alertCardClasses} p-8 text-center`} style={alertCardStyle}>
                 <p className="font-display text-xl uppercase text-xert-offwhite">Timetable temporarily unavailable</p>
-                <button type="button" onClick={() => void refresh()} className="mt-4 min-h-11 px-5 border border-xert-steel/40 font-display text-sm uppercase text-xert-offwhite">Try again</button>
+                <button type="button" onClick={() => void refresh()} className="xert-btn-ghost mt-4 inline-flex min-h-11 items-center justify-center px-5 font-display text-sm uppercase tracking-wide">Try again</button>
               </div>
             ) : sessionsByDay.length === 0 ? (
-              <div className="border p-10 text-center" style={cardStyle}>
+              <div className="xert-card p-10 text-center">
                 <Users className="w-8 h-8 mx-auto mb-4" style={{ color: 'rgba(123,167,188,0.4)' }} />
                 <p className="font-display text-2xl uppercase text-xert-offwhite">Timetable opening soon.</p>
                 <p className="font-body text-sm mt-2 max-w-md mx-auto" style={{ color: 'rgba(209,221,230,0.55)' }}>
@@ -493,7 +487,10 @@ export default function Booking() {
               <div className="space-y-8">
                 {sessionsByDay.map(([day, list]) => (
                   <div key={day}>
-                    <h3 className="font-display text-xl uppercase mb-3" style={{ color: 'rgba(209,221,230,0.8)' }}>{day}</h3>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-px w-6 bg-xert-steel" aria-hidden="true" />
+                      <h3 className="font-display text-xl uppercase text-xert-pale/85">{day}</h3>
+                    </div>
                     <div className="space-y-2">
                       {list.map(s => {
                         const full = s.spots_left !== null && s.spots_left <= 0;
@@ -507,43 +504,38 @@ export default function Booking() {
                             key={s.id}
                             id={`class-session-${s.id.toLowerCase()}`}
                             tabIndex={-1}
-                            className="border p-4 flex flex-wrap items-center gap-4 focus:outline-none focus:ring-2 focus:ring-xert-steel"
-                            style={cardStyle}
+                            className="xert-card p-4 sm:p-5 flex flex-wrap items-center gap-4 focus:outline-none focus:ring-2 focus:ring-xert-steel"
                           >
-                            <p className="font-display text-lg uppercase tabular-nums shrink-0" style={{ color: '#7BA7BC' }}>
+                            <p className="font-display text-2xl leading-none uppercase tabular-nums shrink-0 text-xert-steel">
                               {formatTime(s.start_time)}
                             </p>
                             <div className="flex-1 min-w-[12rem]">
                               <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">
                                 {s.title || s.class_type || 'XERT Class'}
                               </p>
-                              <p className="font-body text-xs mt-0.5" style={{ color: 'rgba(209,221,230,0.5)' }}>
+                              <p className="font-body text-xs mt-0.5 text-xert-pale/55">
                                 {[s.coach_name && `Coach ${s.coach_name}`, s.intensity_level, s.duration_minutes && `${s.duration_minutes} min`]
                                   .filter(Boolean).join(' · ')}
                               </p>
                               {isRequest && (
-                                <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.7)' }}>
+                                <p className="font-body text-xs mt-1 text-xert-steel/75">
                                   Staff confirmation required
                                 </p>
                               )}
                               {timeConflict && (
-                                <p id={`booking-conflict-${s.id}`} className="font-body text-xs mt-1 text-xert-red">
+                                <p id={`booking-conflict-${s.id}`} className="font-body text-xs mt-1" style={{ color: '#f0a1a1' }}>
                                   Overlaps {timeConflict.title || timeConflict.class_type || 'another active booking'}
                                 </p>
                               )}
                             </div>
                             {s.spots_left !== null && (
-                              <span className="font-body text-[11px] uppercase tracking-wider px-2 py-1 shrink-0"
-                                style={{
-                                  backgroundColor: full ? 'rgba(209,221,230,0.15)' : 'rgba(123,167,188,0.16)',
-                                  color: full ? 'rgba(209,221,230,0.5)' : '#7BA7BC',
-                                }}>
+                              <span className={`xert-chip shrink-0 ${full ? 'opacity-70' : ''}`}>
                                 {full ? 'Full' : `${s.spots_left} spot${s.spots_left === 1 ? '' : 's'} left`}
                               </span>
                             )}
                             {isInterestOnly ? (
                               <Link to="/timetable"
-                                className="xert-btn-ghost inline-flex items-center justify-center px-5 py-2.5 font-display text-base uppercase tracking-wide shrink-0">
+                                className={`xert-btn-ghost ${rowButtonClasses} shrink-0`}>
                                 Register interest
                               </Link>
                             ) : (
@@ -551,7 +543,7 @@ export default function Booking() {
                                 onClick={() => handleBook(s)}
                                 disabled={Boolean(existingBooking) || Boolean(timeConflict) || bookingId === s.id}
                                 aria-describedby={timeConflict ? `booking-conflict-${s.id}` : undefined}
-                                className="xert-btn-primary inline-flex items-center justify-center px-5 py-2.5 font-display text-base uppercase tracking-wide disabled:opacity-40 shrink-0">
+                                className={`xert-btn-primary ${rowButtonClasses} disabled:opacity-40 shrink-0`}>
                                 {bookingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : actionLabel}
                               </button>
                             )}

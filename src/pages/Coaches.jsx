@@ -26,41 +26,41 @@ function initials(name) {
 
 function CoachCard({ coach }) {
   return (
-    <article className="border flex flex-col" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' }}>
-      <div className="aspect-[4/5] overflow-hidden relative" style={{ backgroundColor: 'rgba(16,24,32,0.6)' }}>
+    <article className="xert-card p-3 flex flex-col">
+      <div className="aspect-[4/5] rounded-2xl overflow-hidden relative bg-xert-navy/70">
         {coach.photo_url ? (
           <img src={coach.photo_url} alt={coach.name} loading="lazy" decoding="async" className="w-full h-full object-cover" style={{ filter: 'saturate(0.85)' }} />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <span className="font-display text-5xl uppercase" style={{ color: 'rgba(123,167,188,0.4)' }}>
+            <span className="font-display text-5xl uppercase text-xert-steel/40">
               {initials(coach.name) || 'X'}
             </span>
           </div>
         )}
       </div>
 
-      <div className="p-5 flex flex-col flex-1">
+      <div className="px-2 pt-4 pb-2 sm:px-3 flex flex-col flex-1">
         <h3 className="font-display text-2xl uppercase leading-none text-xert-offwhite">{coach.name}</h3>
         {coach.role && (
-          <p className="font-body text-xs uppercase tracking-wider mt-2" style={{ color: '#7BA7BC' }}>{coach.role}</p>
+          <p className="xert-chip mt-3 self-start">{coach.role}</p>
         )}
 
         {coach.bio && (
-          <p className="font-body text-sm leading-relaxed mt-4" style={{ color: 'rgba(209,221,230,0.7)' }}>{coach.bio}</p>
+          <p className="font-body text-sm leading-relaxed mt-4 text-xert-pale/75">{coach.bio}</p>
         )}
 
         <div className="mt-4 space-y-2">
           {coach.experience && (
             <div className="flex items-start gap-2">
-              <Dumbbell className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.62)' }}>{coach.experience}</p>
+              <Dumbbell className="w-4 h-4 mt-0.5 shrink-0 text-xert-steel" />
+              <p className="font-body text-sm text-xert-pale/65">{coach.experience}</p>
             </div>
           )}
           {coach.currently_training_for && (
             <div className="flex items-start gap-2">
-              <Target className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.62)' }}>
-                <span className="uppercase tracking-wider text-[11px]" style={{ color: 'rgba(123,167,188,0.7)' }}>Currently training for: </span>
+              <Target className="w-4 h-4 mt-0.5 shrink-0 text-xert-steel" />
+              <p className="font-body text-sm text-xert-pale/65">
+                <span className="uppercase tracking-wider text-[11px] text-xert-steel/75">Currently training for: </span>
                 {coach.currently_training_for}
               </p>
             </div>
@@ -72,8 +72,7 @@ function CoachCard({ coach }) {
             href={coach.social_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 mt-5 font-body text-xs uppercase tracking-wider transition-colors"
-            style={{ color: '#7BA7BC' }}
+            className="xert-btn-ghost inline-flex min-h-11 items-center gap-2 self-start mt-5 px-4 font-body text-xs uppercase tracking-wider"
           >
             <Instagram className="w-4 h-4" />
             Follow
@@ -107,7 +106,7 @@ export default function Coaches() {
   }, [coaches]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+    <div className="min-h-screen bg-xert-navy">
       <PublicNav />
 
       <main id="main" className="pb-20">
@@ -125,11 +124,11 @@ export default function Coaches() {
               <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <span className="sr-only">Loading the team…</span>
                 {[0, 1, 2].map(i => (
-                  <div key={i} className="border flex flex-col" style={{ borderColor: 'rgba(123,167,188,0.16)', backgroundColor: 'rgba(50,72,90,0.14)' }}>
-                    <Skeleton className="aspect-[4/5] w-full" />
-                    <div className="p-5 space-y-3">
+                  <div key={i} className="xert-card p-3 flex flex-col">
+                    <Skeleton className="aspect-[4/5] w-full rounded-2xl" />
+                    <div className="px-2 pt-4 pb-2 space-y-3">
                       <Skeleton className="h-6 w-2/3" />
-                      <Skeleton className="h-3 w-1/3" />
+                      <Skeleton className="h-6 w-1/3 rounded-full" />
                       <Skeleton className="h-4 w-full" />
                       <Skeleton className="h-4 w-5/6" />
                     </div>
@@ -142,10 +141,10 @@ export default function Coaches() {
             )}
 
             {!loading && !error && coaches.length === 0 && (
-              <div className="border p-10 text-center" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
-                <Users className="w-8 h-8 mx-auto mb-4" style={{ color: 'rgba(123,167,188,0.4)' }} />
+              <div className="xert-card p-10 text-center">
+                <span className="xert-icon-tile mx-auto mb-4"><Users className="w-5 h-5" /></span>
                 <p className="font-display text-2xl uppercase text-xert-offwhite">Meet the team soon.</p>
-                <p className="font-body text-sm mt-2 max-w-md mx-auto" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <p className="font-body text-sm mt-2 max-w-md mx-auto text-xert-pale/60">
                   Coach, nutrition, massage and physio profiles are being finalised and will appear here shortly.
                 </p>
               </div>
@@ -153,9 +152,12 @@ export default function Coaches() {
 
             {!loading && !error && groups.map(section => (
               <section key={section.key} className="mb-12">
-                <h2 className="font-display text-2xl uppercase mb-5" style={{ color: 'rgba(209,221,230,0.85)' }}>
-                  {section.key === 'coach' ? CATEGORY_LABELS.coach : 'Health, Recovery & Performance'}
-                </h2>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="h-px w-6 bg-xert-steel" aria-hidden="true" />
+                  <h2 className="font-display text-2xl uppercase text-xert-pale/85">
+                    {section.key === 'coach' ? CATEGORY_LABELS.coach : 'Health, Recovery & Performance'}
+                  </h2>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {section.coaches.map(c => <CoachCard key={c.id} coach={c} />)}
                 </div>
@@ -163,10 +165,11 @@ export default function Coaches() {
             ))}
           </div>
 
-          <div className="mt-8 pt-8 border-t" style={{ borderColor: 'rgba(123,167,188,0.16)' }}>
+          <div className="mt-8">
+            <div className="xert-divider mb-8" />
             <a
               href="/booking"
-              className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
+              className="xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-8 font-display text-lg uppercase tracking-wide"
             >
               Train With Us
             </a>

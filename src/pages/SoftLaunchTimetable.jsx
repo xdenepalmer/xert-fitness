@@ -14,6 +14,14 @@ import { getClassSessions, getSoftLaunchSettings, getDefaultSettings } from '@/l
 import { getPublicClassAvailability } from '@/lib/submitForms';
 import { classSignupState, signupOutcomeMessage } from '@/lib/classSignup';
 
+const VIEW_OPTIONS = [
+  { key: 'calendar', label: 'Calendar', icon: CalendarDays },
+  { key: 'list', label: 'List', icon: List },
+];
+
+const dialogClasses = 'xert-card border-xert-steel/20 text-xert-pale rounded-2xl sm:rounded-2xl w-[calc(100%-2rem)] gap-0';
+const ctaClasses = 'xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-8 font-display text-base uppercase tracking-wide';
+
 export default function SoftLaunchTimetable() {
   const [sessions, setSessions] = useState([]);
   const [settings, setSettings] = useState(getDefaultSettings());
@@ -56,28 +64,29 @@ export default function SoftLaunchTimetable() {
   const successCopy = signupOutcomeMessage(bookingSuccess);
 
   return (
-    <div className="bg-xert-black min-h-screen flex flex-col">
+    <div className="bg-xert-navy min-h-screen flex flex-col">
       <PublicNav />
 
       <main id="main" className="flex-1 pt-16">
         {/* Header */}
-        <section className="bg-xert-ink border-b border-xert-steel/20 py-16 px-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-0.5 w-6 bg-xert-steel" />
-              <span className="font-body text-xs text-xert-red uppercase tracking-[0.2em]">Soft Launch</span>
+        <section className="relative overflow-hidden py-14 sm:py-20 px-6">
+          <div aria-hidden="true" className="absolute inset-0 pointer-events-none xert-glow-top" />
+          <div className="relative max-w-4xl mx-auto">
+            <div className="flex items-center gap-3 mb-6 xert-enter xert-enter-left">
+              <div className="h-px w-6 bg-xert-steel" />
+              <span className="font-body text-xs text-xert-steel uppercase tracking-[0.2em]">Soft Launch</span>
             </div>
-            <h1 className="font-display text-[clamp(2rem,6vw,4rem)] leading-tight text-xert-offwhite uppercase mb-4">
+            <h1 className="font-display text-[clamp(2rem,6vw,4rem)] leading-tight text-xert-offwhite uppercase mb-4 xert-enter xert-enter-up">
               Timetable &<br />
-              <span className="text-xert-concrete/50">Launch Plan.</span>
+              <span className="text-xert-steel">Launch Plan.</span>
             </h1>
-            <p className="font-body text-base text-xert-concrete/70 leading-relaxed max-w-xl">
+            <p className="font-body text-base text-xert-pale/75 leading-relaxed max-w-xl xert-enter xert-enter-up" style={{ animationDelay: '120ms' }}>
               XERT will open in stages. During the first phase, class capacity may be limited while the full facility continues to take shape. Register interest early to secure your spot.
             </p>
             {settings.show_limited_capacity_badge && (
-              <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 border border-xert-orange/40">
-                <span className="w-1.5 h-1.5 rounded-full bg-xert-orange" />
-                <span className="font-body text-xs text-xert-orange uppercase tracking-wider">Limited foundation capacity</span>
+              <div className="xert-chip mt-5">
+                <span className="w-1.5 h-1.5 rounded-full bg-xert-pale" />
+                <span>Limited foundation capacity</span>
               </div>
             )}
           </div>
@@ -87,33 +96,30 @@ export default function SoftLaunchTimetable() {
         <Countdown targetDate={settings.target_launch_date || DEFAULT_TARGET_LAUNCH_DATE} enabled={settings.countdown_enabled !== false} />
 
         {/* Classes */}
-        <section className="py-16 px-6">
+        <section className="py-14 sm:py-20 px-6">
           <div className="max-w-4xl mx-auto">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-              <h2 className="font-display text-2xl text-xert-offwhite uppercase">What&rsquo;s On</h2>
+            <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <h2 className="font-display text-3xl text-xert-offwhite uppercase">What&rsquo;s On</h2>
               <div className="flex flex-wrap items-center gap-3">
                 {fitbox.blocked ? (
-                  <span role="status" className="font-body text-xs text-xert-red border border-xert-red/40 px-3 py-1 uppercase">
+                  <span role="status" className="xert-chip" style={{ color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.4)' }}>
                     FitBox booking link needs attention
                   </span>
                 ) : fitbox.active ? (
                   <a href={fitbox.url} target="_blank" rel="noopener noreferrer"
-                    className="font-body text-xs text-xert-steel border border-xert-steel/40 px-3 py-1 uppercase hover:border-xert-steel transition-colors">
+                    className="xert-chip min-h-11 px-4 hover:border-xert-steel transition-colors">
                     Continue to FitBox booking
                   </a>
                 ) : !settings.bookings_enabled && (
-                  <span className="font-body text-xs text-xert-concrete/40 border border-xert-steel/30 px-3 py-1 uppercase">
+                  <span className="xert-chip opacity-75">
                     Bookings not yet open
                   </span>
                 )}
-                <div className="flex" role="group" aria-label="Timetable view">
-                  {[
-                    { key: 'calendar', label: 'Calendar', icon: CalendarDays },
-                    { key: 'list', label: 'List', icon: List },
-                  ].map(option => (
+                <div className="inline-flex rounded-full border border-xert-steel/20 bg-white/[0.03] p-1" role="group" aria-label="Timetable view">
+                  {VIEW_OPTIONS.map(option => (
                     <button key={option.key} type="button" onClick={() => setView(option.key)} aria-pressed={view === option.key}
-                      className={`inline-flex min-h-11 items-center gap-1.5 border px-3 font-body text-xs uppercase tracking-wider transition-colors -ml-px first:ml-0
-                        ${view === option.key ? 'border-xert-steel bg-xert-steel/15 text-xert-offwhite' : 'border-xert-steel/25 text-xert-concrete/50 hover:border-xert-steel'}`}>
+                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 font-body text-xs uppercase tracking-wider transition-colors
+                        ${view === option.key ? 'bg-xert-steel text-xert-navy' : 'text-xert-pale/60 hover:text-xert-offwhite'}`}>
                       <option.icon className="w-3.5 h-3.5" aria-hidden="true" />
                       {option.label}
                     </button>
@@ -124,16 +130,15 @@ export default function SoftLaunchTimetable() {
 
             {loading ? (
               <div className="py-20 text-center">
-                <div className="w-6 h-6 border-2 border-xert-steel/30 border-t-xert-red rounded-full animate-spin mx-auto" />
+                <div className="w-6 h-6 border-2 border-xert-steel/30 border-t-xert-steel rounded-full animate-spin mx-auto" />
               </div>
             ) : sessions.length === 0 ? (
-              <div className="py-16 text-center border border-xert-steel/20">
-                <p className="font-display text-xl text-xert-offwhite uppercase mb-3">Timetable coming soon</p>
-                <p className="font-body text-sm text-xert-concrete/50 mb-8">
+              <div className="xert-card px-6 py-14 text-center">
+                <p className="font-display text-2xl text-xert-offwhite uppercase mb-3">Timetable coming soon</p>
+                <p className="font-body text-sm text-xert-pale/60 mb-8 max-w-md mx-auto">
                   Classes will be published here before the August soft launch. Register your interest now to be notified first.
                 </p>
-                <a href="/#eoi"
-                  className="xert-btn-primary inline-flex items-center justify-center px-8 py-3 font-display text-sm uppercase">
+                <a href="/#eoi" className={ctaClasses}>
                   Register interest
                 </a>
               </div>
@@ -157,27 +162,28 @@ export default function SoftLaunchTimetable() {
         </section>
 
         {/* PT Section */}
-        <section className="bg-xert-charcoal py-16 px-6 border-t border-xert-steel/20">
-          <div className="max-w-2xl mx-auto text-center">
-            <h2 className="font-display text-2xl text-xert-offwhite uppercase mb-3">Personal Training</h2>
-            <p className="font-body text-sm text-xert-concrete/60 mb-6">
+        <div className="px-6"><div className="xert-divider max-w-4xl mx-auto" /></div>
+        <section className="relative overflow-hidden py-14 sm:py-20 px-6">
+          <div aria-hidden="true" className="absolute inset-0 pointer-events-none xert-glow-center" />
+          <div className="relative max-w-2xl mx-auto text-center">
+            <h2 className="font-display text-3xl text-xert-offwhite uppercase mb-3">Personal Training</h2>
+            <p className="font-body text-sm text-xert-pale/65 mb-6 max-w-md mx-auto">
               Looking for 1-on-1 coaching? Request a PT session and we'll be in touch to confirm availability.
             </p>
             {!showPTForm && !ptSuccess && (
-              <button onClick={() => setShowPTForm(true)}
-                className="xert-btn-primary px-8 py-3 font-display text-base uppercase">
+              <button onClick={() => setShowPTForm(true)} className={ctaClasses}>
                 Request PT session
               </button>
             )}
             {showPTForm && !ptSuccess && (
-              <div className="bg-xert-ink border border-xert-steel/20 p-6 sm:p-8 text-left mt-6">
+              <div className="xert-card p-5 sm:p-8 text-left mt-6">
                 <PTRequestForm onSuccess={() => { setPTSuccess(true); setShowPTForm(false); }} />
               </div>
             )}
             {ptSuccess && (
-              <div className="bg-xert-ink border border-xert-steel/20 p-8 text-center">
+              <div className="xert-card-accent p-8 text-center">
                 <p className="font-display text-xl text-xert-offwhite uppercase mb-2">PT request received.</p>
-                <p className="font-body text-sm text-xert-concrete/60">We'll be in touch to confirm your session.</p>
+                <p className="font-body text-sm text-xert-pale/65">We'll be in touch to confirm your session.</p>
               </div>
             )}
           </div>
@@ -188,7 +194,7 @@ export default function SoftLaunchTimetable() {
       <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => { if (!open) setSelectedSession(null); }}>
         <DialogContent
           aria-describedby={undefined}
-          className="bg-xert-ink border-xert-steel/20 text-xert-pale rounded-none sm:rounded-none w-[calc(100%-2rem)] max-w-lg max-h-[90vh] overflow-y-auto p-6 gap-0"
+          className={`${dialogClasses} max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6`}
         >
           <DialogHeader className="text-left mb-6">
             <DialogTitle className="font-display font-normal tracking-normal text-xl text-xert-offwhite uppercase">
@@ -213,18 +219,18 @@ export default function SoftLaunchTimetable() {
 
       {/* Booking success */}
       <Dialog open={Boolean(bookingSuccess)} onOpenChange={(open) => { if (!open) setBookingSuccess(null); }}>
-        <DialogContent className="bg-xert-ink border-xert-steel/20 text-xert-pale rounded-none sm:rounded-none w-[calc(100%-2rem)] max-w-sm p-8 gap-0 text-center">
-          <div className="w-12 h-12 bg-xert-steel/20 border-2 border-xert-red rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-xert-red text-xl" aria-hidden="true">✓</span>
+        <DialogContent className={`${dialogClasses} max-w-sm p-8 text-center`}>
+          <div className="w-12 h-12 rounded-full bg-xert-steel text-xert-navy flex items-center justify-center mx-auto mb-4">
+            <span className="text-xl" aria-hidden="true">✓</span>
           </div>
           <DialogTitle className="font-display font-normal tracking-normal leading-none text-2xl text-xert-offwhite uppercase mb-2">
             {successCopy.title}
           </DialogTitle>
-          <DialogDescription className="font-body text-sm text-xert-concrete/60 mb-6">
+          <DialogDescription className="font-body text-sm text-xert-pale/65 mb-6">
             {successCopy.body}
           </DialogDescription>
           <button onClick={() => setBookingSuccess(null)}
-            className="xert-btn-primary mx-auto px-6 py-3 font-display text-sm uppercase">
+            className="xert-btn-primary mx-auto inline-flex min-h-[52px] w-full items-center justify-center px-6 font-display text-sm uppercase tracking-wide">
             Done
           </button>
         </DialogContent>

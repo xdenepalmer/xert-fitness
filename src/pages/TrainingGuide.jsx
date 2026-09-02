@@ -28,37 +28,40 @@ const sections = [
 
 export default function TrainingGuide() {
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+    <div className="min-h-screen bg-xert-navy">
       <PublicNav />
-      <main id="main" className="max-w-3xl mx-auto px-6 pt-28 pb-20">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-          <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Training Guide</span>
-        </div>
+      <main id="main" className="relative overflow-hidden">
+        <div aria-hidden="true" className="absolute inset-x-0 top-0 h-[30rem] pointer-events-none xert-glow-top" />
+        <div className="relative max-w-3xl mx-auto px-6 pt-28 sm:pt-32 pb-14 sm:pb-20">
+          <div className="flex items-center gap-3 mb-6 xert-enter xert-enter-left">
+            <div className="h-px w-6 bg-xert-steel" />
+            <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Training Guide</span>
+          </div>
 
-        <h1 className="font-display uppercase mb-8 text-xert-offwhite" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
-          Functional Training in Kingaroy
-        </h1>
+          <h1 className="font-display uppercase mb-6 text-xert-offwhite xert-enter xert-enter-up" style={{ fontSize: 'clamp(2.5rem,7vw,4.5rem)', lineHeight: 0.95 }}>
+            Functional Training in Kingaroy
+          </h1>
 
-        <p className="font-body leading-relaxed mb-12" style={{ color: 'rgba(209,221,230,0.78)', fontSize: '1.0625rem' }}>
-          A plain-language guide to how XERT Fitness trains, who it is for, and why coached, event-led functional training delivers better results than guessing your way through a commercial gym.
-        </p>
+          <p className="font-body leading-relaxed mb-10 max-w-prose text-xert-pale/80 xert-enter xert-enter-up" style={{ fontSize: '1.0625rem', animationDelay: '120ms' }}>
+            A plain-language guide to how XERT Fitness trains, who it is for, and why coached, event-led functional training delivers better results than guessing your way through a commercial gym.
+          </p>
 
-        <div className="space-y-10">
-          {sections.map((s, i) => (
-            <section key={i}>
-              <h2 className="font-display text-2xl uppercase mb-3 text-xert-offwhite">{s.h}</h2>
-              <p className="font-body leading-relaxed" style={{ color: 'rgba(209,221,230,0.72)', fontSize: '1rem' }}>{s.p}</p>
-            </section>
-          ))}
-        </div>
+          <div className="space-y-4">
+            {sections.map((s, i) => (
+              <section key={i} className="xert-card-flat p-5 sm:p-6">
+                <h2 className="font-display text-2xl uppercase mb-3 text-xert-offwhite">{s.h}</h2>
+                <p className="font-body leading-relaxed max-w-prose text-xert-pale/75" style={{ fontSize: '1rem' }}>{s.p}</p>
+              </section>
+            ))}
+          </div>
 
-        <div className="mt-12 pt-8" style={{ borderTop: '1px solid rgba(123,167,188,0.12)' }}>
-          <a href="/#eoi"
-            className="inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide transition-all active:scale-[0.98]"
-            style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
-            Register Foundation Interest
-          </a>
+          <div className="mt-12">
+            <div className="xert-divider mb-8" />
+            <a href="/#eoi"
+              className="xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-8 font-display text-lg uppercase tracking-wide">
+              Register Foundation Interest
+            </a>
+          </div>
         </div>
       </main>
       <PublicFooter />

@@ -38,9 +38,11 @@ const FEATURES = [
   },
 ];
 
+const ctaClasses = 'inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-8 font-display text-lg uppercase tracking-wide';
+
 export default function AppLanding() {
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101820' }}>
+    <div className="min-h-screen bg-xert-navy">
       <PublicNav />
       <main id="main" className="pb-20">
         <PageHeader
@@ -56,46 +58,45 @@ export default function AppLanding() {
           {FEATURES.map(({ icon: Icon, title, copy }) => (
             <div
               key={title}
-              className="p-6"
-              style={{ backgroundColor: '#0b1218', border: '1px solid rgba(123,167,188,0.18)' }}
+              className="xert-card p-5 sm:p-6"
             >
-              <Icon className="w-6 h-6 mb-4" style={{ color: '#7BA7BC' }} aria-hidden="true" />
+              <span className="xert-icon-tile mb-4"><Icon className="w-5 h-5" aria-hidden="true" /></span>
               <h2 className="font-display uppercase text-xl tracking-wide text-xert-offwhite mb-2">{title}</h2>
-              <p className="font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.7)' }}>{copy}</p>
+              <p className="font-body text-sm leading-relaxed text-xert-pale/75">{copy}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-14 p-8" style={{ backgroundColor: '#0b1218', border: '1px solid rgba(123,167,188,0.18)' }}>
+        <div className="xert-card-accent mt-10 sm:mt-14 p-6 sm:p-8">
           <div className="flex items-center gap-3 mb-4">
-            <div className="h-px w-6" style={{ backgroundColor: '#7BA7BC' }} />
-            <span className="font-body text-xs uppercase tracking-[0.2em]" style={{ color: '#7BA7BC' }}>Beta</span>
+            <div className="h-px w-6 bg-xert-steel" />
+            <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Beta</span>
           </div>
           <h2 className="font-display uppercase text-3xl text-xert-offwhite mb-3">Now Testing On TestFlight</h2>
-          <p className="font-body leading-relaxed max-w-2xl mb-8" style={{ color: 'rgba(209,221,230,0.78)' }}>
+          <p className="font-body leading-relaxed max-w-2xl mb-8 text-xert-pale/80">
             The app is in beta ahead of the XERT launch. Members and early supporters can help
             test it — create your member account, then ask us for a TestFlight invite. The App
             Store release lands with the gym opening.
           </p>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             <a
               href="/register"
-              className="xert-btn-primary inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
+              className={`xert-btn-primary ${ctaClasses}`}
             >
               Create Member Account
             </a>
             <a
               href="/contact"
-              className="xert-btn-ghost inline-flex items-center justify-center px-8 py-4 font-display text-lg uppercase tracking-wide"
+              className={`xert-btn-ghost ${ctaClasses}`}
             >
               Request A Beta Invite
             </a>
           </div>
         </div>
 
-        <p className="font-body text-xs mt-8" style={{ color: 'rgba(209,221,230,0.45)' }}>
+        <p className="font-body text-xs mt-8 text-xert-pale/50">
           Requires iPhone with iOS 16 or later. Read how the app handles your data in the{' '}
-          <a href="/privacy" className="underline" style={{ color: '#7BA7BC' }}>Privacy Policy</a>.
+          <a href="/privacy" className="underline text-xert-steel">Privacy Policy</a>.
         </p>
         </div>
       </main>
