@@ -58,6 +58,32 @@ Keep the discovery asset named
 implemented and contract-tested, reserve `XERT → FitBox — Get Next Session — Read Only`;
 its name does not authorize activation.
 
+## Recorded production activation state
+
+**Updated 2 September 2026 (AEST).** This is an operational record, not a
+replacement for checking the named Zap and Operations Health at the time of an
+incident.
+
+The following Zaps are published, on, and have passed a safe XERT receipt test:
+
+- `FitBox → XERT — Class Session Booked (Review Only)`
+- `FitBox → XERT — Class Session Cancelled (Review Only)`
+- `FitBox → XERT — User First Session Booked (Review Only)`
+- `FitBox → XERT — User Profile Changed (Review Only)`
+- `FitBox → XERT — User Status Changed (Review Only)`
+- `FitBox → XERT — User Subscription Changed (Review Only)`
+
+Each of those tests returned an accepted `needs_review` receipt and was limited
+to the allowlisted event envelope. No XERT booking, member profile, membership,
+credit, payment, Stripe or attendance record was changed.
+
+`XERT → FitBox — Register Approved Prospect` and `XERT → FitBox — Get User —
+Read Only` remain deliberately unpublished until the owner gives an
+action-time privacy confirmation for the exact contact fields moving between
+XERT, Zapier and FitBox. They have already been structurally verified against
+the callback contract. This record must be updated only after each outbound
+flow has an approved synthetic end-to-end test and is published.
+
 ## Server configuration
 
 Set these server-only values in the Vercel Production environment and redeploy.
