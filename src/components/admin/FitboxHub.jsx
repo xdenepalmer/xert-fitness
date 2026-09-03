@@ -128,6 +128,8 @@ function OverviewTab({ overview, loading, error, onReload, onSync, syncing, sync
   }
   const summary = overview.summary;
   const gatewayReady = overview.gateway?.ready;
+  const feedsViaGateway = Boolean(overview.gateway?.feeds_available);
+  const pushLive = Boolean(overview.events?.ready && overview.last_event_at);
   return (
     <div className="space-y-5">
       <MirrorNotice installed={overview.mirror_installed} />
@@ -140,20 +142,22 @@ function OverviewTab({ overview, loading, error, onReload, onSync, syncing, sync
             <h3 className="font-display text-xl uppercase text-xert-offwhite">{gatewayReady ? 'Live gateway connected' : 'Live gateway not connected'}</h3>
             <p className="mt-1 max-w-xl font-body text-sm leading-relaxed text-xert-pale/65">
               {gatewayReady
-                ? `XERT can ask FitBox directly through Zapier for gym ${overview.gym_id || '—'}. Last full sync ${when(overview.last_completed_sync)}.`
-                : 'Add the Zapier MCP server URL in Vercel to sync members, memberships and bookings on demand. The push-only Zaps keep working meanwhile.'}
+                ? `XERT can ask FitBox directly through Zapier for gym ${overview.gym_id || '—'}.${feedsViaGateway ? ` Last full sync ${when(overview.last_completed_sync)}.` : pushLive ? ` Members, memberships and bookings arrive live from your FitBox Zaps; last change ${when(overview.last_event_at)}.` : ' Your FitBox Zaps deliver changes as they happen.'}`
+                : 'Add the Zapier MCP server URL in Vercel to look people up in FitBox and register prospects instantly. The FitBox Zaps keep delivering changes meanwhile.'}
             </p>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
-          <button type="button" onClick={onSync} disabled={!gatewayReady || !overview.gateway?.feeds_available || syncing || !overview.mirror_installed} className={`${ADMIN_BUTTON.primary} min-h-11 px-5`}>
-            {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            {syncing ? `Syncing ${FEED_LABELS[syncProgress] || ''}…` : 'Sync everything now'}
-          </button>
-          {gatewayReady && !overview.gateway?.feeds_available && (
-            <p className="max-w-xs font-body text-xs leading-relaxed text-amber-200 sm:text-right">
-              This Zapier server is in actions-only mode: lookups and prospect registration work, but bulk feeds do not. Lookups keep the mirror current per member.
-            </p>
+          {feedsViaGateway ? (
+            <button type="button" onClick={onSync} disabled={!gatewayReady || syncing || !overview.mirror_installed} className={`${ADMIN_BUTTON.primary} min-h-11 px-5`}>
+              {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              {syncing ? `Syncing ${FEED_LABELS[syncProgress] || ''}…` : 'Sync everything now'}
+            </button>
+          ) : (
+            <div className="max-w-xs rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 font-body text-xs leading-relaxed text-xert-pale/70 sm:text-right">
+              <p className="font-semibold text-xert-offwhite">{pushLive ? 'Live via FitBox Zaps' : 'Waiting for the first FitBox change'}</p>
+              <p className="mt-1">{overview.events_24h || 0} change{overview.events_24h === 1 ? '' : 's'} received in the last 24 hours. Use Members → Look up to pull one person on demand.</p>
+            </div>
           )}
           {!gatewayReady && <button type="button" onClick={() => onGoTo('setup')} className="font-body text-xs uppercase tracking-wider text-xert-steel underline-offset-4 hover:underline">Open setup</button>}
         </div>
@@ -177,14 +181,17 @@ function OverviewTab({ overview, loading, error, onReload, onSync, syncing, sync
                 Open
               </button>
             </li>
-            <li className="flex items-center justify-between py-3">
+            <li className="flex items-center justify-between gap-4 py-3">
               <span className="font-body text-sm text-xert-offwhite">Classes known to FitBox</span>
-              <span className="font-body text-sm text-xert-pale/70">{overview.classes?.length ? overview.classes.map(item => item.name).join(', ') : 'Not synced yet'}</span>
+              <span className="text-right font-body text-sm text-xert-pale/70">{overview.classes?.length ? overview.classes.map(item => item.name).join(', ') : 'None seen yet'}</span>
             </li>
           </ul>
         </section>
         <section className={`${ADMIN_PANEL} p-5`}>
-          <h3 className={ADMIN_TEXT.sectionHeading}>Recent syncs</h3>
+          <h3 className={ADMIN_TEXT.sectionHeading}>{feedsViaGateway ? 'Recent syncs' : 'Recent activity'}</h3>
+          {!feedsViaGateway && overview.last_event_at && (
+            <p className="mt-3 font-body text-sm text-xert-pale/70">Last FitBox change: {readable(overview.last_event_type)} · {when(overview.last_event_at)}</p>
+          )}
           {overview.recent_runs?.length ? (
             <ul className="mt-3 divide-y divide-white/[0.06]">
               {overview.recent_runs.slice(0, 8).map(run => (
@@ -197,7 +204,7 @@ function OverviewTab({ overview, loading, error, onReload, onSync, syncing, sync
                 </li>
               ))}
             </ul>
-          ) : <p className="mt-3 font-body text-sm text-xert-pale/55">No syncs yet. Run one to fill the members, memberships and bookings tabs.</p>}
+          ) : <p className="mt-3 font-body text-sm text-xert-pale/55">{feedsViaGateway ? 'No syncs yet. Run one to fill the members, memberships and bookings tabs.' : 'Lookups and prospect registrations will be listed here.'}</p>}
         </section>
       </div>
     </div>

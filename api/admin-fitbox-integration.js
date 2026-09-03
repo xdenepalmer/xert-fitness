@@ -968,24 +968,33 @@ async function fitboxOverview(admin) {
     mirror_installed: installed,
   };
   if (!installed) return { ...base, summary: null, classes: [], recent_runs: [], last_completed_sync: null, review_queue: 0 };
-  const [users, subscriptions, attendance, classes, runs, reviews, links] = await Promise.all([
+  const [users, subscriptions, attendance, classes, runs, reviews, links, latestEvent, eventsToday] = await Promise.all([
     admin.from('fitbox_users').select('status, role').limit(5000),
     admin.from('fitbox_subscriptions').select('status, price_in_cents').limit(5000),
-    admin.from('fitbox_attendance').select('status, feed, session_start_time').limit(5000),
+    admin.from('fitbox_attendance').select('status, feed, session_start_time, fitbox_class_id, class_name').limit(5000),
     admin.from('fitbox_classes').select('fitbox_class_id, name').order('name'),
     admin.from('fitbox_sync_runs').select('id, feed, status, accepted, rejected, linked, error_code, started_at, finished_at').order('started_at', { ascending: false }).limit(20),
     admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true }).eq('processing_state', 'needs_review'),
     admin.from('fitbox_member_links').select('id', { count: 'exact', head: true }),
+    admin.from('fitbox_integration_events').select('event_type, received_at').order('received_at', { ascending: false }).limit(1).maybeSingle(),
+    admin.from('fitbox_integration_events').select('id', { count: 'exact', head: true }).gte('received_at', new Date(Date.now() - 24 * 60 * 60_000).toISOString()),
   ]);
-  for (const result of [users, subscriptions, attendance, classes, runs, reviews, links]) if (result.error) throw result.error;
+  for (const result of [users, subscriptions, attendance, classes, runs, reviews, links, latestEvent, eventsToday]) if (result.error) throw result.error;
   const summary = summarizeFitboxMirror({ users: users.data || [], subscriptions: subscriptions.data || [], attendance: attendance.data || [] });
   const recentRuns = runs.data || [];
+  // Without a class catalogue feed, the classes seen in bookings are the catalogue.
+  const knownClasses = classes.data?.length
+    ? classes.data
+    : [...new Map((attendance.data || []).filter(row => row.fitbox_class_id && row.class_name).map(row => [row.fitbox_class_id, { fitbox_class_id: row.fitbox_class_id, name: row.class_name }])).values()];
   return {
     ...base,
     summary: { ...summary, links: Number(links.count || 0) },
-    classes: classes.data || [],
+    classes: knownClasses,
     recent_runs: recentRuns,
     last_completed_sync: recentRuns.find(run => run.status === 'completed' && run.feed !== 'lookup')?.finished_at || null,
+    last_event_at: latestEvent.data?.received_at || null,
+    last_event_type: latestEvent.data?.event_type || null,
+    events_24h: Number(eventsToday.count || 0),
     review_queue: Number(reviews.count || 0),
   };
 }
