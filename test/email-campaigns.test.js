@@ -61,7 +61,8 @@ test('the database builds and sends group emails; the browser only picks people'
   assert.match(sql, /v_cta_url !~ '\^https:\/\/'/);
   assert.match(sql, /queue_email\('campaign', v_email, v_subject, v_html, v_body, 'email_campaigns', v_campaign_id::text\)/);
   assert.match(sql, /grant execute on function public\.admin_send_bulk_email\(text, text, jsonb, text, boolean, text, text\) to authenticated/);
-  assert.match(sql, /xert-logo-horizontal-light\.png/, 'the branded layout carries the logo');
+  assert.match(sql, /xert-email-header\.png/, 'the branded layout carries the baked navy logo header');
+  assert.match(sql, /background-color:#ffffff/, 'light body so dark-mode inboxes cannot invert it');
   assert.match(sql, /create or replace function public\.admin_email_confirmed_bookings\(p_session_id uuid default null\)/);
   assert.match(sql, /l\.subject like 'You are booked in%'/, 'the catch-up never emails a confirmation twice');
   assert.match(sql, /s\.status = 'published' and s\.start_time > now\(\)/);
