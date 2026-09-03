@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  CalendarDays, CheckCheck, ClipboardList, Dumbbell, Loader2, MessageSquareText,
-  RefreshCw, Send, Users, XCircle,
+  CheckCheck, Loader2, MessageSquareText, RefreshCw, Send, XCircle,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
-  adminListMembers, adminSessionRoster, getClassBookings, getClassSessions,
-  getMemberLeads, getPTRequests,
-} from '@/lib/adminData';
+  BROADCAST_AUDIENCES as AUDIENCES, formatBroadcastSessionLabel as formatSessionLabel,
+  loadAudienceRows, loadBroadcastSessions,
+} from '@/lib/adminAudiences';
 import {
   SMS_MAX_RECIPIENTS, recipientsFromRows, smsCampaignValidationError, smsSegments,
 } from '@/lib/smsCampaigns';
@@ -15,58 +14,7 @@ import { sendAdminSms } from '@/lib/smsSend';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { ADMIN_INPUT, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
-const AUDIENCES = [
-  { key: 'members', label: 'All members', detail: 'Every signed-up member account', icon: Users },
-  { key: 'class', label: 'A class', detail: 'Sign-ups, requests and roster for one class', icon: CalendarDays },
-  { key: 'leads', label: 'Member leads', detail: 'People who expressed interest in joining', icon: ClipboardList },
-  { key: 'pt', label: 'PT requests', detail: 'Private training enquiries', icon: Dumbbell },
-];
-
 const inputCls = ADMIN_INPUT;
-
-function formatSessionLabel(session) {
-  const when = session.start_time
-    ? new Date(session.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-    : 'unscheduled';
-  return `${session.title || session.class_type} — ${when}`;
-}
-
-async function collectPagedRows(fetchPage) {
-  const rows = [];
-  for (let page = 1; page <= 10; page += 1) {
-    const result = await fetchPage(page);
-    rows.push(...result.rows);
-    if (result.rows.length < result.pageSize) break;
-  }
-  return rows;
-}
-
-async function loadAudienceRows(audience, sessionId) {
-  if (audience === 'members') {
-    const members = await adminListMembers();
-    return members.map(member => ({ ...member, detail: 'Member' }));
-  }
-  if (audience === 'leads') {
-    const leads = await collectPagedRows(page => getMemberLeads({ page, pageSize: 200 }));
-    return leads.map(lead => ({ ...lead, detail: `Lead · ${lead.status || 'new'}` }));
-  }
-  if (audience === 'pt') {
-    const requests = await collectPagedRows(page => getPTRequests({ page, pageSize: 200, includeSummary: false }));
-    return requests.map(request => ({ ...request, detail: `PT · ${request.status || 'requested'}` }));
-  }
-  if (audience === 'class') {
-    if (!sessionId) return [];
-    const [signups, roster] = await Promise.all([
-      getClassBookings({ class_session_id: sessionId }),
-      adminSessionRoster(sessionId).catch(() => []),
-    ]);
-    return [
-      ...roster.map(member => ({ ...member, detail: `Roster · ${member.status}` })),
-      ...signups.map(signup => ({ ...signup, detail: `Sign-up · ${signup.status}` })),
-    ];
-  }
-  return [];
-}
 
 export default function SmsManager() {
   const [audience, setAudience] = useState('members');
@@ -82,9 +30,8 @@ export default function SmsManager() {
   const [outcome, setOutcome] = useState(null);
 
   useEffect(() => {
-    getClassSessions(false)
-      .then(loaded => setSessions(loaded.filter(session => session.start_time
-        && new Date(session.start_time).getTime() > Date.now() - 6 * 60 * 60 * 1000)))
+    loadBroadcastSessions()
+      .then(setSessions)
       .catch(error => toast({ title: 'Could not load classes', description: error.message, variant: 'destructive' }));
   }, []);
 

@@ -61,5 +61,8 @@ test('offers only valid bulk transitions for a consistent booking state', () => 
   assert.deepEqual(bulkBookingStatusOptions([{ status: 'confirmed' }]), ['attended', 'no_show', 'cancelled']);
   assert.deepEqual(bulkBookingStatusOptions([{ status: 'waitlisted' }]), ['cancelled']);
   assert.deepEqual(bulkBookingStatusOptions([{ status: 'requested' }, { status: 'confirmed' }]), []);
-  assert.deepEqual(bulkBookingStatusOptions([{ status: 'attended' }]), []);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'attended' }]), ['confirmed']);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'no_show' }, { status: 'no_show' }]), ['confirmed']);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'declined' }]), ['requested']);
+  assert.deepEqual(bulkBookingStatusOptions([{ status: 'cancelled' }]), ['requested']);
 });

@@ -59,6 +59,9 @@ export function bulkBookingStatusOptions(bookings) {
   if (status === 'requested') return ['confirmed', 'waitlisted', 'declined'];
   if (status === 'waitlisted') return ['cancelled'];
   if (status === 'confirmed') return ['attended', 'no_show', 'cancelled'];
+  // Roll-call mistakes and hasty declines are common; both can be undone.
+  if (status === 'attended' || status === 'no_show') return ['confirmed'];
+  if (status === 'declined' || status === 'cancelled') return ['requested'];
   return [];
 }
 

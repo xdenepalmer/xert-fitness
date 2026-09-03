@@ -3,6 +3,7 @@ import { CheckCircle2, Loader2, Mail, RefreshCw, Send, TriangleAlert } from 'luc
 import { EMAIL_TYPE_LABELS, getEmailSettings, listEmailLog, saveEmailSettings, sendTestEmail } from '@/lib/adminData';
 import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import EmailCampaignComposer from '@/components/admin/EmailCampaignComposer';
 import { ADMIN_BUTTON, ADMIN_INPUT, ADMIN_PAGE, ADMIN_PANEL, ADMIN_TEXT } from '@/components/admin/ui';
 
 function when(value) {
@@ -28,7 +29,7 @@ function Toggle({ checked, onChange, label, description, disabled }) {
   );
 }
 
-export default function EmailManager() {
+export default function EmailManager({ initialTab = 'send' }) {
   const [installed, setInstalled] = useState(true);
   const [settings, setSettings] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -38,6 +39,7 @@ export default function EmailManager() {
   const [error, setError] = useState('');
   const [testTo, setTestTo] = useState('');
   const [testing, setTesting] = useState(false);
+  const [tab, setTab] = useState(initialTab === 'automatic' ? 'automatic' : 'send');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,8 +102,8 @@ export default function EmailManager() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className={ADMIN_TEXT.sectionHeading}>Communications</p>
-          <h2 className={ADMIN_TEXT.pageTitle}>Email</h2>
-          <p className="mt-2 max-w-2xl font-body text-sm leading-relaxed text-xert-pale/65">Automatic emails XERT sends from your domain when bookings change, classes are cancelled, enquiries arrive and members join. Nothing is sent until you turn it on here.</p>
+          <h2 className={ADMIN_TEXT.pageTitle}>Email members</h2>
+          <p className="mt-2 max-w-2xl font-body text-sm leading-relaxed text-xert-pale/65">Write an email to any group, the same way you text members. XERT also sends automatic emails from your domain when bookings are confirmed, classes are cancelled, enquiries arrive and members join.</p>
         </div>
         <button type="button" onClick={() => void load()} disabled={loading} className={`${ADMIN_BUTTON.ghost} min-h-11 px-4`}>
           {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Refresh
@@ -117,6 +119,18 @@ export default function EmailManager() {
         <div className={`${ADMIN_PANEL} h-40 animate-pulse`} role="status" aria-label="Loading email settings" />
       ) : (
         <>
+          <div role="tablist" aria-label="Email" className="flex gap-2 overflow-x-auto">
+            {[['send', 'Send an email'], ['automatic', 'Automatic emails']].map(([key, label]) => (
+              <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+                className={`${tab === key ? ADMIN_BUTTON.primary : ADMIN_BUTTON.ghost} shrink-0 px-4`}>{label}</button>
+            ))}
+          </div>
+
+          {tab === 'send' && (
+            <EmailCampaignComposer emailEnabled={Boolean(settings?.enabled)} providerReady={Boolean(settings?.provider_ready)} onSent={() => void load()} />
+          )}
+
+          {tab === 'automatic' && (<>
           <section className={`${ADMIN_PANEL} p-5`}>
             <div className="flex items-start gap-3">
               <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${draft.enabled ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}><Mail className="size-5" /></div>
@@ -171,6 +185,7 @@ export default function EmailManager() {
               </ul>
             )}
           </section>
+          </>)}
         </>
       )}
     </div>

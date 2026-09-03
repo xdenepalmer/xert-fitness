@@ -60,7 +60,7 @@ export const ADMIN_HUBS = Object.freeze([
     items: [
       { key: 'sms', label: 'Text members', detail: 'SMS any group with a mobile', icon: MessageSquareText },
       { key: 'announcements', label: 'App notices', detail: 'Push a notice to the member app', icon: BellRing },
-      { key: 'emails', label: 'Email', detail: 'Automatic emails and the send log', icon: Mail },
+      { key: 'emails', label: 'Email members', detail: 'Email any group, plus automatic emails', icon: Mail },
     ],
   },
   {

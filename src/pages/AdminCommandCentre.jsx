@@ -149,7 +149,7 @@ export default function AdminCommandCentre() {
       case 'forms': return <FormsSurveysManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'announcements': return <AnnouncementsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'sms': return <SmsManager />;
-      case 'emails': return <EmailManager />;
+      case 'emails': return <EmailManager initialTab={intent.get('tab') || 'send'} />;
       case 'settings': return <SoftLaunchSettings onDirtyChange={setHasUnsavedChanges} />;
       case 'campaigns': return <CampaignStats />;
       default: return <AdminToday onNavigate={setSection} />;

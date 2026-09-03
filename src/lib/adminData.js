@@ -157,6 +157,7 @@ export const EMAIL_TYPE_LABELS = Object.freeze({
   enquiry_acknowledgements: 'Thanks-for-enquiring reply to new leads',
   welcome: 'Welcome email for new member accounts',
   owner_alerts: 'Alert the owner about new enquiries and requests',
+  campaign: 'Emails you write and send to a group',
 });
 
 export async function getEmailSettings() {
@@ -178,6 +179,35 @@ export async function sendTestEmail(to) {
   const { data, error } = await supabase.rpc('admin_send_test_email', { p_to: String(to || '').trim() });
   if (error) throw new Error(error.message);
   return data;
+}
+
+/** Send one owner-written email to a list of people. The database builds the
+ *  branded message, applies the same switches as every other email and logs
+ *  each send under the campaign id. */
+export async function sendBulkEmail(payload) {
+  const { data, error } = await supabase.rpc('admin_send_bulk_email', payload);
+  if (error) {
+    const message = error.message || '';
+    if (error.code === 'PGRST202' || /admin_send_bulk_email.*(?:not found|schema cache|does not exist)/i.test(message)) {
+      throw new Error('Apply supabase/migrations/20260903010000_email_notifications.sql before emailing a group.');
+    }
+    if (/EMAIL_RECIPIENTS_TOO_MANY/i.test(message)) throw new Error('Send to at most 500 people per email.');
+    if (/EMAIL_CTA_URL_INVALID/i.test(message)) throw new Error('The button link must start with https://.');
+    throw new Error(message);
+  }
+  return data;
+}
+
+export async function listEmailCampaigns({ limit = 20 } = {}) {
+  const { data, error } = await supabase.from('email_campaigns')
+    .select('id, subject, audience, recipient_count, queued_count, skipped_count, created_at')
+    .order('created_at', { ascending: false })
+    .limit(Math.min(Math.max(Number(limit) || 20, 1), 100));
+  if (error) {
+    if (missingFitboxMirror(error)) return { installed: false, rows: [] };
+    throw new Error(error.message);
+  }
+  return { installed: true, rows: data || [] };
 }
 
 export async function listEmailLog({ limit = 100 } = {}) {

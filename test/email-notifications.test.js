@@ -11,7 +11,7 @@ test('transactional email is sent by the database through Resend with the key he
   assert.match(sql, /net\.http_post\(\s*url := 'https:\/\/api\.resend\.com\/emails'/);
   assert.doesNotMatch(sql, /re_[A-Za-z0-9]{20,}/, 'no Resend key may be written into the migration');
   assert.match(sql, /enabled boolean not null default false/, 'email stays off until the owner turns it on');
-  for (const type of ['booking_decisions', 'booking_cancellations', 'class_cancellations', 'pt_decisions', 'enquiry_acknowledgements', 'welcome', 'owner_alerts']) {
+  for (const type of ['booking_decisions', 'booking_cancellations', 'class_cancellations', 'pt_decisions', 'enquiry_acknowledgements', 'welcome', 'owner_alerts', 'campaign']) {
     assert.match(sql, new RegExp(`"${type}": true`));
   }
   assert.match(sql, /status = 'skipped', error = 'EMAIL_DISABLED'/);
@@ -42,11 +42,11 @@ test('the Command Centre email screen only reads settings and the log and asks t
   assert.match(manager, /Send test/);
   assert.match(manager, /EMAIL_TYPE_LABELS/);
   const centre = await read('../src/pages/AdminCommandCentre.jsx');
-  assert.match(centre, /case 'emails': return <EmailManager \/>/);
+  assert.match(centre, /case 'emails': return <EmailManager initialTab=/);
   const navigation = await read('../src/lib/adminNavigation.js');
   assert.match(navigation, /'emails',/);
   const workspaces = await read('../src/lib/adminWorkspaces.js');
-  assert.match(workspaces, /key: 'emails', label: 'Email'/);
+  assert.match(workspaces, /key: 'emails', label: 'Email members'/);
   const capabilities = await read('../src/lib/schemaCapabilities.js');
   assert.match(capabilities, /email_notifications: 'Apply supabase\/migrations\/20260903010000_email_notifications\.sql/);
   const docs = await read('../docs/EMAIL_RESEND_SETUP.md');

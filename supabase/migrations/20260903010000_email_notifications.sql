@@ -20,7 +20,8 @@ create table if not exists public.email_settings (
     "pt_decisions": true,
     "enquiry_acknowledgements": true,
     "welcome": true,
-    "owner_alerts": true
+    "owner_alerts": true,
+    "campaign": true
   }'::jsonb,
   updated_by uuid references auth.users(id) on delete set null,
   updated_at timestamptz not null default now(),
@@ -31,6 +32,23 @@ create table if not exists public.email_settings (
   constraint email_settings_owner_alert_check check (owner_alert_email is null or owner_alert_email ~ '^[^\s@]+@[^\s@]+\.[^\s@]+$')
 );
 insert into public.email_settings (id) values (1) on conflict (id) do nothing;
+update public.email_settings set types = types || '{"campaign": true}'::jsonb where id = 1 and not (types ? 'campaign');
+
+-- One row per owner-written email sent to a group (the email twin of an SMS campaign).
+create table if not exists public.email_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  subject text not null,
+  body text not null,
+  audience text,
+  recipient_count integer not null default 0,
+  queued_count integer not null default 0,
+  skipped_count integer not null default 0,
+  sent_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  constraint email_campaigns_subject_check check (char_length(subject) between 1 and 150),
+  constraint email_campaigns_body_check check (char_length(body) between 1 and 5000)
+);
+create index if not exists email_campaigns_recent_idx on public.email_campaigns (created_at desc);
 
 create table if not exists public.email_log (
   id uuid primary key default gen_random_uuid(),
@@ -57,6 +75,11 @@ create index if not exists email_log_queued_idx on public.email_log (status) whe
 
 alter table public.email_settings enable row level security;
 alter table public.email_log enable row level security;
+alter table public.email_campaigns enable row level security;
+drop policy if exists "email_campaigns_admin_read" on public.email_campaigns;
+create policy "email_campaigns_admin_read" on public.email_campaigns for select to authenticated using (public.is_admin());
+revoke all on table public.email_campaigns from public, anon, authenticated;
+grant select on table public.email_campaigns to authenticated;
 drop policy if exists "email_settings_admin_read" on public.email_settings;
 create policy "email_settings_admin_read" on public.email_settings for select to authenticated using (public.is_admin());
 drop policy if exists "email_log_admin_read" on public.email_log;
@@ -86,13 +109,13 @@ as $$
   select '<!doctype html><html><body style="margin:0;padding:0;background:#0d1720;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#F1F3F4;">'
     || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0d1720;padding:32px 16px;"><tr><td align="center">'
     || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#101820;border:1px solid rgba(123,167,188,0.2);border-radius:16px;overflow:hidden;">'
-    || '<tr><td style="padding:28px 28px 8px;"><div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#7BA7BC;">XERT Fitness</div>'
+    || '<tr><td style="padding:28px 28px 8px;"><img src="https://xertfitness.com.au/assets/xert-logo-horizontal-light.png" alt="XERT Fitness" width="150" style="display:block;width:150px;max-width:60%;height:auto;border:0;"><div style="margin-top:14px;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#7BA7BC;">Beat Your Best</div>'
     || '<h1 style="margin:10px 0 0;font-size:26px;line-height:1.15;color:#F1F3F4;">' || p_title || '</h1></td></tr>'
     || '<tr><td style="padding:8px 28px 8px;font-size:16px;line-height:1.55;color:#D1DDE6;">' || p_body_html || '</td></tr>'
     || case when p_cta_label is not null and p_cta_url is not null
          then '<tr><td style="padding:8px 28px 28px;"><a href="' || p_cta_url || '" style="display:inline-block;background:#7BA7BC;color:#101820;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px;">' || p_cta_label || '</a></td></tr>'
          else '<tr><td style="padding:0 28px 20px;"></td></tr>' end
-    || '<tr><td style="padding:16px 28px 24px;border-top:1px solid rgba(123,167,188,0.15);font-size:12px;line-height:1.5;color:rgba(209,221,230,0.55);">Semi-private functional fitness coaching in Kingaroy, Queensland. Beat Your Best.<br>Reply to this email if you have a question.</td></tr>'
+    || '<tr><td style="padding:16px 28px 24px;border-top:1px solid rgba(123,167,188,0.15);font-size:12px;line-height:1.5;color:rgba(209,221,230,0.55);">XERT Fitness · Semi-private functional fitness coaching in Kingaroy, Queensland.<br>Reply to this email if you have a question. <a href="https://xertfitness.com.au" style="color:#7BA7BC;text-decoration:none;">xertfitness.com.au</a></td></tr>'
     || '</table></td></tr></table></body></html>';
 $$;
 
@@ -288,6 +311,129 @@ end;
 $$;
 revoke execute on function public.admin_send_test_email(text) from public, anon;
 grant execute on function public.admin_send_test_email(text) to authenticated;
+
+-- Owner-written text → safe HTML paragraphs. Blank lines separate paragraphs,
+-- single line breaks stay as line breaks, and nothing the owner types can
+-- inject markup into the branded layout.
+create or replace function public.email_body_html(p_text text)
+returns text
+language sql
+immutable
+as $$
+  select coalesce(string_agg('<p>' || replace(paragraph, E'\n', '<br>') || '</p>', '' order by position), '')
+  from (
+    select trim(both E'\n' from parts.part) as paragraph, parts.position
+    from regexp_split_to_table(
+      replace(replace(replace(replace(replace(coalesce(p_text, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;'), E'\r', ''),
+      E'\n{2,}'
+    ) with ordinality as parts(part, position)
+  ) as paragraphs
+  where paragraph <> '';
+$$;
+
+-- Send one owner-written email to a list of people. Each recipient gets their
+-- own message (no shared To/CC), the same switches apply as to every other
+-- email, and every send lands in the log under the campaign id.
+create or replace function public.admin_send_bulk_email(
+  p_subject text,
+  p_body text,
+  p_recipients jsonb,
+  p_audience text default null,
+  p_greeting boolean default true,
+  p_cta_label text default null,
+  p_cta_url text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_subject text := left(trim(coalesce(p_subject, '')), 150);
+  v_body text := left(trim(coalesce(p_body, '')), 5000);
+  v_cta_label text := nullif(left(trim(coalesce(p_cta_label, '')), 60), '');
+  v_cta_url text := nullif(trim(coalesce(p_cta_url, '')), '');
+  v_campaign_id uuid;
+  v_body_html text;
+  v_html text;
+  v_log_id uuid;
+  v_status text;
+  v_queued integer := 0;
+  v_skipped integer := 0;
+  v_failed integer := 0;
+  v_invalid integer := 0;
+  v_count integer := 0;
+  v_seen text[] := '{}';
+  v_email text;
+  v_name text;
+  r jsonb;
+  v_results jsonb := '[]'::jsonb;
+begin
+  if auth.uid() is null or not public.is_admin() then
+    raise exception 'ADMIN_REQUIRED';
+  end if;
+  if v_subject = '' then raise exception 'EMAIL_SUBJECT_REQUIRED'; end if;
+  if v_body = '' then raise exception 'EMAIL_BODY_REQUIRED'; end if;
+  if p_recipients is null or jsonb_typeof(p_recipients) <> 'array' or jsonb_array_length(p_recipients) = 0 then
+    raise exception 'EMAIL_RECIPIENTS_REQUIRED';
+  end if;
+  if jsonb_array_length(p_recipients) > 500 then
+    raise exception 'EMAIL_RECIPIENTS_TOO_MANY';
+  end if;
+  if v_cta_url is not null and v_cta_url !~ '^https://' then
+    raise exception 'EMAIL_CTA_URL_INVALID';
+  end if;
+  if v_cta_label is null or v_cta_url is null then
+    v_cta_label := null;
+    v_cta_url := null;
+  end if;
+
+  v_body_html := public.email_body_html(v_body);
+  insert into public.email_campaigns (subject, body, audience, sent_by)
+  values (v_subject, v_body, nullif(left(trim(coalesce(p_audience, '')), 60), ''), auth.uid())
+  returning id into v_campaign_id;
+
+  for r in select value from jsonb_array_elements(p_recipients) loop
+    v_email := lower(trim(coalesce(r ->> 'email', '')));
+    v_name := nullif(trim(coalesce(r ->> 'name', '')), '');
+    if v_email !~ '^[^\s@]+@[^\s@]+\.[^\s@]+$' then
+      v_invalid := v_invalid + 1;
+      continue;
+    end if;
+    if v_email = any(v_seen) then continue; end if;
+    v_seen := array_append(v_seen, v_email);
+    v_count := v_count + 1;
+    v_html := public.email_layout(
+      v_subject,
+      case when coalesce(p_greeting, true) then '<p>Hi ' || public.email_first_name(v_name) || ',</p>' else '' end || v_body_html,
+      v_cta_label, v_cta_url
+    );
+    v_log_id := public.queue_email('campaign', v_email, v_subject, v_html, v_body, 'email_campaigns', v_campaign_id::text);
+    select status into v_status from public.email_log where id = v_log_id;
+    if v_status = 'queued' then v_queued := v_queued + 1;
+    elsif v_status = 'failed' then v_failed := v_failed + 1;
+    else v_skipped := v_skipped + 1;
+    end if;
+    v_results := v_results || jsonb_build_object('email', v_email, 'name', v_name, 'status', v_status);
+  end loop;
+
+  update public.email_campaigns
+     set recipient_count = v_count, queued_count = v_queued, skipped_count = v_skipped + v_failed
+   where id = v_campaign_id;
+
+  return jsonb_build_object(
+    'campaign_id', v_campaign_id,
+    'recipients', v_count,
+    'queued', v_queued,
+    'skipped', v_skipped,
+    'failed', v_failed,
+    'invalid', v_invalid,
+    'results', v_results
+  );
+end;
+$$;
+revoke execute on function public.admin_send_bulk_email(text, text, jsonb, text, boolean, text, text) from public, anon;
+grant execute on function public.admin_send_bulk_email(text, text, jsonb, text, boolean, text, text) to authenticated;
 
 -- ─── Content helpers ─────────────────────────────────────────────────────────
 

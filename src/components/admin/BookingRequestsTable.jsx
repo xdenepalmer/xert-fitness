@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, RefreshCw, Undo2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
   getClassBookings, getMemberBookingRequests, updateBookingStatus,
@@ -342,6 +342,32 @@ export default function BookingRequestsTable() {
                         No show
                       </button>
                     </>
+                  )}
+                  {b.status === 'waitlisted' && (
+                    <>
+                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
+                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
+                        Confirm
+                      </button>
+                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'declined')}
+                        className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
+                        Decline
+                      </button>
+                    </>
+                  )}
+                  {(b.status === 'attended' || b.status === 'no_show') && (
+                    <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
+                      title={`Marked ${b.status === 'no_show' ? 'no show' : 'attended'} by mistake? Put them back to confirmed.`}
+                      className="min-h-11 px-3 py-2.5 border border-xert-steel/40 font-body text-xs text-xert-pale hover:border-xert-steel hover:text-xert-offwhite transition-colors">
+                      <Undo2 className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> Undo {b.status === 'no_show' ? 'no show' : 'attended'}
+                    </button>
+                  )}
+                  {(b.status === 'declined' || b.status === 'cancelled') && (
+                    <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'requested')}
+                      title="Reopen this as a request so it can be confirmed or waitlisted again."
+                      className="min-h-11 px-3 py-2.5 border border-xert-steel/40 font-body text-xs text-xert-pale hover:border-xert-steel hover:text-xert-offwhite transition-colors">
+                      <Undo2 className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> Reopen
+                    </button>
                   )}
                   {b.source === 'enquiry' && (
                     <button onClick={() => { setSelectedBooking(b); setNotes(b.admin_notes || ''); }}

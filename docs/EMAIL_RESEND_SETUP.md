@@ -44,6 +44,20 @@ it is unused and can be removed.
 | New website enquiry, class request or PT request | the person, as a thank-you | Thanks-for-enquiring reply |
 | New member account | the member | Welcome email |
 | New enquiry, class request or PT request | the owner-alert address | Alert the owner |
+| An email you write under Email members → Send an email | each ticked person, one copy each | Emails you write and send to a group |
+
+Every message is wrapped in the branded XERT layout: the horizontal logo,
+"Beat Your Best", the heading, your text, an optional button and the Kingaroy
+footer. The logo is served from `https://xertfitness.com.au/assets/`.
+
+## Emailing a group
+
+Command Centre → Communications → Email members → **Send an email** works like
+Text members: pick all members, one class, member leads or PT requests, untick
+anyone who should not receive it, write a subject and message, optionally add
+a button, and send. Each person gets their own copy with "Hi <first name>,"
+at the top (switch that off for a message that already opens its own way).
+Sends are capped at 500 people and show up in the log as type `campaign`.
 
 Each type can be switched off individually. With the master switch off, every
 email is logged as skipped and nothing is sent.
