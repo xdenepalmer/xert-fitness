@@ -106,17 +106,28 @@ returns text
 language sql
 immutable
 as $$
-  select '<!doctype html><html><body style="margin:0;padding:0;background:#0d1720;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#F1F3F4;">'
-    || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0d1720;padding:32px 16px;"><tr><td align="center">'
-    || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#101820;border:1px solid rgba(123,167,188,0.2);border-radius:16px;overflow:hidden;">'
-    || '<tr><td style="padding:28px 28px 8px;"><img src="https://xertfitness.com.au/assets/xert-logo-horizontal-light.png" alt="XERT Fitness" width="150" style="display:block;width:150px;max-width:60%;height:auto;border:0;"><div style="margin-top:14px;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#7BA7BC;">Beat Your Best</div>'
-    || '<h1 style="margin:10px 0 0;font-size:26px;line-height:1.15;color:#F1F3F4;">' || p_title || '</h1></td></tr>'
-    || '<tr><td style="padding:8px 28px 8px;font-size:16px;line-height:1.55;color:#D1DDE6;">' || p_body_html || '</td></tr>'
+  -- Light body on purpose: Gmail and Outlook "dark mode" invert dark email
+  -- backgrounds into washed-out pastels. A white card with dark text survives
+  -- every client, and the navy header is a baked image so it cannot be
+  -- recoloured. Table layout and inline styles only; no external CSS.
+  select '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>' || p_title || '</title></head>'
+    || '<body style="margin:0;padding:0;background-color:#e9edf0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;">'
+    || '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' || regexp_replace(p_body_html, '<[^>]+>', ' ', 'g') || '</div>'
+    || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e9edf0;"><tr><td align="center" style="padding:28px 12px;">'
+    || '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(16,24,32,0.10);">'
+    || '<tr><td style="padding:0;line-height:0;background-color:#101820;"><img src="https://xertfitness.com.au/assets/xert-email-header.png" alt="XERT Fitness" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;"></td></tr>'
+    || '<tr><td style="padding:32px 32px 8px;"><div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#5a8aa0;font-weight:700;">XERT Fitness</div>'
+    || '<h1 style="margin:10px 0 0;font-size:28px;line-height:1.15;color:#101820;font-weight:800;">' || p_title || '</h1></td></tr>'
+    || '<tr><td style="padding:12px 32px 8px;font-size:16px;line-height:1.6;color:#2b3a45;">' || p_body_html || '</td></tr>'
     || case when p_cta_label is not null and p_cta_url is not null
-         then '<tr><td style="padding:8px 28px 28px;"><a href="' || p_cta_url || '" style="display:inline-block;background:#7BA7BC;color:#101820;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px;">' || p_cta_label || '</a></td></tr>'
-         else '<tr><td style="padding:0 28px 20px;"></td></tr>' end
-    || '<tr><td style="padding:16px 28px 24px;border-top:1px solid rgba(123,167,188,0.15);font-size:12px;line-height:1.5;color:rgba(209,221,230,0.55);">XERT Fitness · Semi-private functional fitness coaching in Kingaroy, Queensland.<br>Reply to this email if you have a question. <a href="https://xertfitness.com.au" style="color:#7BA7BC;text-decoration:none;">xertfitness.com.au</a></td></tr>'
-    || '</table></td></tr></table></body></html>';
+         then '<tr><td style="padding:12px 32px 32px;"><a href="' || p_cta_url || '" style="display:inline-block;background-color:#101820;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:15px 26px;border-radius:12px;">' || p_cta_label || '</a></td></tr>'
+         else '<tr><td style="padding:0 32px 24px;"></td></tr>' end
+    || '<tr><td style="padding:20px 32px 26px;border-top:1px solid #e3e9ee;font-size:12px;line-height:1.6;color:#6b7a86;">'
+    || '<strong style="color:#101820;">XERT Fitness</strong> &middot; Semi-private functional fitness coaching in Kingaroy, Queensland.<br>Beat Your Best. Reply to this email if you have a question.<br>'
+    || '<a href="https://xertfitness.com.au" style="color:#5a8aa0;text-decoration:none;font-weight:600;">xertfitness.com.au</a></td></tr>'
+    || '</table>'
+    || '<p style="margin:16px 0 0;font-size:11px;color:#8a97a3;">You are receiving this because you booked, enquired or trained with XERT Fitness.</p>'
+    || '</td></tr></table></body></html>';
 $$;
 
 -- Queues one email. Returns the log row id. Never raises into the caller's
