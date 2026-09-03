@@ -346,6 +346,7 @@ workflows:
               "fitbox_zapier_bridge",
               "fitbox_get_user_refresh",
               "fitbox_live_mirror",
+              "email_notifications",
             ];
             const missing = required.filter(item => !installed.has(item));
             if (missing.length) {

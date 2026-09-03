@@ -145,6 +145,55 @@ export async function refreshFitboxUser(leadId) {
   return body;
 }
 
+// ─── Transactional email (Resend via database triggers) ─────────────────────
+// Emails are sent by the database itself (pg_net + Vault), so the browser only
+// ever reads settings and the log, and asks for a test send through an RPC.
+
+export const EMAIL_TYPE_LABELS = Object.freeze({
+  booking_decisions: 'Booking confirmed, waitlisted or declined',
+  booking_cancellations: 'Booking cancelled',
+  class_cancellations: 'Class cancelled by XERT',
+  pt_decisions: 'Personal training request updates',
+  enquiry_acknowledgements: 'Thanks-for-enquiring reply to new leads',
+  welcome: 'Welcome email for new member accounts',
+  owner_alerts: 'Alert the owner about new enquiries and requests',
+});
+
+export async function getEmailSettings() {
+  const { data, error } = await supabase.rpc('admin_get_email_settings');
+  if (error) {
+    if (missingFitboxMirror(error) || error.code === 'PGRST202') return { installed: false, settings: null };
+    throw new Error(error.message);
+  }
+  return { installed: true, settings: data || null };
+}
+
+export async function saveEmailSettings(patch) {
+  const { data, error } = await supabase.rpc('admin_update_email_settings', { p_patch: patch || {} });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function sendTestEmail(to) {
+  const { data, error } = await supabase.rpc('admin_send_test_email', { p_to: String(to || '').trim() });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function listEmailLog({ limit = 100 } = {}) {
+  const reconcile = await supabase.rpc('admin_reconcile_email_log');
+  if (reconcile.error && !missingFitboxMirror(reconcile.error) && reconcile.error.code !== 'PGRST202') throw new Error(reconcile.error.message);
+  const { data, error } = await supabase.from('email_log')
+    .select('id, email_type, recipient, subject, status, error, related_table, related_id, created_at, sent_at')
+    .order('created_at', { ascending: false })
+    .limit(Math.min(Math.max(Number(limit) || 100, 1), 500));
+  if (error) {
+    if (missingFitboxMirror(error)) return { installed: false, rows: [] };
+    throw new Error(error.message);
+  }
+  return { installed: true, rows: data || [] };
+}
+
 // ─── FitBox live mirror (Zapier MCP gateway) ────────────────────────────────
 // Reads come straight from the admin-readable mirror tables; anything that
 // talks to FitBox goes through the server so no Zapier credential reaches the

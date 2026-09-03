@@ -58,7 +58,8 @@ with required (capability, migration) as (
     ('form_response_snapshots', 'supabase/migrations/20260813020000_require_versioned_form_submissions.sql'),
     ('fitbox_zapier_bridge', 'supabase/migrations/20260902010000_fitbox_zapier_bridge.sql'),
     ('fitbox_get_user_refresh', 'supabase/migrations/20260902020000_fitbox_get_user_refresh.sql'),
-    ('fitbox_live_mirror', 'supabase/migrations/20260903000000_fitbox_live_mirror.sql')
+    ('fitbox_live_mirror', 'supabase/migrations/20260903000000_fitbox_live_mirror.sql'),
+    ('email_notifications', 'supabase/migrations/20260903010000_email_notifications.sql')
 ), readiness as (
   select
     required.capability,

@@ -1,5 +1,5 @@
 import {
-  BarChart3, BellRing, Briefcase, CalendarDays, CalendarRange, ClipboardCheck, ClipboardList, DollarSign,
+  BarChart3, BellRing, Briefcase, CalendarDays, Mail, CalendarRange, ClipboardCheck, ClipboardList, DollarSign,
   Dumbbell, Handshake, Inbox, ListChecks, MessageSquareText, PenSquare, ScrollText,
   Settings, ShieldCheck, Sun, Ticket, Trophy, Tv, UserCog, Users, UserSquare2,
 } from 'lucide-react';
@@ -56,10 +56,11 @@ export const ADMIN_HUBS = Object.freeze([
     key: 'communications',
     label: 'Communications',
     icon: MessageSquareText,
-    detail: 'Texts and app notices',
+    detail: 'Texts, emails and app notices',
     items: [
       { key: 'sms', label: 'Text members', detail: 'SMS any group with a mobile', icon: MessageSquareText },
       { key: 'announcements', label: 'App notices', detail: 'Push a notice to the member app', icon: BellRing },
+      { key: 'emails', label: 'Email', detail: 'Automatic emails and the send log', icon: Mail },
     ],
   },
   {
