@@ -185,7 +185,7 @@ export async function sendTestEmail(to) {
  *  branded message, applies the same switches as every other email and logs
  *  each send under the campaign id. */
 export async function sendBulkEmail(payload) {
-  const { data, error } = await supabase.rpc('admin_send_bulk_email', payload);
+  const { data, error } = await supabase.rpc('admin_send_bulk_email', { p_campaign_id: null, ...payload });
   if (error) {
     const message = error.message || '';
     if (error.code === 'PGRST202' || /admin_send_bulk_email.*(?:not found|schema cache|does not exist)/i.test(message)) {
@@ -201,13 +201,20 @@ export async function sendBulkEmail(payload) {
 /** Email everyone already confirmed for an upcoming class who has not had a
  *  confirmation email yet (decisions made before email was switched on). */
 export async function emailConfirmedBookings(sessionId = null) {
-  const { data, error } = await supabase.rpc('admin_email_confirmed_bookings', { p_session_id: sessionId || null });
+  const { data, error } = await supabase.rpc('admin_email_confirmed_bookings', { p_session_id: sessionId || null, p_limit: 40 });
   if (error) {
     if (error.code === 'PGRST202' || /admin_email_confirmed_bookings.*(?:not found|schema cache|does not exist)/i.test(error.message || '')) {
       throw new Error('Apply the latest supabase/migrations/20260903010000_email_notifications.sql first.');
     }
     throw new Error(error.message);
   }
+  return data;
+}
+
+/** Re-send emails that failed on a provider rate limit or outage, a few at a time. */
+export async function retryFailedEmails() {
+  const { data, error } = await supabase.rpc('admin_retry_failed_emails', { p_limit: 8 });
+  if (error) throw new Error(error.message);
   return data;
 }
 

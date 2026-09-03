@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, History, Loader2, Mail, RefreshCw, Send, TriangleAlert } from 'lucide-react';
-import { EMAIL_TYPE_LABELS, emailConfirmedBookings, getEmailSettings, listEmailLog, saveEmailSettings, sendTestEmail } from '@/lib/adminData';
+import { CheckCircle2, History, Loader2, Mail, RefreshCw, RotateCcw, Send, TriangleAlert } from 'lucide-react';
+import { EMAIL_TYPE_LABELS, emailConfirmedBookings, getEmailSettings, listEmailLog, retryFailedEmails, saveEmailSettings, sendTestEmail } from '@/lib/adminData';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
@@ -43,6 +43,7 @@ export default function EmailManager({ initialTab = 'send' }) {
   const [tab, setTab] = useState(initialTab === 'automatic' ? 'automatic' : 'send');
   const [catchUpOpen, setCatchUpOpen] = useState(false);
   const [catchingUp, setCatchingUp] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,7 +104,12 @@ export default function EmailManager({ initialTab = 'send' }) {
   const catchUp = async () => {
     setCatchingUp(true);
     try {
-      const result = await emailConfirmedBookings();
+      // Paced in batches of 40; keep going until nobody is left waiting.
+      let result = await emailConfirmedBookings();
+      for (let round = 0; round < 20 && Number(result?.remaining || 0) > 0; round += 1) {
+        const next = await emailConfirmedBookings();
+        result = { ...next, queued: result.queued + Number(next.queued || 0), skipped: result.skipped + Number(next.skipped || 0) };
+      }
       setCatchUpOpen(false);
       toast({
         title: result?.queued ? `${result.queued} confirmation email${result.queued === 1 ? '' : 's'} queued` : 'Nobody was waiting on a confirmation',
@@ -117,6 +123,23 @@ export default function EmailManager({ initialTab = 'send' }) {
       setCatchingUp(false);
     }
   };
+
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      const result = await retryFailedEmails();
+      toast({
+        title: result?.retried ? `${result.retried} email${result.retried === 1 ? '' : 's'} sent again` : 'Nothing to retry',
+        description: result?.remaining ? `${result.remaining} more still waiting; press again in a moment.` : 'Refresh the log in a minute to see delivery.',
+      });
+      await load();
+    } catch (retryError) {
+      toast({ title: 'Retry failed', description: retryError.message, variant: 'destructive' });
+    } finally {
+      setRetrying(false);
+    }
+  };
+  const retryable = log.filter(row => row.status === 'failed' && /^(HTTP 429|HTTP 5|HANDOFF_FAILED|HTTP timeout)/.test(row.error || '')).length;
 
   return (
     <div className={`${ADMIN_PAGE} space-y-5`}>
@@ -199,7 +222,14 @@ export default function EmailManager({ initialTab = 'send' }) {
           </section>
 
           <section className={`${ADMIN_PANEL} p-5`}>
-            <h3 className={ADMIN_TEXT.sectionHeading}>Recent emails</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className={ADMIN_TEXT.sectionHeading}>Recent emails</h3>
+              {retryable > 0 && (
+                <button type="button" onClick={() => void retry()} disabled={retrying} className={`${ADMIN_BUTTON.ghost} min-h-10 px-3 text-xs`}>
+                  {retrying ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />} Retry {retryable} failed
+                </button>
+              )}
+            </div>
             {log.length === 0 ? <p className="mt-3 font-body text-sm text-xert-pale/55">Nothing sent yet.</p> : (
               <ul className="mt-3 divide-y divide-white/[0.06]">
                 {log.map(row => (

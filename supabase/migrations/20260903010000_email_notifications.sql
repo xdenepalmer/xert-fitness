@@ -6,6 +6,24 @@
 
 create extension if not exists pg_net with schema extensions;
 
+-- Resend accepts 10 requests a second. pg_net's worker sends a whole batch at
+-- once (200 by default), so a burst of confirmations would overflow. Eight per
+-- pass keeps every burst under the limit; the setting takes effect on the
+-- worker's next start.
+do $$
+begin
+  execute 'alter role postgres set pg_net.batch_size = 8';
+  execute 'alter database ' || quote_ident(current_database()) || ' set pg_net.batch_size = 8';
+exception when others then
+  raise notice 'pg_net.batch_size not changed: %', sqlerrm;
+end $$;
+do $$
+begin
+  perform net.worker_restart();
+exception when others then
+  raise notice 'pg_net worker not restarted: %', sqlerrm;
+end $$;
+
 create table if not exists public.email_settings (
   id smallint primary key default 1,
   enabled boolean not null default false,
@@ -70,6 +88,8 @@ create table if not exists public.email_log (
   constraint email_log_subject_check check (char_length(subject) <= 200),
   constraint email_log_error_check check (error is null or char_length(error) <= 500)
 );
+alter table public.email_log add column if not exists payload jsonb;
+alter table public.email_log add column if not exists attempts integer not null default 1;
 create index if not exists email_log_recent_idx on public.email_log (created_at desc);
 create index if not exists email_log_queued_idx on public.email_log (status) where status = 'queued';
 
@@ -197,7 +217,7 @@ begin
       headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_key),
       timeout_milliseconds := 8000
     );
-    update public.email_log set request_id = v_request_id, updated_at = now() where id = v_log_id;
+    update public.email_log set request_id = v_request_id, payload = v_body, updated_at = now() where id = v_log_id;
   exception when others then
     update public.email_log set status = 'failed', error = left('HANDOFF_FAILED: ' || sqlerrm, 500), updated_at = now() where id = v_log_id;
   end;
@@ -243,6 +263,63 @@ end;
 $$;
 revoke execute on function public.admin_reconcile_email_log() from public, anon;
 grant execute on function public.admin_reconcile_email_log() to authenticated;
+
+-- Resend allows 10 requests a second. A burst of confirmations can exceed
+-- that, and the provider answers 429 for the overflow. This re-sends any
+-- failed email whose failure was a rate limit, a provider outage or a
+-- hand-off error, a few at a time, using the body kept in the log.
+create or replace function public.admin_retry_failed_emails(p_limit integer default 8)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  r record;
+  v_key text;
+  v_request_id bigint;
+  v_retried integer := 0;
+  v_remaining integer := 0;
+begin
+  if auth.uid() is null or not public.is_admin() then
+    raise exception 'ADMIN_REQUIRED';
+  end if;
+  perform public.admin_reconcile_email_log();
+  v_key := public.email_provider_key();
+  if v_key is null or v_key = '' then
+    raise exception 'RESEND_API_KEY_MISSING';
+  end if;
+  for r in
+    select id, payload from public.email_log
+    where status = 'failed' and payload is not null and attempts < 5
+      and (error like 'HTTP 429%' or error like 'HTTP 5%' or error like 'HANDOFF_FAILED%' or error like 'HTTP timeout%')
+    order by created_at asc
+    limit greatest(1, least(coalesce(p_limit, 8), 50))
+  loop
+    begin
+      v_request_id := net.http_post(
+        url := 'https://api.resend.com/emails',
+        body := r.payload,
+        headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_key),
+        timeout_milliseconds := 8000
+      );
+      update public.email_log
+         set status = 'queued', error = null, request_id = v_request_id, attempts = attempts + 1, updated_at = now()
+       where id = r.id;
+      v_retried := v_retried + 1;
+    exception when others then
+      update public.email_log set error = left('HANDOFF_FAILED: ' || sqlerrm, 500), attempts = attempts + 1, updated_at = now() where id = r.id;
+    end;
+    perform pg_sleep(0.15);
+  end loop;
+  select count(*) into v_remaining from public.email_log
+   where status = 'failed' and payload is not null and attempts < 5
+     and (error like 'HTTP 429%' or error like 'HTTP 5%' or error like 'HANDOFF_FAILED%' or error like 'HTTP timeout%');
+  return jsonb_build_object('retried', v_retried, 'remaining', v_remaining);
+end;
+$$;
+revoke execute on function public.admin_retry_failed_emails(integer) from public, anon;
+grant execute on function public.admin_retry_failed_emails(integer) to authenticated;
 
 create or replace function public.admin_get_email_settings()
 returns jsonb
@@ -345,6 +422,7 @@ $$;
 -- Send one owner-written email to a list of people. Each recipient gets their
 -- own message (no shared To/CC), the same switches apply as to every other
 -- email, and every send lands in the log under the campaign id.
+drop function if exists public.admin_send_bulk_email(text, text, jsonb, text, boolean, text, text);
 create or replace function public.admin_send_bulk_email(
   p_subject text,
   p_body text,
@@ -352,7 +430,8 @@ create or replace function public.admin_send_bulk_email(
   p_audience text default null,
   p_greeting boolean default true,
   p_cta_label text default null,
-  p_cta_url text default null
+  p_cta_url text default null,
+  p_campaign_id uuid default null
 )
 returns jsonb
 language plpgsql
@@ -388,7 +467,10 @@ begin
   if p_recipients is null or jsonb_typeof(p_recipients) <> 'array' or jsonb_array_length(p_recipients) = 0 then
     raise exception 'EMAIL_RECIPIENTS_REQUIRED';
   end if;
-  if jsonb_array_length(p_recipients) > 500 then
+  -- The browser sends at most 40 people per call (see emailCampaigns.js) so
+  -- the paced loop below finishes well inside the API statement timeout;
+  -- later calls pass p_campaign_id to keep one campaign record.
+  if jsonb_array_length(p_recipients) > 50 then
     raise exception 'EMAIL_RECIPIENTS_TOO_MANY';
   end if;
   if v_cta_url is not null and v_cta_url !~ '^https://' then
@@ -400,9 +482,14 @@ begin
   end if;
 
   v_body_html := public.email_body_html(v_body);
-  insert into public.email_campaigns (subject, body, audience, sent_by)
-  values (v_subject, v_body, nullif(left(trim(coalesce(p_audience, '')), 60), ''), auth.uid())
-  returning id into v_campaign_id;
+  if p_campaign_id is not null then
+    select id into v_campaign_id from public.email_campaigns where id = p_campaign_id;
+    if v_campaign_id is null then raise exception 'EMAIL_CAMPAIGN_NOT_FOUND'; end if;
+  else
+    insert into public.email_campaigns (subject, body, audience, sent_by)
+    values (v_subject, v_body, nullif(left(trim(coalesce(p_audience, '')), 60), ''), auth.uid())
+    returning id into v_campaign_id;
+  end if;
 
   for r in select value from jsonb_array_elements(p_recipients) loop
     v_email := lower(trim(coalesce(r ->> 'email', '')));
@@ -426,10 +513,11 @@ begin
     else v_skipped := v_skipped + 1;
     end if;
     v_results := v_results || jsonb_build_object('email', v_email, 'name', v_name, 'status', v_status);
+    perform pg_sleep(0.12);
   end loop;
 
   update public.email_campaigns
-     set recipient_count = v_count, queued_count = v_queued, skipped_count = v_skipped + v_failed
+     set recipient_count = recipient_count + v_count, queued_count = queued_count + v_queued, skipped_count = skipped_count + v_skipped + v_failed
    where id = v_campaign_id;
 
   return jsonb_build_object(
@@ -443,8 +531,8 @@ begin
   );
 end;
 $$;
-revoke execute on function public.admin_send_bulk_email(text, text, jsonb, text, boolean, text, text) from public, anon;
-grant execute on function public.admin_send_bulk_email(text, text, jsonb, text, boolean, text, text) to authenticated;
+revoke execute on function public.admin_send_bulk_email(text, text, jsonb, text, boolean, text, text, uuid) from public, anon;
+grant execute on function public.admin_send_bulk_email(text, text, jsonb, text, boolean, text, text, uuid) to authenticated;
 
 -- ─── Content helpers ─────────────────────────────────────────────────────────
 
@@ -488,7 +576,8 @@ revoke execute on function public.email_owner_alert(text, text, text, text, text
 -- Catch-up: confirmations decided before email existed. Emails every
 -- confirmed place in an upcoming published class that has not yet had a
 -- "You are booked in" email, so nobody gets it twice.
-create or replace function public.admin_email_confirmed_bookings(p_session_id uuid default null)
+drop function if exists public.admin_email_confirmed_bookings(uuid);
+create or replace function public.admin_email_confirmed_bookings(p_session_id uuid default null, p_limit integer default 40)
 returns jsonb
 language plpgsql
 security definer
@@ -503,6 +592,7 @@ declare
   v_queued integer := 0;
   v_skipped integer := 0;
   v_already integer := 0;
+  v_remaining integer := 0;
   v_sessions uuid[] := '{}';
 begin
   if auth.uid() is null or not public.is_admin() then
@@ -532,6 +622,10 @@ begin
       v_already := v_already + 1;
       continue;
     end if;
+    if v_queued + v_skipped >= greatest(1, least(coalesce(p_limit, 40), 50)) then
+      v_remaining := v_remaining + 1;
+      continue;
+    end if;
     select * into v_session from public.class_sessions where id = r.class_session_id;
     v_line := public.email_class_line(v_session);
     v_log_id := public.queue_email('booking_decisions', r.email, 'You are booked in: ' || coalesce(v_session.title, 'XERT class'),
@@ -540,12 +634,13 @@ begin
     select status into v_status from public.email_log where id = v_log_id;
     if v_status = 'queued' then v_queued := v_queued + 1; else v_skipped := v_skipped + 1; end if;
     if not (r.class_session_id = any(v_sessions)) then v_sessions := array_append(v_sessions, r.class_session_id); end if;
+    perform pg_sleep(0.12);
   end loop;
-  return jsonb_build_object('queued', v_queued, 'skipped', v_skipped, 'already_emailed', v_already, 'classes', coalesce(array_length(v_sessions, 1), 0));
+  return jsonb_build_object('queued', v_queued, 'skipped', v_skipped, 'already_emailed', v_already, 'remaining', v_remaining, 'classes', coalesce(array_length(v_sessions, 1), 0));
 end;
 $$;
-revoke execute on function public.admin_email_confirmed_bookings(uuid) from public, anon;
-grant execute on function public.admin_email_confirmed_bookings(uuid) to authenticated;
+revoke execute on function public.admin_email_confirmed_bookings(uuid, integer) from public, anon;
+grant execute on function public.admin_email_confirmed_bookings(uuid, integer) to authenticated;
 
 -- ─── Triggers ────────────────────────────────────────────────────────────────
 

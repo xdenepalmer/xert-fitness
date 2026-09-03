@@ -69,6 +69,14 @@ everyone already confirmed**. It sends the "You are booked in" email to every
 confirmed place in an upcoming published class that has no confirmation email
 in the log, so nobody receives it twice. Safe to press more than once.
 
+## Rate limits and retries
+
+Resend accepts 10 requests a second. The database keeps pg_net's batch at 8,
+paces group sends and the catch-up, and the browser sends big lists in chunks
+of 40. Anything that still fails with HTTP 429 or a provider error shows a
+**Retry failed** button above the log; it re-sends from the stored body, a few
+at a time, up to five attempts per email.
+
 ## Supabase Auth URLs
 
 Supabase Dashboard → Authentication → URL Configuration:

@@ -3,6 +3,8 @@
 // node. The database does the sending; the browser only chooses who and what.
 
 export const EMAIL_MAX_RECIPIENTS = 500;
+/** The database paces sends to stay under the provider's rate limit, so each call carries at most this many people. */
+export const EMAIL_CHUNK_SIZE = 40;
 export const EMAIL_SUBJECT_MAX_LENGTH = 150;
 export const EMAIL_BODY_MAX_LENGTH = 5000;
 
@@ -60,7 +62,7 @@ export function emailCampaignValidationError({ subject, body, recipients, ctaLab
 }
 
 /** The request body the RPC expects: one small object per person, nothing else. */
-export function emailCampaignPayload({ subject, body, recipients, audience, greeting = true, ctaLabel, ctaUrl }) {
+export function emailCampaignPayload({ subject, body, recipients, audience, greeting = true, ctaLabel, ctaUrl, campaignId = null }) {
   const label = String(ctaLabel || '').trim();
   const url = String(ctaUrl || '').trim();
   return {
@@ -71,5 +73,27 @@ export function emailCampaignPayload({ subject, body, recipients, audience, gree
     p_greeting: Boolean(greeting),
     p_cta_label: label && url ? label : null,
     p_cta_url: label && url ? url : null,
+    p_campaign_id: campaignId || null,
   };
+}
+
+/** Split recipients into the chunks the RPC accepts; the first chunk creates the campaign, later chunks join it. */
+export function chunkRecipients(recipients, size = EMAIL_CHUNK_SIZE) {
+  const chunks = [];
+  const list = Array.isArray(recipients) ? recipients : [];
+  for (let index = 0; index < list.length; index += size) chunks.push(list.slice(index, index + size));
+  return chunks;
+}
+
+/** Merge the results of several chunked sends into one outcome. */
+export function mergeCampaignResults(results) {
+  return (results || []).reduce((total, result) => ({
+    campaign_id: total.campaign_id || result?.campaign_id || null,
+    recipients: total.recipients + Number(result?.recipients || 0),
+    queued: total.queued + Number(result?.queued || 0),
+    skipped: total.skipped + Number(result?.skipped || 0),
+    failed: total.failed + Number(result?.failed || 0),
+    invalid: total.invalid + Number(result?.invalid || 0),
+    results: total.results.concat(Array.isArray(result?.results) ? result.results : []),
+  }), { campaign_id: null, recipients: 0, queued: 0, skipped: 0, failed: 0, invalid: 0, results: [] });
 }

@@ -6,7 +6,7 @@ import {
 } from '@/lib/adminAudiences';
 import {
   EMAIL_BODY_MAX_LENGTH, EMAIL_MAX_RECIPIENTS, EMAIL_SUBJECT_MAX_LENGTH,
-  emailCampaignPayload, emailCampaignValidationError, emailRecipientsFromRows,
+  chunkRecipients, emailCampaignPayload, emailCampaignValidationError, emailRecipientsFromRows, mergeCampaignResults,
 } from '@/lib/emailCampaigns';
 import { listEmailCampaigns, sendBulkEmail } from '@/lib/adminData';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
@@ -82,7 +82,17 @@ export default function EmailCampaignComposer({ emailEnabled = true, providerRea
   const send = async () => {
     setSending(true);
     try {
-      const result = await sendBulkEmail(emailCampaignPayload({ subject, body, recipients: selected, audience, greeting, ctaLabel, ctaUrl }));
+      // The database paces sends to stay under Resend's rate limit, so a big
+      // list goes over in chunks that each join the same campaign record.
+      const results = [];
+      let campaignId = null;
+      for (const chunk of chunkRecipients(selected)) {
+        const part = await sendBulkEmail(emailCampaignPayload({ subject, body, recipients: chunk, audience, greeting, ctaLabel, ctaUrl, campaignId }));
+        campaignId = campaignId || part?.campaign_id || null;
+        results.push(part);
+        setOutcome(mergeCampaignResults(results));
+      }
+      const result = mergeCampaignResults(results);
       setOutcome(result);
       setConfirming(false);
       const problems = Number(result?.skipped || 0) + Number(result?.failed || 0);
