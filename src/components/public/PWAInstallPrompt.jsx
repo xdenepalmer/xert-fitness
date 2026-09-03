@@ -63,7 +63,7 @@ export default function PWAInstallPrompt({ context = 'member' }) {
     visible ? (
         // Below md the StickyMobileCTA floats at the bottom edge, so the sheet
         // sits above its height (incl. safe area) instead of overlapping it.
-        <div className={`xert-sheet-enter fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-0 right-0 px-4 sm:left-auto sm:right-4 sm:max-w-sm sm:px-0 md:bottom-4 ${context === 'owner' ? 'z-[45]' : 'z-[60]'}`}>
+        <div className={`xert-sheet-enter fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-0 right-0 px-4 sm:max-w-sm sm:px-0 md:bottom-4 ${context === 'owner' ? 'z-[45] sm:left-4 sm:right-auto' : 'z-[60] sm:left-auto sm:right-4'}`}>
           <div
             className="xert-glass flex items-center gap-3 rounded-2xl p-3 shadow-[0_20px_50px_-18px_rgba(0,0,0,0.85)] sm:gap-4 sm:p-4"
             style={{ backgroundColor: 'rgba(16,24,32,0.94)' }}

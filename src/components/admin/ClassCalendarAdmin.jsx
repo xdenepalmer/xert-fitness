@@ -696,6 +696,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
               ? 'Their private notice is live and Apple push was delivered.'
               : 'Their private notice is live in their member account.'),
         });
+      } else {
+        toast({ title: 'Booking updated', description: `Now ${status.replace(/_/g, ' ')}.` });
       }
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
@@ -850,6 +852,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     try {
       await updateBookingStatus(id, status);
       await refreshBookings(sessionId);
+      toast({ title: 'Request updated', description: `Now ${status.replace(/_/g, ' ')}.` });
     } catch (e) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
