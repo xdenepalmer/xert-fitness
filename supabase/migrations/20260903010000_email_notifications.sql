@@ -115,7 +115,7 @@ as $$
     || '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' || regexp_replace(p_body_html, '<[^>]+>', ' ', 'g') || '</div>'
     || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e9edf0;"><tr><td align="center" style="padding:28px 12px;">'
     || '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(16,24,32,0.10);">'
-    || '<tr><td style="padding:0;line-height:0;background-color:#101820;"><img src="https://xertfitness.com.au/assets/xert-email-header.png" alt="XERT Fitness" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;"></td></tr>'
+    || '<tr><td style="padding:0;line-height:0;background-color:#101820;"><img src="https://www.xertfitness.com.au/assets/xert-email-header.png" alt="XERT Fitness" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;"></td></tr>'
     || '<tr><td style="padding:32px 32px 8px;"><div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#5a8aa0;font-weight:700;">XERT Fitness</div>'
     || '<h1 style="margin:10px 0 0;font-size:28px;line-height:1.15;color:#101820;font-weight:800;">' || p_title || '</h1></td></tr>'
     || '<tr><td style="padding:12px 32px 8px;font-size:16px;line-height:1.6;color:#2b3a45;">' || p_body_html || '</td></tr>'
