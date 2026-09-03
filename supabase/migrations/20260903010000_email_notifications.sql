@@ -150,6 +150,27 @@ as $$
     || '</td></tr></table></body></html>';
 $$;
 
+-- Some mail apps read the HTML as Latin-1 whatever the declared charset, which
+-- turns a middle dot into "Â·". Entities survive every client, so every
+-- non-ASCII character in the HTML becomes one, and the plain-text twin uses
+-- ASCII stand-ins for the punctuation we write ourselves.
+create or replace function public.email_ascii_html(p_html text)
+returns text
+language sql
+immutable
+as $$
+  select coalesce(string_agg(case when ascii(t.ch) > 127 then '&#' || ascii(t.ch) || ';' else t.ch end, '' order by t.n), '')
+  from regexp_split_to_table(coalesce(p_html, ''), '') with ordinality as t(ch, n);
+$$;
+
+create or replace function public.email_ascii_text(p_text text)
+returns text
+language sql
+immutable
+as $$
+  select translate(replace(coalesce(p_text, ''), '…', '...'), '·–—‘’“”', '---''''""');
+$$;
+
 -- Queues one email. Returns the log row id. Never raises into the caller's
 -- transaction: a failure to hand off is recorded as failed/skipped instead.
 create or replace function public.queue_email(
@@ -203,8 +224,8 @@ begin
     'from', v_from,
     'to', jsonb_build_array(v_to),
     'subject', v_subject,
-    'html', p_html,
-    'text', coalesce(p_text, regexp_replace(p_html, '<[^>]+>', ' ', 'g'))
+    'html', public.email_ascii_html(p_html),
+    'text', public.email_ascii_text(coalesce(p_text, regexp_replace(p_html, '<[^>]+>', ' ', 'g')))
   );
   if v_settings.reply_to is not null then
     v_body := v_body || jsonb_build_object('reply_to', v_settings.reply_to);

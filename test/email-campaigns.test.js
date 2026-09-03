@@ -76,6 +76,7 @@ test('the database builds and sends group emails; the browser only picks people'
   assert.match(sql, /grant execute on function public\.admin_send_bulk_email\(text, text, jsonb, text, boolean, text, text, uuid\) to authenticated/);
   assert.match(sql, /alter role postgres set pg_net\.batch_size = 8/, 'pg_net must not fire a whole burst at once');
   assert.match(sql, /perform pg_sleep\(0\.12\)/, 'bulk loops pace themselves');
+  assert.match(sql, /'html', public\.email_ascii_html\(p_html\)/, 'non-ASCII characters are sent as entities so no client shows mojibake');
   assert.match(sql, /xert-email-header\.png/, 'the branded layout carries the baked navy logo header');
   assert.match(sql, /background-color:#ffffff/, 'light body so dark-mode inboxes cannot invert it');
   assert.match(sql, /create or replace function public\.admin_email_confirmed_bookings\(p_session_id uuid default null, p_limit integer default 40\)/);
