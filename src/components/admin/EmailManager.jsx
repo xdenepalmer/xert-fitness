@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, Mail, RefreshCw, Send, TriangleAlert } from 'lucide-react';
-import { EMAIL_TYPE_LABELS, getEmailSettings, listEmailLog, saveEmailSettings, sendTestEmail } from '@/lib/adminData';
+import { CheckCircle2, History, Loader2, Mail, RefreshCw, Send, TriangleAlert } from 'lucide-react';
+import { EMAIL_TYPE_LABELS, emailConfirmedBookings, getEmailSettings, listEmailLog, saveEmailSettings, sendTestEmail } from '@/lib/adminData';
+import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { toast } from '@/components/ui/use-toast';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import EmailCampaignComposer from '@/components/admin/EmailCampaignComposer';
@@ -40,6 +41,8 @@ export default function EmailManager({ initialTab = 'send' }) {
   const [testTo, setTestTo] = useState('');
   const [testing, setTesting] = useState(false);
   const [tab, setTab] = useState(initialTab === 'automatic' ? 'automatic' : 'send');
+  const [catchUpOpen, setCatchUpOpen] = useState(false);
+  const [catchingUp, setCatchingUp] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,6 +97,24 @@ export default function EmailManager({ initialTab = 'send' }) {
       toast({ title: 'Test email failed', description: testError.message, variant: 'destructive' });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const catchUp = async () => {
+    setCatchingUp(true);
+    try {
+      const result = await emailConfirmedBookings();
+      setCatchUpOpen(false);
+      toast({
+        title: result?.queued ? `${result.queued} confirmation email${result.queued === 1 ? '' : 's'} queued` : 'Nobody was waiting on a confirmation',
+        description: `${result?.already_emailed || 0} already had one${result?.skipped ? `, ${result.skipped} skipped (see the log)` : ''}.`,
+        variant: result?.skipped ? 'destructive' : undefined,
+      });
+      await load();
+    } catch (catchUpError) {
+      toast({ title: 'Catch-up failed', description: catchUpError.message, variant: 'destructive' });
+    } finally {
+      setCatchingUp(false);
     }
   };
 
@@ -170,6 +191,14 @@ export default function EmailManager({ initialTab = 'send' }) {
           </div>
 
           <section className={`${ADMIN_PANEL} p-5`}>
+            <h3 className={ADMIN_TEXT.sectionHeading}>Catch up on earlier confirmations</h3>
+            <p className="mt-2 font-body text-sm leading-relaxed text-xert-pale/65">Confirmed a class before email was switched on? This sends the “You are booked in” email to everyone confirmed for an upcoming class who has not received one. Nobody gets it twice.</p>
+            <button type="button" onClick={() => setCatchUpOpen(true)} disabled={!draft.enabled || catchingUp} className={`${ADMIN_BUTTON.ghost} mt-3`}>
+              {catchingUp ? <Loader2 className="size-4 animate-spin" /> : <History className="size-4" />} Email everyone already confirmed
+            </button>
+          </section>
+
+          <section className={`${ADMIN_PANEL} p-5`}>
             <h3 className={ADMIN_TEXT.sectionHeading}>Recent emails</h3>
             {log.length === 0 ? <p className="mt-3 font-body text-sm text-xert-pale/55">Nothing sent yet.</p> : (
               <ul className="mt-3 divide-y divide-white/[0.06]">
@@ -188,6 +217,15 @@ export default function EmailManager({ initialTab = 'send' }) {
           </>)}
         </>
       )}
+      <AdminConfirmDialog
+        open={catchUpOpen}
+        title="Email everyone already confirmed?"
+        description="Each person confirmed for an upcoming class who has not had a confirmation email gets the branded “You are booked in” email now."
+        confirmLabel={catchingUp ? 'Sending…' : 'Send confirmations'}
+        busy={catchingUp}
+        onOpenChange={open => { if (!open && !catchingUp) setCatchUpOpen(false); }}
+        onConfirm={() => void catchUp()}
+      />
     </div>
   );
 }

@@ -198,6 +198,19 @@ export async function sendBulkEmail(payload) {
   return data;
 }
 
+/** Email everyone already confirmed for an upcoming class who has not had a
+ *  confirmation email yet (decisions made before email was switched on). */
+export async function emailConfirmedBookings(sessionId = null) {
+  const { data, error } = await supabase.rpc('admin_email_confirmed_bookings', { p_session_id: sessionId || null });
+  if (error) {
+    if (error.code === 'PGRST202' || /admin_email_confirmed_bookings.*(?:not found|schema cache|does not exist)/i.test(error.message || '')) {
+      throw new Error('Apply the latest supabase/migrations/20260903010000_email_notifications.sql first.');
+    }
+    throw new Error(error.message);
+  }
+  return data;
+}
+
 export async function listEmailCampaigns({ limit = 20 } = {}) {
   const { data, error } = await supabase.from('email_campaigns')
     .select('id, subject, audience, recipient_count, queued_count, skipped_count, created_at')

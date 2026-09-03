@@ -62,6 +62,9 @@ test('the database builds and sends group emails; the browser only picks people'
   assert.match(sql, /queue_email\('campaign', v_email, v_subject, v_html, v_body, 'email_campaigns', v_campaign_id::text\)/);
   assert.match(sql, /grant execute on function public\.admin_send_bulk_email\(text, text, jsonb, text, boolean, text, text\) to authenticated/);
   assert.match(sql, /xert-logo-horizontal-light\.png/, 'the branded layout carries the logo');
+  assert.match(sql, /create or replace function public\.admin_email_confirmed_bookings\(p_session_id uuid default null\)/);
+  assert.match(sql, /l\.subject like 'You are booked in%'/, 'the catch-up never emails a confirmation twice');
+  assert.match(sql, /s\.status = 'published' and s\.start_time > now\(\)/);
 
   const data = await read('../src/lib/adminData.js');
   assert.match(data, /supabase\.rpc\('admin_send_bulk_email', payload\)/);
@@ -75,6 +78,8 @@ test('the database builds and sends group emails; the browser only picks people'
   assert.doesNotMatch(composer, /window\.confirm|api\.resend\.com/);
   const manager = await read('../src/components/admin/EmailManager.jsx');
   assert.match(manager, /<EmailCampaignComposer/);
+  assert.match(manager, /emailConfirmedBookings\(\)/);
+  assert.match(manager, /Email everyone already confirmed/);
   assert.match(manager, /\['send', 'Send an email'\], \['automatic', 'Automatic emails'\]/);
 
   // Text members and Email members share one audience loader.

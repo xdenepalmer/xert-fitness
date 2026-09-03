@@ -474,6 +474,68 @@ end;
 $$;
 revoke execute on function public.email_owner_alert(text, text, text, text, text) from public, anon, authenticated;
 
+-- Catch-up: confirmations decided before email existed. Emails every
+-- confirmed place in an upcoming published class that has not yet had a
+-- "You are booked in" email, so nobody gets it twice.
+create or replace function public.admin_email_confirmed_bookings(p_session_id uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+  v_session public.class_sessions%rowtype;
+  v_line text;
+  v_log_id uuid;
+  v_status text;
+  v_queued integer := 0;
+  v_skipped integer := 0;
+  v_already integer := 0;
+  v_sessions uuid[] := '{}';
+begin
+  if auth.uid() is null or not public.is_admin() then
+    raise exception 'ADMIN_REQUIRED';
+  end if;
+  for r in
+    select p.email, p.full_name, b.class_session_id, 'session_bookings' as source, b.id::text as record_id, 'https://xertfitness.com.au/account' as cta_url, 'View my bookings' as cta_label
+    from public.session_bookings b
+    join public.profiles p on p.id = b.user_id
+    join public.class_sessions s on s.id = b.class_session_id
+    where b.status = 'confirmed' and s.status = 'published' and s.start_time > now()
+      and (p_session_id is null or s.id = p_session_id)
+    union all
+    select c.email, c.full_name, c.class_session_id, 'class_bookings', c.id::text, 'https://xertfitness.com.au/timetable', 'See the timetable'
+    from public.class_bookings c
+    join public.class_sessions s on s.id = c.class_session_id
+    where c.status = 'confirmed' and s.status = 'published' and s.start_time > now()
+      and (p_session_id is null or s.id = p_session_id)
+  loop
+    if r.email is null then continue; end if;
+    if exists (
+      select 1 from public.email_log l
+      where l.related_table = r.source and l.related_id = r.record_id
+        and l.email_type = 'booking_decisions' and l.status in ('queued', 'sent')
+        and l.subject like 'You are booked in%'
+    ) then
+      v_already := v_already + 1;
+      continue;
+    end if;
+    select * into v_session from public.class_sessions where id = r.class_session_id;
+    v_line := public.email_class_line(v_session);
+    v_log_id := public.queue_email('booking_decisions', r.email, 'You are booked in: ' || coalesce(v_session.title, 'XERT class'),
+      public.email_layout('You are booked in', '<p>Hi ' || public.email_first_name(r.full_name) || ',</p><p>Your place is confirmed for:</p><p><strong>' || v_line || '</strong></p><p>See you there.</p>', r.cta_label, r.cta_url),
+      null, r.source, r.record_id);
+    select status into v_status from public.email_log where id = v_log_id;
+    if v_status = 'queued' then v_queued := v_queued + 1; else v_skipped := v_skipped + 1; end if;
+    if not (r.class_session_id = any(v_sessions)) then v_sessions := array_append(v_sessions, r.class_session_id); end if;
+  end loop;
+  return jsonb_build_object('queued', v_queued, 'skipped', v_skipped, 'already_emailed', v_already, 'classes', coalesce(array_length(v_sessions, 1), 0));
+end;
+$$;
+revoke execute on function public.admin_email_confirmed_bookings(uuid) from public, anon;
+grant execute on function public.admin_email_confirmed_bookings(uuid) to authenticated;
+
 -- ─── Triggers ────────────────────────────────────────────────────────────────
 
 -- Member bookings: confirmed / waitlisted / declined / cancelled.

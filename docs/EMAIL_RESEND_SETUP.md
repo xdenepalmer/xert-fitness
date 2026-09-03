@@ -62,6 +62,25 @@ Sends are capped at 500 people and show up in the log as type `campaign`.
 Each type can be switched off individually. With the master switch off, every
 email is logged as skipped and nothing is sent.
 
+## Classes confirmed before email was switched on
+
+Command Centre → Communications → Email members → Automatic emails → **Email
+everyone already confirmed**. It sends the "You are booked in" email to every
+confirmed place in an upcoming published class that has no confirmation email
+in the log, so nobody receives it twice. Safe to press more than once.
+
+## Supabase Auth URLs
+
+Supabase Dashboard → Authentication → URL Configuration:
+
+- Site URL: `https://xertfitness.com.au`
+- Redirect URLs: `https://xertfitness.com.au/**`, `https://www.xertfitness.com.au/**`,
+  `http://localhost:5173/**`, `xertfitness://**`
+
+The website sends people to `/login`, `/reset-password` and `/account` after
+auth links, and the iOS app opens `xertfitness://` links, so all four patterns
+are needed for sign-up confirmations and password resets to land.
+
 ## Auth emails (sign-up confirmation, password reset)
 
 Those are sent by Supabase Auth, not by these triggers. To send them from the
