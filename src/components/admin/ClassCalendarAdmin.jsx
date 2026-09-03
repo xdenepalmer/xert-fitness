@@ -676,9 +676,16 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
   };
 
+  // The roster is open either in the list view (expandedBookings) or in the
+  // calendar view (boardRosterSessionId); status changes must work in both.
+  const activeRosterSessionId = () => expandedBookings || boardRosterSessionId;
+
   const handleRosterStatus = async (bookingId, status) => {
-    const sessionId = expandedBookings;
-    if (!sessionId) return;
+    const sessionId = activeRosterSessionId();
+    if (!sessionId) {
+      toast({ title: 'Open the class first', description: 'Open the class sign-ups, then change the status.', variant: 'destructive' });
+      return;
+    }
     const session = sessions.find(item => item.id === sessionId);
     if (session?.status !== 'published') {
       toast({ title: 'Class is not open for booking', description: 'Publish the class before reopening a member booking.', variant: 'destructive' });
@@ -713,7 +720,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       const result = await adminPromoteNextWaitlisted(candidate.session_id, candidate.next_booking_id);
       await Promise.all([
         refreshWaitlistOverview(),
-        ...(expandedBookings === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
+        ...(activeRosterSessionId() === candidate.session_id ? [refreshBookings(candidate.session_id)] : []),
       ]);
       const delivery = result.warning
         || (Number(result.push?.delivered || 0) > 0
@@ -846,8 +853,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   };
 
   const handleBookingStatus = async (id, status) => {
-    const sessionId = expandedBookings;
-    if (!sessionId) return;
+    const sessionId = activeRosterSessionId();
+    if (!sessionId) {
+      toast({ title: 'Open the class first', description: 'Open the class sign-ups, then change the status.', variant: 'destructive' });
+      return;
+    }
     setUpdatingBookingId(id);
     try {
       await updateBookingStatus(id, status);

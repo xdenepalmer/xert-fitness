@@ -49,5 +49,5 @@ test('class calendar exposes waitlist blockers, roster access, and direct promot
   assert.match(source, /onClick=\{\(\) => onOpen\(item\.session_id\)\}/);
   assert.match(source, /onClick=\{\(\) => onPromote\(item\)\}/);
   assert.match(source, /adminWaitlistOverview\(20\)/);
-  assert.match(source, /expandedBookings === candidate\.session_id \? \[refreshBookings\(candidate\.session_id\)\] : \[\]/);
+  assert.match(source, /activeRosterSessionId\(\) === candidate\.session_id \? \[refreshBookings\(candidate\.session_id\)\] : \[\]/);
 });

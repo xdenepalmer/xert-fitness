@@ -70,3 +70,11 @@ test('the member app gets its own month calendar over the shared grid', async ()
   assert.match(grid, /calendar\.firstWeekday/);
   assert.match(grid, /struct XertMonthCalendarView: View/);
 });
+
+test('roster status changes work from the calendar view as well as the list view', async () => {
+  const admin = await read('../src/components/admin/ClassCalendarAdmin.jsx');
+  assert.match(admin, /const activeRosterSessionId = \(\) => expandedBookings \|\| boardRosterSessionId;/);
+  assert.match(admin, /const handleRosterStatus = async \(bookingId, status\) => \{\s*const sessionId = activeRosterSessionId\(\);/);
+  assert.match(admin, /const handleBookingStatus = async \(id, status\) => \{\s*const sessionId = activeRosterSessionId\(\);/);
+  assert.doesNotMatch(admin, /const sessionId = expandedBookings;\s*if \(!sessionId\) return;/, 'a missing session must never fail silently');
+});
