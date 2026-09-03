@@ -6,23 +6,10 @@
 
 create extension if not exists pg_net with schema extensions;
 
--- Resend accepts 10 requests a second. pg_net's worker sends a whole batch at
--- once (200 by default), so a burst of confirmations would overflow. Eight per
--- pass keeps every burst under the limit; the setting takes effect on the
--- worker's next start.
-do $$
-begin
-  execute 'alter role postgres set pg_net.batch_size = 8';
-  execute 'alter database ' || quote_ident(current_database()) || ' set pg_net.batch_size = 8';
-exception when others then
-  raise notice 'pg_net.batch_size not changed: %', sqlerrm;
-end $$;
-do $$
-begin
-  perform net.worker_restart();
-exception when others then
-  raise notice 'pg_net worker not restarted: %', sqlerrm;
-end $$;
+-- Resend accepts 10 requests a second and pg_net's batch size cannot be
+-- changed on managed Postgres, so the bulk and catch-up loops pause between
+-- sends instead, and admin_retry_failed_emails re-sends anything that still
+-- gets a 429.
 
 create table if not exists public.email_settings (
   id smallint primary key default 1,
