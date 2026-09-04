@@ -88,9 +88,8 @@ const questions = [
   ),
   required('9ed92db0-5fc6-4acf-9e4f-baa280143401', 'short_text', 'Participant name'),
   required('576cbb02-2819-488f-a7d8-1719d8d53840', 'signature', 'Participant signature', {
-    description: 'By signing, you confirm that you have read and agreed to the declarations above.',
+    description: 'By signing, you confirm that you have read and agreed to the declarations above. Today’s date is recorded with your signature, so there is no date to fill in.',
   }),
-  required('caeec366-3dfc-4ea5-86d2-7119f0313501', 'date', 'Date signed'),
 
   section(
     '584f206f-300f-4722-b655-fb576c8b4401',
@@ -98,7 +97,7 @@ const questions = [
     'These answers do not affect your ability to participate.',
   ),
   required('f27341c0-c910-4434-b07a-7e3fd09a4501', 'yes_no', 'Are you visiting as part of the Friends Train Free Saturdays campaign?', {
-    skip_rules: [{ option: 'No', skip_to: 34 }],
+    skip_rules: [{ option: 'No', skip_to: 33 }],
   }),
   required('2486526d-cee2-57c1-aafc-89ccb655480c', 'short_text', 'Referring member’s first and last name'),
   required('eefcd865-5ac9-4cab-af9e-158f5c7fe605', 'yes_no', 'Do you consent to XERT using identifiable photos or video of you in its marketing?', {

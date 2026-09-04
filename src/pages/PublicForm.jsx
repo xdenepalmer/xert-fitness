@@ -149,6 +149,11 @@ function SignatureInput({ value, onChange }) {
     <div>
       <canvas ref={canvasRef} width="720" height="220" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} aria-label="Signature pad" className="h-44 w-full touch-none rounded-xl border border-xert-steel/30 bg-white" />
       <div className="mt-2 flex items-center justify-between text-xs text-xert-pale/55"><span>Sign with your finger, mouse or Apple Pencil</span><button type="button" onClick={clear} className="min-h-11 rounded-full px-3 text-xert-steel hover:text-xert-pale transition-colors">Clear</button></div>
+      {/* A signature is always dated. Recording it here saves asking for a
+          date nobody should have to type, and it is the moment of signing. */}
+      <p className="mt-2 text-xs text-xert-pale/55">
+        Dated <time dateTime={new Date().toISOString().slice(0, 10)}>{new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</time>, recorded with your signature.
+      </p>
       {value && <p className="text-xs text-emerald-300">Signature captured</p>}
     </div>
   );

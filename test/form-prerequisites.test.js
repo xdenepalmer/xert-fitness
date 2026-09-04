@@ -181,6 +181,7 @@ test('the public form page enforces the gate, hands over and carries details acr
   assert.match(source, /const handoff = nextFormSlug\(search\)/);
   assert.match(source, /readFormCompletion\(data\.prerequisite_slug\)/);
   assert.match(source, /role="region"/, 'a long agreement scrolls inside its own panel');
+  assert.match(source, /Dated <time dateTime=/, 'a signature shows the date it is being given');
 
   const sql = await read('../supabase/migrations/20260904010000_form_prerequisites.sql');
   assert.match(sql, /add column if not exists prerequisite_form_id uuid references public\.xert_forms\(id\) on delete set null/);
