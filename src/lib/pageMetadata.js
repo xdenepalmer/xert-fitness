@@ -26,7 +26,7 @@ const PUBLIC_METADATA = Object.freeze({
   '/trainer-interest': { title: 'Coach Opportunities | XERT Fitness', description: 'Register your interest in coaching or personal training opportunities with XERT Fitness.' },
   '/partner-interest': { title: 'Allied Health Partnerships | XERT Fitness', description: 'Register your interest in an allied health or community partnership with XERT Fitness.' },
   '/privacy': { title: 'Privacy Policy | XERT Fitness', description: 'Read how XERT Fitness collects, uses and protects member and website visitor information.' },
-  '/terms': { title: 'Terms of Use | XERT Fitness', description: 'Read the terms that apply to XERT Fitness services, bookings, session packs and digital products.' },
+  '/terms': { title: 'Terms and Conditions | XERT Fitness', description: 'The XERT Fitness membership agreement: memberships, club access, cancellation, privacy and the conditions that apply to training with us.' },
 });
 
 // Real pages that must never be indexed. The club TV kiosk is public (a

@@ -95,8 +95,7 @@ export default function PublicFooter() {
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link to="/privacy" className="inline-flex min-h-11 items-center font-body text-xs text-xert-pale/70 transition-colors hover:text-xert-steel">Privacy</Link>
-            <Link to="/terms" className="inline-flex min-h-11 items-center font-body text-xs text-xert-pale/70 transition-colors hover:text-xert-steel">Terms</Link>
-            <Link to="/membership-terms" className="inline-flex min-h-11 items-center font-body text-xs text-xert-pale/70 transition-colors hover:text-xert-steel">Membership Agreement</Link>
+            <Link to="/terms" className="inline-flex min-h-11 items-center font-body text-xs text-xert-pale/70 transition-colors hover:text-xert-steel">Terms &amp; Conditions</Link>
             {isAdmin && (
               <Link to="/admin"
                 className="xert-chip transition-colors hover:border-xert-steel hover:text-xert-pale"

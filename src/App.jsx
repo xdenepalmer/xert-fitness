@@ -2,7 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { SupabaseAuthProvider } from '@/lib/SupabaseAuthContext';
 import AdminRoute from '@/components/admin/AdminRoute';
@@ -31,7 +31,6 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const Terms = lazy(() => import('./pages/Terms'));
-const MembershipTerms = lazy(() => import('./pages/MembershipTerms'));
 const AppLanding = lazy(() => import('./pages/AppLanding'));
 const WorkoutDisplay = lazy(() => import('./pages/WorkoutDisplay'));
 const CheckoutReturn = lazy(() => import('./pages/CheckoutReturn'));
@@ -71,7 +70,8 @@ const AppRoutes = () => (
       <Route path="/display" element={<WorkoutDisplay />} />
       <Route path="/checkout-return" element={<CheckoutReturn />} />
       <Route path="/open/*" element={<NativeTaskBridge />} />
-      <Route path="/membership-terms" element={<MembershipTerms />} />
+      {/* The agreement moved onto /terms; anything already pointing here still lands. */}
+      <Route path="/membership-terms" element={<Navigate to="/terms" replace />} />
       <Route path="/forms/:slug" element={<PublicForm />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/training-guide" element={<TrainingGuide />} />

@@ -272,7 +272,7 @@ export default function Register() {
           )}
         </button>
         <p className="text-xs text-center font-body text-xert-pale/60 leading-relaxed">
-          By creating an account, you agree to the <Link to="/terms" className="text-xert-steel underline hover:text-xert-pale">Terms of Use</Link> and acknowledge the <Link to="/privacy" className="text-xert-steel underline hover:text-xert-pale">Privacy Policy</Link>.
+          By creating an account, you agree to the <Link to="/terms" className="text-xert-steel underline hover:text-xert-pale">Terms and Conditions</Link> and acknowledge the <Link to="/privacy" className="text-xert-steel underline hover:text-xert-pale">Privacy Policy</Link>.
         </p>
       </form>
     </AuthLayout>

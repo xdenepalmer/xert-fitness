@@ -1899,7 +1899,11 @@ test('native class cancellation preserves mutation truth and provides complete m
     api.indexOf('func adminClassSessions'),
   );
   assert.match(enquiryMethod, /class_session_id", value: "eq\.\\\(classSessionID\.uuidString\)"/);
-  assert.match(enquiryMethod, /status", value: "in\.\(requested,confirmed,waitlisted\)"/);
+  // The status list moved into the shared class_bookings fetch when the SMS
+  // screen needed the same rows unfiltered; a cancellation still only reaches
+  // people who hold a place, a request or a waitlist spot.
+  assert.match(enquiryMethod, /statuses: \["requested", "confirmed", "waitlisted"\]/);
+  assert.match(enquiryMethod, /status", value: "in\.\(\\\(statuses\.joined\(separator: ","\)\)\)"/);
   assert.match(enquiryMethod, /created_at\.asc,id\.asc/);
   assert.match(enquiryMethod, /while true[\s\S]*offset \+= pageSize/);
   assert.match(api, /func adminNotifyClassCancellation[\s\S]*-> AdminClassCancellationNoticeOutcome/);

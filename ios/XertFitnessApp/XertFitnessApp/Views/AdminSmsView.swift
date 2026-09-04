@@ -414,13 +414,24 @@ struct AdminSmsView: View {
                 )
             }
         case .classSignups:
+            // A class holds two kinds of people: members who booked with a
+            // credit, and anyone who signed up from the public timetable. The
+            // roster alone finds nobody for a class full of timetable sign-ups.
             guard let classID = selectedClassID else { return [] }
-            let roster = try await api.adminSessionRoster(session: session, classSessionID: classID)
+            async let rosterRequest = api.adminSessionRoster(session: session, classSessionID: classID)
+            async let signupRequest = api.adminClassSignups(session: session, classSessionID: classID)
+            let (roster, signups) = try await (rosterRequest, signupRequest)
             return roster.map {
                 SmsCampaign.Contact(
                     name: $0.displayName,
                     phone: $0.phone,
                     detail: "Roster · \($0.status)"
+                )
+            } + signups.map {
+                SmsCampaign.Contact(
+                    name: $0.full_name ?? "",
+                    phone: $0.phone,
+                    detail: "Sign-up · \($0.status)"
                 )
             }
         }

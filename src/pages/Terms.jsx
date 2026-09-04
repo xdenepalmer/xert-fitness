@@ -1,15 +1,20 @@
 import React from 'react';
 import LegalPage from '@/components/public/LegalPage';
-import { useSiteContent } from '@/lib/siteContent';
-import { TERMS_DEFAULTS } from '@/lib/contentDefaults';
+import { XERT_TERMS_INTRO, XERT_TERMS_SECTIONS, XERT_TERMS_UPDATED } from '@/lib/xertTermsAgreement';
 
-
+// The membership agreement, published in full. The acceptance form at
+// /forms/terms-and-conditions is built from the same module, so what a member
+// signs and what the website shows can never drift apart. That is also why
+// this page is not editable in Site Content: it is a signed legal document,
+// changed in one place and republished to the form with the same commit.
 export default function Terms() {
-  // Copy is editable in Admin → Site Content; the defaults render immediately
-  // so the page is never blank while the CMS value loads.
-  const content = useSiteContent('terms', TERMS_DEFAULTS);
-  const sections = Array.isArray(content.sections) && content.sections.length
-    ? content.sections
-    : TERMS_DEFAULTS.sections;
-  return <LegalPage eyebrow="Service Agreement" title="Terms Of Use" updated={content.updated || '11 August 2026'} intro={content.intro || TERMS_DEFAULTS.intro} sections={sections} />;
+  return (
+    <LegalPage
+      eyebrow="Membership Agreement"
+      title="Terms And Conditions"
+      updated={XERT_TERMS_UPDATED}
+      intro={XERT_TERMS_INTRO}
+      sections={XERT_TERMS_SECTIONS}
+    />
+  );
 }

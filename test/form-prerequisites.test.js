@@ -143,10 +143,20 @@ test('signed responses stay on the form that collected them', async () => {
 });
 
 test('the published agreement and the signed agreement come from one module', async () => {
-  const page = await read('../src/pages/MembershipTerms.jsx');
+  // The public terms page and the signed agreement are one document.
+  const page = await read('../src/pages/Terms.jsx');
   assert.match(page, /XERT_TERMS_SECTIONS/);
+  assert.match(page, /title="Terms And Conditions"/);
+  assert.doesNotMatch(page, /TERMS_DEFAULTS|useSiteContent/, 'a signed document is not CMS copy');
   const app = await read('../src/App.jsx');
-  assert.match(app, /path="\/membership-terms"/);
+  assert.match(app, /path="\/membership-terms" element=\{<Navigate to="\/terms" replace \/>\}/,
+    'the old address still lands on the agreement');
+  const footer = await read('../src/components/public/PublicFooter.jsx');
+  assert.match(footer, /Terms &amp; Conditions/);
+  const metadata = await read('../src/lib/pageMetadata.js');
+  assert.match(metadata, /'\/terms': \{ title: 'Terms and Conditions \| XERT Fitness'/);
+  const contentManager = await read('../src/components/admin/ContentManager.jsx');
+  assert.doesNotMatch(contentManager, /viewPath: '\/terms'/, 'Site Content must not offer to edit a signed agreement');
   const agreement = await read('../src/lib/xertTermsAgreement.js');
   assert.match(agreement, /ABN 65 327 079 634/);
   assert.match(agreement, /XERT FITNESS MEMBERSHIP OPTIONS/, 'the membership table image is transcribed as text');

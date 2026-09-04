@@ -369,20 +369,49 @@ final class XertAPI {
         session auth: AuthSession,
         classSessionID: UUID
     ) async throws -> [AdminLegacyBookingRequest] {
+        try await adminClassBookings(
+            session: auth,
+            classSessionID: classSessionID,
+            statuses: ["requested", "confirmed", "waitlisted"]
+        )
+    }
+
+    /// Everyone who signed up for one class from the public timetable, whatever
+    /// their status. The web SMS screen texts these people alongside the member
+    /// roster; passing no statuses keeps the two platforms addressing the same
+    /// list rather than the app quietly finding nobody.
+    func adminClassSignups(
+        session auth: AuthSession,
+        classSessionID: UUID
+    ) async throws -> [AdminLegacyBookingRequest] {
+        try await adminClassBookings(session: auth, classSessionID: classSessionID, statuses: nil)
+    }
+
+    private func adminClassBookings(
+        session auth: AuthSession,
+        classSessionID: UUID,
+        statuses: [String]?
+    ) async throws -> [AdminLegacyBookingRequest] {
         let pageSize = 500
         var offset = 0
         var enquiries: [AdminLegacyBookingRequest] = []
         while true {
+            var queryItems = [
+                URLQueryItem(name: "select", value: "id,full_name,email,phone,status,admin_notes,created_at"),
+                URLQueryItem(name: "class_session_id", value: "eq.\(classSessionID.uuidString)"),
+                URLQueryItem(name: "order", value: "created_at.asc,id.asc"),
+                URLQueryItem(name: "limit", value: String(pageSize)),
+                URLQueryItem(name: "offset", value: String(offset))
+            ]
+            if let statuses, !statuses.isEmpty {
+                queryItems.insert(
+                    URLQueryItem(name: "status", value: "in.(\(statuses.joined(separator: ",")))"),
+                    at: 2
+                )
+            }
             let page: [AdminLegacyBookingRequest] = try await restRequest(
                 path: "/rest/v1/class_bookings",
-                queryItems: [
-                    URLQueryItem(name: "select", value: "id,full_name,email,phone,status,admin_notes,created_at"),
-                    URLQueryItem(name: "class_session_id", value: "eq.\(classSessionID.uuidString)"),
-                    URLQueryItem(name: "status", value: "in.(requested,confirmed,waitlisted)"),
-                    URLQueryItem(name: "order", value: "created_at.asc,id.asc"),
-                    URLQueryItem(name: "limit", value: String(pageSize)),
-                    URLQueryItem(name: "offset", value: String(offset))
-                ],
+                queryItems: queryItems,
                 auth: auth
             )
             enquiries.append(contentsOf: page)

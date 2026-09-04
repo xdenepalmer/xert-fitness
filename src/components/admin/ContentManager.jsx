@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Home, Phone, HelpCircle, FileText, ScrollText, Ticket, Image, ExternalLink, GripVertical, RotateCcw } from 'lucide-react';
+import { Home, Phone, HelpCircle, FileText, Ticket, Image, ExternalLink, GripVertical, RotateCcw } from 'lucide-react';
 import { getAllSiteContent, saveSiteContent } from '@/lib/adminData';
 import { clearSiteContentCache } from '@/lib/siteContent';
 import { CONTENT_DEFAULTS } from '@/lib/contentDefaults';
@@ -71,18 +71,6 @@ const SECTIONS = [
     description: 'Questions shown on the homepage. Leave empty to use the built-in defaults.',
     fields: [
       { key: 'items', label: 'Questions & answers', type: 'qa_list' },
-    ],
-  },
-  {
-    key: 'terms',
-    title: 'Terms & Conditions',
-    icon: ScrollText,
-    viewPath: '/terms',
-    description: 'The public terms page — health and safety, medical conditions, free trial day, privacy and photography consent.',
-    fields: [
-      { key: 'intro', label: 'Intro paragraph', type: 'textarea', placeholder: 'These terms set clear expectations…' },
-      { key: 'updated', label: 'Last updated date', type: 'text', placeholder: '11 August 2026' },
-      { key: 'sections', label: 'Clauses', type: 'clause_list' },
     ],
   },
 ];
