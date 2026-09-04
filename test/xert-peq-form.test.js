@@ -34,14 +34,14 @@ test('the declaration mirrors the supplied paper structure and uses conditional 
   assert.match(allText, /maximum extent permitted by applicable law/i);
   assert.match(allText, /cannot lawfully be excluded/i);
   assert.match(allText, /Parent or guardian signature/i);
-  assert.match(allText, /XERT representative signature/i);
+  assert.doesNotMatch(allText, /XERT representative/i, 'staff sign-off belongs on paper, not in the member\u2019s form');
   assert.match(allText, /Friends Train Free Saturdays campaign/i);
   assert.match(allText, /consent to XERT using identifiable photos or video/i);
 
   const minorQuestion = XERT_PEQ_FORM_DEFINITION.questions.find(question => /under 18/i.test(question.question));
   const referralQuestion = XERT_PEQ_FORM_DEFINITION.questions.find(question => /Friends Train Free/i.test(question.question));
   assert.deepEqual(minorQuestion.skip_rules, [{ option: 'No', skip_to: 36 }]);
-  assert.deepEqual(referralQuestion.skip_rules, [{ option: 'No', skip_to: 43 }]);
+  assert.deepEqual(referralQuestion.skip_rules, [{ option: 'No', skip_to: 39 }]);
 });
 
 test('digital Yes/No and one-option consents show visible checkbox controls while retaining radio semantics', async () => {

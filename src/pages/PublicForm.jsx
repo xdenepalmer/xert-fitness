@@ -6,6 +6,7 @@ import { buildPublicFormSteps } from '@/lib/formBranching';
 import {
   completionIdentity, formPath, nextFormSlug, prerequisiteRedirect, readFormCompletion, writeFormCompletion,
 } from '@/lib/formPrerequisites';
+import { answerValidationMessage, firstInvalidAnswer } from '@/lib/formAnswerValidation';
 
 const inputClass = 'xert-input';
 const errorStyle = { color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' };
@@ -241,10 +242,23 @@ export default function PublicForm() {
     setError('');
     if (step === 0 && !introValid) { setError('Complete the required contact details to continue.'); return; }
     if (question && !currentValid) { setError('This question is required.'); return; }
+    // Catch what the database would reject while the answer is still on screen.
+    const answerProblem = question ? answerValidationMessage(question, answers[question.id]) : null;
+    if (answerProblem) { setError(answerProblem); return; }
     if (step < steps.length) { setStep(value => value + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    const kept = Object.fromEntries(Object.entries(answers).filter(([id]) => !skipped.has(id)));
+    // A last sweep, so an answer edited earlier can never fail at the very end
+    // with nothing to act on: send them back to the question that needs fixing.
+    const offender = firstInvalidAnswer(steps.map(item => item.question).filter(Boolean), kept);
+    if (offender) {
+      const target = steps.findIndex(item => item.question?.id === offender.question.id);
+      if (target >= 0) setStep(target + 1);
+      setError(offender.message);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setSubmitting(true);
     try {
-      const kept = Object.fromEntries(Object.entries(answers).filter(([id]) => !skipped.has(id)));
       await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: kept, name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
       writeFormCompletion(slug, completionIdentity(formItems, kept, { name, email, phone }));
       const handoff = nextFormSlug(search);

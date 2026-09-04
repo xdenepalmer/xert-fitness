@@ -106,21 +106,12 @@ const questions = [
   required('9eb7a8d3-a51d-4f1c-9220-5acc4f163901', 'date', 'Parent or guardian date signed'),
 
   section(
-    '2b6ddd13-e882-4f19-b006-322b0c454001',
-    'XERT representative',
-    'Optional staff completion fields.',
-  ),
-  field('d75a20ee-ec5f-4dd3-9a20-bb31137e4101', 'short_text', 'XERT representative name'),
-  field('71f42aa3-860c-4500-83ea-0516f0a74201', 'signature', 'XERT representative signature'),
-  field('65bef8f1-a228-4786-b903-7be82a794301', 'date', 'XERT representative date signed'),
-
-  section(
     '584f206f-300f-4722-b655-fb576c8b4401',
     'Referral and marketing preferences',
     'These answers do not affect your ability to participate.',
   ),
   required('f27341c0-c910-4434-b07a-7e3fd09a4501', 'yes_no', 'Are you visiting as part of the Friends Train Free Saturdays campaign?', {
-    skip_rules: [{ option: 'No', skip_to: 43 }],
+    skip_rules: [{ option: 'No', skip_to: 39 }],
   }),
   required('2486526d-cee2-57c1-aafc-89ccb655480c', 'short_text', 'Referring member’s first and last name'),
   required('eefcd865-5ac9-4cab-af9e-158f5c7fe605', 'yes_no', 'Do you consent to XERT using identifiable photos or video of you in its marketing?', {
