@@ -476,11 +476,6 @@ export const XERT_TERMS_SECTIONS = Object.freeze([
       '• Conditions. The participant confirms and warrants that they have the consent of the people they are referring to provide their details to the Promoter for the purpose of being contacted by the Promoter in relation to the Promoter’s products and services.',
       '• Changes. Xert Fitness reserves the right to vary the Terms & Conditions of this Promotion at any time at their sole and reasonable discretion.',
       '• Acceptance. By participating in this Promotion, you understand and accept the Terms & Conditions of this Promotion. Members and prospective members acknowledge and agree that upon purchasing a Membership Package through this Promotion, you will be bound by the Terms and Conditions of Xert Fitness, available at: Terms of Use | XERT Fitness',
-      'Date: / /',
-      'First / Last Name: ________________________________________________________________',
-      'Member Signature: _______________________________________________________________',
-      'Guardian First / Last Name: _______________________________________________________',
-      'Guardian Signature: ______________________________________________________________',
     ],
   },
 ].map(Object.freeze));

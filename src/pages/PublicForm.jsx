@@ -93,15 +93,15 @@ function InformationalBlocks({ items }) {
         if (item.type === 'section_break') {
           return (
             <section key={item.id} className="border-b border-xert-steel/25 pb-3">
-              <h2 className="font-display text-2xl uppercase tracking-wide text-white">{title || 'Section'}</h2>
-              {item.description && <p className="mt-2 whitespace-pre-wrap text-sm text-xert-pale/65">{item.description}</p>}
+              <h2 className="font-display text-2xl uppercase tracking-wide text-white break-words">{title || 'Section'}</h2>
+              {item.description && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-xert-pale/65">{item.description}</p>}
             </section>
           );
         }
         return (
           <section key={item.id} className="xert-card-flat p-4">
-            {title && <p className="whitespace-pre-wrap text-sm leading-relaxed text-xert-offwhite">{title}</p>}
-            {item.description && <p className="mt-2 whitespace-pre-wrap text-sm text-xert-pale/60">{item.description}</p>}
+            {title && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-xert-offwhite">{title}</p>}
+            {item.description && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-xert-pale/60">{item.description}</p>}
           </section>
         );
       })}
@@ -113,7 +113,7 @@ function InformationalBlocks({ items }) {
   return (
     <div className="mb-8">
       <div tabIndex={0} role="region" aria-label="Form information"
-        className="max-h-[70vh] space-y-4 overflow-y-auto rounded-2xl border border-xert-steel/20 bg-black/20 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-xert-steel">
+        className="max-h-[70vh] space-y-4 overflow-y-auto overflow-x-hidden rounded-2xl border border-xert-steel/20 bg-black/20 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-xert-steel">
         {blocks}
       </div>
       <p className="mt-2 text-xs text-xert-pale/45">Scroll inside the panel to read it all. The buttons are below.</p>

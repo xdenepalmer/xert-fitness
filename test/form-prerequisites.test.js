@@ -111,6 +111,15 @@ test('the published agreement and the signed agreement come from one module', as
   assert.match(agreement, /ABN 65 327 079 634/);
   assert.match(agreement, /XERT FITNESS MEMBERSHIP OPTIONS/, 'the membership table image is transcribed as text');
   assert.match(agreement, /48 HOUR COOLING OFF PERIOD/);
+  // The paper form's ruled signature block has no place in the digital one:
+  // the form captures the name, date and signature as real fields, and the
+  // long rules forced the reading panel to scroll sideways on a phone.
+  assert.doesNotMatch(agreement, /Member Signature: _+/);
+  assert.doesNotMatch(agreement, /Guardian Signature: _+/);
+  assert.doesNotMatch(agreement, /_{10,}/, 'no ruled lines from the paper form');
+  const form = await read('../src/pages/PublicForm.jsx');
+  assert.match(form, /overflow-y-auto overflow-x-hidden/);
+  assert.match(form, /whitespace-pre-wrap break-words text-sm leading-relaxed/);
 });
 
 test('the public form page enforces the gate, hands over and carries details across', async () => {
