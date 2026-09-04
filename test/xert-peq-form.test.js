@@ -38,12 +38,14 @@ test('the declaration mirrors the supplied paper structure and uses conditional 
   // the PEQ already records a date of birth, and a guardian signs the
   // agreement they are taking responsibility for.
   assert.doesNotMatch(allText, /under 18/i, 'the PEQ records a date of birth instead');
+  // The complimentary trial is a membership term, not a health question.
+  assert.doesNotMatch(allText, /free trial/i);
   assert.doesNotMatch(allText, /Parent or guardian/i);
   assert.match(allText, /Friends Train Free Saturdays campaign/i);
   assert.match(allText, /consent to XERT using identifiable photos or video/i);
 
   const referralQuestion = XERT_PEQ_FORM_DEFINITION.questions.find(question => /Friends Train Free/i.test(question.question));
-  assert.deepEqual(referralQuestion.skip_rules, [{ option: 'No', skip_to: 35 }]);
+  assert.deepEqual(referralQuestion.skip_rules, [{ option: 'No', skip_to: 34 }]);
 });
 
 test('digital Yes/No and one-option consents show visible checkbox controls while retaining radio semantics', async () => {

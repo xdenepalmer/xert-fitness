@@ -73,12 +73,7 @@ const questions = [
   section(
     '66596cbd-e19f-4110-88e7-c5b54df13201',
     'Additional terms',
-    'Please confirm the terms that apply to your visit and personal information.',
-  ),
-  acknowledgement(
-    '5bd9e1d8-43d5-47f9-847a-5cc9bee24ca3',
-    'Free trial day',
-    'I understand that a complimentary trial is a one-time access pass unless XERT agrees otherwise. This form does not enrol me in a paid membership; any membership requires a separate sign-up and payment authorisation.',
+    'Please confirm how XERT may handle your personal information.',
   ),
   acknowledgement(
     '6f45c338-790e-4994-930a-a02d2bb4010a',
@@ -103,7 +98,7 @@ const questions = [
     'These answers do not affect your ability to participate.',
   ),
   required('f27341c0-c910-4434-b07a-7e3fd09a4501', 'yes_no', 'Are you visiting as part of the Friends Train Free Saturdays campaign?', {
-    skip_rules: [{ option: 'No', skip_to: 35 }],
+    skip_rules: [{ option: 'No', skip_to: 34 }],
   }),
   required('2486526d-cee2-57c1-aafc-89ccb655480c', 'short_text', 'Referring member’s first and last name'),
   required('eefcd865-5ac9-4cab-af9e-158f5c7fe605', 'yes_no', 'Do you consent to XERT using identifiable photos or video of you in its marketing?', {
