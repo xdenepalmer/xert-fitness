@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
-  FORM_COMPLETION_TTL_MS, completionIdentity, formPath, nextFormSlug,
+  FORM_COMPLETION_TTL_MS, ageInYears, completionIdentity, formPath, minorStatus, nextFormSlug,
   prerequisiteRedirect, readFormCompletion, writeFormCompletion,
 } from '../src/lib/formPrerequisites.js';
 import { XERT_TERMS_FORM_DEFINITION, XERT_TERMS_FORM_PREREQUISITE_ID, validateXertTermsFormDefinition } from '../src/lib/xertTermsForm.js';
@@ -50,11 +50,44 @@ test('the name, email and phone already given are carried to the next form', () 
   ];
   const answers = { blank: { first: '  ' }, name: { first: 'Cherie', last: 'Ashby' }, email: ' Cherie@Bigpond.com ', phone: '0400 000 000' };
   assert.deepEqual(completionIdentity(questions, answers, {}), {
-    name: 'Cherie Ashby', email: 'cherie@bigpond.com', phone: '0400 000 000',
+    name: 'Cherie Ashby', email: 'cherie@bigpond.com', phone: '0400 000 000', date_of_birth: '',
   });
   assert.deepEqual(completionIdentity([], {}, { name: ' Dene ', email: 'INFO@XERTFITNESS.COM.AU' }), {
-    name: 'Dene', email: 'info@xertfitness.com.au', phone: '',
+    name: 'Dene', email: 'info@xertfitness.com.au', phone: '', date_of_birth: '',
   });
+});
+
+test('the date of birth on the questionnaire decides who needs a guardian', () => {
+  const today = new Date('2026-09-04T00:00:00Z');
+  assert.equal(ageInYears('2008-09-04', today), 18, 'turning 18 today counts as an adult');
+  assert.equal(minorStatus({ date_of_birth: '2008-09-04' }, today), 'adult');
+  assert.equal(minorStatus({ date_of_birth: '2008-09-05' }, today), 'minor', 'one day short of 18');
+  assert.equal(minorStatus({ date_of_birth: '2010-01-01' }, today), 'minor');
+  // Never guess: an unusable date leaves the guardian fields askable.
+  assert.equal(minorStatus({ date_of_birth: '' }, today), 'unknown');
+  assert.equal(minorStatus({ date_of_birth: 'sometime' }, today), 'unknown');
+  assert.equal(minorStatus({ date_of_birth: '2027-01-01' }, today), 'unknown', 'a future date proves nothing');
+  assert.equal(minorStatus(null, today), 'unknown');
+
+  const dated = [{ id: 'dob', type: 'date', question: 'Date of birth' }, { id: 'signed', type: 'date', question: 'Date signed' }];
+  const identity = completionIdentity(dated, { dob: '2010-09-05', signed: '2026-09-04' }, {});
+  assert.equal(identity.date_of_birth, '2010-09-05', 'the birthday travels, not the signing date');
+});
+
+test('the guardian questions follow that answer instead of asking again', async () => {
+  const { XERT_TERMS_FORM_DEFINITION } = await import('../src/lib/xertTermsForm.js');
+  const guardians = XERT_TERMS_FORM_DEFINITION.questions.filter(question => question.minor_only);
+  assert.equal(guardians.length, 2);
+  assert.ok(guardians.every(question => question.required === false),
+    'the database must accept an adult submission that omits them');
+
+  const source = await read('../src/pages/PublicForm.jsx');
+  assert.match(source, /const audience = useMemo\(\(\) => minorStatus\(carried\), \[carried\]\);/);
+  assert.match(source, /\.filter\(item => !\(item\.minor_only && audience === 'adult'\)\)/,
+    'an adult is never shown a guardian question');
+  assert.match(source, /question\?\.minor_only && audience === 'minor'/,
+    'a member under 18 cannot continue without one');
+  assert.match(source, /A parent or guardian must complete this for a member under 18\./);
 });
 
 test('the terms form is the agreement, gated behind the PEQ, ending in accept or decline', () => {
@@ -82,7 +115,7 @@ test('the terms form is the agreement, gated behind the PEQ, ending in accept or
   const guardianSignature = definition.questions.find(question => question.id === 'tc-guardian-signature');
   assert.equal(guardianName.required, false);
   assert.equal(guardianSignature.required, false);
-  assert.match(guardianName.description, /Only for a member under 18/);
+  assert.match(guardianName.description, /because the member is under 18/);
   const heading = definition.questions.find(question => question.id === 'tc-00-agreement');
   assert.equal(heading.content, 'XERT Fitness Terms and Conditions', 'no date in the heading to go stale');
   assert.equal(definition.questions.at(-1).id, 'tc-guardian-signature');

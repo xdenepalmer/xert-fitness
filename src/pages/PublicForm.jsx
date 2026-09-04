@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Check, ExternalLink, FileUp, LoaderCircle, Star 
 import { answerIsPresent, loadPublicForm, submitPublicForm } from '@/lib/xertForms';
 import { buildPublicFormSteps } from '@/lib/formBranching';
 import {
-  completionIdentity, formPath, nextFormSlug, prerequisiteRedirect, readFormCompletion, writeFormCompletion,
+  completionIdentity, formPath, minorStatus, nextFormSlug, prerequisiteRedirect, readFormCompletion, writeFormCompletion,
 } from '@/lib/formPrerequisites';
 import { answerValidationMessage, firstInvalidAnswer } from '@/lib/formAnswerValidation';
 
@@ -203,21 +203,25 @@ export default function PublicForm() {
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false); const [submitted, setSubmitted] = useState(false);
   const [handingOver, setHandingOver] = useState(false);
+  const [carried, setCarried] = useState(null);
   const startedAt = useRef(Date.now());
   // A different slug is a different form: nothing from the previous one may
   // survive, or a handover would carry stale answers into the next document.
   useEffect(() => {
     let active = true;
     setLoading(true); setForm(null); setError(''); setStep(0); setAnswers({});
-    setName(''); setEmail(''); setPhone(''); setSubmitted(false); setHandingOver(false);
+    setName(''); setEmail(''); setPhone(''); setSubmitted(false); setHandingOver(false); setCarried(null);
     startedAt.current = Date.now();
     loadPublicForm(slug).then(data => {
       if (!active) return;
       setForm(data);
       document.title = data ? `${data.title} | XERT` : 'Form unavailable | XERT';
       // Carry across what they already typed on the form that led here.
-      const carried = data?.prerequisite_slug ? readFormCompletion(data.prerequisite_slug) : null;
-      if (carried) { setName(carried.name || ''); setEmail(carried.email || ''); setPhone(carried.phone || ''); }
+      const details = data?.prerequisite_slug ? readFormCompletion(data.prerequisite_slug) : null;
+      if (details) {
+        setCarried(details);
+        setName(details.name || ''); setEmail(details.email || ''); setPhone(details.phone || '');
+      }
     }).catch(err => active && setError(err.message)).finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [slug]);
@@ -227,7 +231,15 @@ export default function PublicForm() {
   // Skip destinations are indexed against the complete builder sequence, so
   // layout blocks must stay in this calculation even though they do not hold
   // answers. Each statement/section is then displayed with the next question.
-  const formItems = useMemo(() => form?.questions || [], [form]);
+  // Some questions only apply to a member under 18. The date of birth given on
+  // the prerequisite settles that, so an adult is never shown them and a minor
+  // cannot skip them. Without a usable date of birth they stay askable and
+  // optional rather than being silently dropped.
+  const audience = useMemo(() => minorStatus(carried), [carried]);
+  const formItems = useMemo(
+    () => (form?.questions || []).filter(item => !(item.minor_only && audience === 'adult')),
+    [audience, form],
+  );
   const formFlow = useMemo(() => buildPublicFormSteps(formItems, answers), [answers, formItems]);
   const { skipped, steps } = formFlow;
   const currentStep = step > 0 ? steps[step - 1] : null;
@@ -237,11 +249,17 @@ export default function PublicForm() {
     ? steps.slice(0, step).filter(item => item.question).length
     : 0;
   const introValid = (!form?.collect_name_required || name.trim()) && (!form?.collect_email_required || /^\S+@\S+\.\S+$/.test(email)) && (!form?.collect_phone_required || phone.trim());
-  const currentValid = !question?.required || answerIsPresent(answers[question.id]);
+  const mustAnswer = Boolean(question?.required || (question?.minor_only && audience === 'minor'));
+  const currentValid = !mustAnswer || answerIsPresent(answers[question.id]);
   const next = async () => {
     setError('');
     if (step === 0 && !introValid) { setError('Complete the required contact details to continue.'); return; }
-    if (question && !currentValid) { setError('This question is required.'); return; }
+    if (question && !currentValid) {
+      setError(question.minor_only
+        ? 'A parent or guardian must complete this for a member under 18.'
+        : 'This question is required.');
+      return;
+    }
     // Catch what the database would reject while the answer is still on screen.
     const answerProblem = question ? answerValidationMessage(question, answers[question.id]) : null;
     if (answerProblem) { setError(answerProblem); return; }
@@ -294,6 +312,11 @@ export default function PublicForm() {
               <p className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-xert-steel">Question {questionNumber} of {questionCount}</p>
               <Media type={question.media_type} url={question.media_url} caption={question.media_caption} />
               <h1 id={`question-${question.id}`} className="font-display text-3xl uppercase leading-tight tracking-wide text-white sm:text-4xl">{question.question}{question.required && <span className="ml-2 text-xert-steel">*</span>}</h1>
+              {question.minor_only && audience === 'minor' && (
+                <p className="mt-3 rounded-xl border border-xert-steel/30 bg-xert-steel/10 p-3 text-sm text-xert-offwhite">
+                  The date of birth on the questionnaire makes this member under 18, so a parent or legal guardian must complete this.
+                </p>
+              )}
               {question.description && <p className="mt-3 text-xert-pale/60">{question.description}</p>}
               <div className="mt-7"><AnswerInput question={question} value={answers[question.id]} onChange={value => setAnswers(current => ({ ...current, [question.id]: value }))} /></div>
             </> : <><h1 className="font-display text-4xl uppercase text-white">Review and submit</h1><p className="mt-3 text-xert-pale/65">Confirm the information above, or go back before sending your response.</p></>}

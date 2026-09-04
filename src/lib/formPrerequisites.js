@@ -21,7 +21,30 @@ function safeStorage() {
   }
 }
 
-/** The best name, email and phone we can carry from one form to the next. */
+/** Whole years old on a given day, or null when the date makes no sense. */
+export function ageInYears(dateOfBirth, now = new Date()) {
+  const born = new Date(String(dateOfBirth || ''));
+  if (Number.isNaN(born.getTime())) return null;
+  const today = now instanceof Date ? now : new Date(now);
+  if (born > today) return null;
+  let age = today.getFullYear() - born.getFullYear();
+  const monthGap = today.getMonth() - born.getMonth();
+  if (monthGap < 0 || (monthGap === 0 && today.getDate() < born.getDate())) age -= 1;
+  return age >= 0 && age < 130 ? age : null;
+}
+
+/**
+ * Whether the person filling this form is a minor, from the date of birth they
+ * already gave on the prerequisite. "unknown" when no usable date came across,
+ * which must stay askable rather than silently dropping a guardian signature.
+ */
+export function minorStatus(identity, now = new Date()) {
+  const age = ageInYears(identity?.date_of_birth, now);
+  if (age === null) return 'unknown';
+  return age < 18 ? 'minor' : 'adult';
+}
+
+/** The best name, email, phone and date of birth to carry from one form to the next. */
 export function completionIdentity(questions, answers = {}, contact = {}) {
   const present = value => value !== undefined && value !== null && String(value).trim() !== '';
   const firstAnswer = type => {
@@ -34,10 +57,16 @@ export function completionIdentity(questions, answers = {}, contact = {}) {
   const names = firstAnswer('name_fields') || {};
   const fromFields = [names.first, names.last].filter(present).join(' ').trim();
   const text = value => (present(value) ? String(value).trim() : '');
+  // A date of birth carries across so the next form can tell a minor from an
+  // adult without asking anyone their age twice.
+  const birthday = (questions || []).find(question => question?.type === 'date'
+    && /birth/i.test(String(question.question || ''))
+    && present(answers[question.id]));
   return {
     name: text(contact.name) || fromFields,
     email: text(contact.email).toLowerCase() || text(firstAnswer('email')).toLowerCase(),
     phone: text(contact.phone) || text(firstAnswer('phone')),
+    date_of_birth: birthday ? text(answers[birthday.id]) : '',
   };
 }
 

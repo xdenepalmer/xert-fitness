@@ -47,13 +47,16 @@ function decisionQuestions(total) {
     required('tc-signature', 'signature', 'Member signature', {
       description: 'Sign with your finger, mouse or Apple Pencil.',
     }),
-    // No age question: a guardian signature is itself the record that the
-    // member is under 18, and their date of birth is already on the PEQ.
+    // No age question here: the date of birth given on the questionnaire
+    // decides it. An adult never sees these two; a member under 18 cannot get
+    // past them without a guardian completing them.
     field('tc-guardian-name', 'short_text', 'Parent or guardian first and last name', {
-      description: 'Only for a member under 18. Everyone else can continue past this.',
+      minor_only: true,
+      description: 'Asked because the member is under 18.',
     }),
     field('tc-guardian-signature', 'signature', 'Parent or guardian signature', {
-      description: 'Only for a member under 18. A parent or legal guardian signing here accepts legal responsibility for the member’s obligations under this Agreement.',
+      minor_only: true,
+      description: 'A parent or legal guardian signing here accepts legal responsibility for the member’s obligations under this Agreement.',
     }),
   ];
 }
