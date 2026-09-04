@@ -2,7 +2,7 @@ import React from 'react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 
-export default function LegalPage({ eyebrow, title, updated, intro, sections }) {
+export default function LegalPage({ eyebrow, title, updated, intro, note = null, sections }) {
   return (
     <div className="min-h-screen bg-xert-navy">
       <PublicNav />
@@ -21,6 +21,11 @@ export default function LegalPage({ eyebrow, title, updated, intro, sections }) 
           </h1>
           <p className="xert-chip mt-5">Last updated {updated}</p>
           <p className="font-body text-base leading-relaxed mt-8 max-w-prose text-xert-pale/75">{intro}</p>
+          {note && (
+            <aside className="xert-card-flat mt-6 max-w-prose p-4 sm:p-5">
+              <p className="font-body text-sm leading-relaxed text-xert-pale/75">{note}</p>
+            </aside>
+          )}
 
           <div className="mt-10 space-y-4">
             {sections.map(section => (

@@ -14,6 +14,9 @@ export default function Terms() {
       title="Terms And Conditions"
       updated={XERT_TERMS_UPDATED}
       intro={XERT_TERMS_INTRO}
+      note={'This page is the published copy, here to read whenever you like — nothing is signed here. '
+        + 'New members accept these terms at the club, after the pre-exercise questionnaire, and we keep a '
+        + 'record of that with the date. Where the wording below talks about signing, it means that step.'}
       sections={XERT_TERMS_SECTIONS}
     />
   );

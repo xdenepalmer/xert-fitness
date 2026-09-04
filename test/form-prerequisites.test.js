@@ -147,6 +147,7 @@ test('the published agreement and the signed agreement come from one module', as
   const page = await read('../src/pages/Terms.jsx');
   assert.match(page, /XERT_TERMS_SECTIONS/);
   assert.match(page, /title="Terms And Conditions"/);
+  assert.match(page, /nothing is signed here/, 'the published copy must not read as a document to sign');
   assert.doesNotMatch(page, /TERMS_DEFAULTS|useSiteContent/, 'a signed document is not CMS copy');
   const app = await read('../src/App.jsx');
   assert.match(app, /path="\/membership-terms" element=\{<Navigate to="\/terms" replace \/>\}/,
