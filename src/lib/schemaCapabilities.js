@@ -56,6 +56,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   fitbox_get_user_refresh: 'Apply supabase/migrations/20260902020000_fitbox_get_user_refresh.sql in Supabase.',
   fitbox_live_mirror: 'Apply supabase/migrations/20260903000000_fitbox_live_mirror.sql in Supabase.',
   email_notifications: 'Apply supabase/migrations/20260903010000_email_notifications.sql in Supabase.',
+  form_prerequisites: 'Apply supabase/migrations/20260904010000_form_prerequisites.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

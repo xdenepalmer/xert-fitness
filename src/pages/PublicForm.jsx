@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, ExternalLink, FileUp, LoaderCircle, Star } from 'lucide-react';
 import { answerIsPresent, loadPublicForm, submitPublicForm } from '@/lib/xertForms';
 import { buildPublicFormSteps } from '@/lib/formBranching';
+import {
+  completionIdentity, formPath, nextFormSlug, prerequisiteRedirect, readFormCompletion, writeFormCompletion,
+} from '@/lib/formPrerequisites';
 
 const inputClass = 'xert-input';
 const errorStyle = { color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' };
@@ -73,10 +76,17 @@ function Media({ type, url, caption }) {
   );
 }
 
+// A legal agreement runs to thousands of words. Left inline it buries the
+// Continue button under a page of scrolling, so anything this long reads
+// inside its own scrollable panel.
+const LONG_READ_CHARACTERS = 4000;
+
 function InformationalBlocks({ items }) {
   if (!items.length) return null;
-  return (
-    <div className="mb-8 space-y-4" aria-label="Form information">
+  const length = items.reduce((total, item) => total
+    + String(item.content || item.question || '').length + String(item.description || '').length, 0);
+  const blocks = (
+    <>
       {items.map(item => {
         const title = String(item.content || item.question || '').trim();
         if (item.type === 'section_break') {
@@ -94,6 +104,18 @@ function InformationalBlocks({ items }) {
           </section>
         );
       })}
+    </>
+  );
+  if (length <= LONG_READ_CHARACTERS) {
+    return <div className="mb-8 space-y-4" aria-label="Form information">{blocks}</div>;
+  }
+  return (
+    <div className="mb-8">
+      <div tabIndex={0} role="region" aria-label="Form information"
+        className="max-h-[70vh] space-y-4 overflow-y-auto rounded-2xl border border-xert-steel/20 bg-black/20 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-xert-steel">
+        {blocks}
+      </div>
+      <p className="mt-2 text-xs text-xert-pale/45">Scroll inside the panel to read it all. The buttons are below.</p>
     </div>
   );
 }
@@ -173,12 +195,34 @@ function AnswerInput({ question, value, onChange }) {
 
 export default function PublicForm() {
   const { slug } = useParams();
+  const navigate = useNavigate();
+  const { search } = useLocation();
   const [form, setForm] = useState(null); const [loading, setLoading] = useState(true);
   const [error, setError] = useState(''); const [step, setStep] = useState(0); const [answers, setAnswers] = useState({});
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false); const [submitted, setSubmitted] = useState(false);
+  const [handingOver, setHandingOver] = useState(false);
   const startedAt = useRef(Date.now());
-  useEffect(() => { let active = true; setLoading(true); loadPublicForm(slug).then(data => { if (active) { setForm(data); document.title = data ? `${data.title} | XERT` : 'Form unavailable | XERT'; } }).catch(err => active && setError(err.message)).finally(() => active && setLoading(false)); return () => { active = false; }; }, [slug]);
+  // A different slug is a different form: nothing from the previous one may
+  // survive, or a handover would carry stale answers into the next document.
+  useEffect(() => {
+    let active = true;
+    setLoading(true); setForm(null); setError(''); setStep(0); setAnswers({});
+    setName(''); setEmail(''); setPhone(''); setSubmitted(false); setHandingOver(false);
+    startedAt.current = Date.now();
+    loadPublicForm(slug).then(data => {
+      if (!active) return;
+      setForm(data);
+      document.title = data ? `${data.title} | XERT` : 'Form unavailable | XERT';
+      // Carry across what they already typed on the form that led here.
+      const carried = data?.prerequisite_slug ? readFormCompletion(data.prerequisite_slug) : null;
+      if (carried) { setName(carried.name || ''); setEmail(carried.email || ''); setPhone(carried.phone || ''); }
+    }).catch(err => active && setError(err.message)).finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [slug]);
+  // Gated forms send a first-time visitor to their prerequisite first.
+  const gatePath = form ? prerequisiteRedirect(form) : null;
+  useEffect(() => { if (gatePath) navigate(gatePath, { replace: true }); }, [gatePath, navigate]);
   // Skip destinations are indexed against the complete builder sequence, so
   // layout blocks must stay in this calculation even though they do not hold
   // answers. Each statement/section is then displayed with the next question.
@@ -200,12 +244,17 @@ export default function PublicForm() {
     if (step < steps.length) { setStep(value => value + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setSubmitting(true);
     try {
-      await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: Object.fromEntries(Object.entries(answers).filter(([id]) => !skipped.has(id))), name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
+      const kept = Object.fromEntries(Object.entries(answers).filter(([id]) => !skipped.has(id)));
+      await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: kept, name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
+      writeFormCompletion(slug, completionIdentity(formItems, kept, { name, email, phone }));
+      const handoff = nextFormSlug(search);
+      if (handoff && handoff !== slug) { setHandingOver(true); navigate(formPath(handoff), { replace: true }); return; }
       setSubmitted(true);
       if (safeURL(form.redirect_url)) window.setTimeout(() => window.location.assign(form.redirect_url), 1400);
     } catch (err) { setError(err.message); } finally { setSubmitting(false); }
   };
-  if (loading) return <main className="min-h-screen bg-xert-navy grid place-items-center text-xert-pale" role="status"><LoaderCircle className="mr-3 inline h-6 w-6 animate-spin text-xert-steel" /> Loading form…</main>;
+  if (loading || handingOver) return <main className="min-h-screen bg-xert-navy grid place-items-center text-xert-pale" role="status"><LoaderCircle className="mr-3 inline h-6 w-6 animate-spin text-xert-steel" /> {handingOver ? 'Saved. Opening the next form…' : 'Loading form…'}</main>;
+  if (gatePath) return <main className="min-h-screen bg-xert-navy grid place-items-center p-6 text-center text-xert-pale" role="status"><div><LoaderCircle className="mx-auto mb-4 h-6 w-6 animate-spin text-xert-steel" /><p className="text-xert-offwhite">{form.prerequisite_title || 'Another form'} comes first.</p><p className="mt-2 text-sm text-xert-pale/60">Taking you there now. {form.title} opens as soon as it is done.</p></div></main>;
   if (!form) return <main className="min-h-screen bg-xert-navy grid place-items-center p-6 text-center"><div><img src="/assets/xert-logo-horizontal-light.png" alt="XERT" className="mx-auto mb-8 h-10" /><h1 className="font-display text-4xl text-white">Form unavailable</h1><p className="mt-3 text-xert-pale/60">This link may be paused, archived or incorrect.</p></div></main>;
   if (submitted) return <main className="min-h-screen bg-xert-navy xert-glow-top grid place-items-center p-6"><section className="xert-card w-full max-w-xl p-8 text-center"><span className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full bg-emerald-400/10 text-emerald-300"><Check /></span><h1 className="font-display text-4xl uppercase tracking-wide text-white">Response received</h1><p className="mt-4 text-xert-pale/70">{form.thank_you_message}</p></section></main>;
   const progress = steps.length ? Math.min(100, Math.max(0, step / steps.length * 100)) : 100;

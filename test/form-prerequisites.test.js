@@ -1,0 +1,116 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+import {
+  FORM_COMPLETION_TTL_MS, completionIdentity, formPath, nextFormSlug,
+  prerequisiteRedirect, readFormCompletion, writeFormCompletion,
+} from '../src/lib/formPrerequisites.js';
+import { XERT_TERMS_FORM_DEFINITION, XERT_TERMS_FORM_PREREQUISITE_ID, validateXertTermsFormDefinition } from '../src/lib/xertTermsForm.js';
+import { XERT_PEQ_FORM_ID } from '../src/lib/xertPeqForm.js';
+import { XERT_TERMS_SECTIONS } from '../src/lib/xertTermsAgreement.js';
+
+const read = path => readFile(new URL(path, import.meta.url), 'utf8');
+const fakeStorage = () => {
+  const data = new Map();
+  return { getItem: key => (data.has(key) ? data.get(key) : null), setItem: (key, value) => data.set(key, value) };
+};
+
+test('a gated form sends a first-time visitor to its prerequisite and back again', () => {
+  const storage = fakeStorage();
+  const terms = { slug: 'terms-and-conditions', prerequisite_slug: 'peq' };
+  assert.equal(prerequisiteRedirect(terms, { storage }), '/forms/peq?next=terms-and-conditions');
+  assert.equal(nextFormSlug('?next=terms-and-conditions'), 'terms-and-conditions');
+  writeFormCompletion('peq', { name: 'Cherie Ashby' }, { storage, now: 1_000 });
+  assert.equal(prerequisiteRedirect(terms, { storage, now: 2_000 }), null, 'the gate opens once the PEQ is done');
+});
+
+test('a completion marker expires, and a form without a prerequisite is never gated', () => {
+  const storage = fakeStorage();
+  writeFormCompletion('peq', { name: 'Cherie' }, { storage, now: 1_000 });
+  assert.equal(readFormCompletion('peq', { storage, now: 1_000 + FORM_COMPLETION_TTL_MS + 1 }), null);
+  assert.equal(readFormCompletion('peq', { storage, now: 0 }), null, 'a marker from the future is ignored');
+  assert.equal(prerequisiteRedirect({ slug: 'peq' }, { storage }), null);
+  assert.equal(prerequisiteRedirect({ slug: 'peq', prerequisite_slug: 'peq' }, { storage }), null, 'a form cannot gate itself');
+});
+
+test('untrusted next and slug values can never become a path', () => {
+  assert.equal(nextFormSlug('?next=../admin'), null);
+  assert.equal(nextFormSlug('?next=https://evil.example'), null);
+  assert.equal(nextFormSlug(''), null);
+  assert.equal(formPath('peq'), '/forms/peq');
+  assert.equal(formPath('peq', '../admin'), '/forms/peq');
+});
+
+test('the name, email and phone already given are carried to the next form', () => {
+  const questions = [
+    { id: 'blank', type: 'name_fields' },
+    { id: 'name', type: 'name_fields' },
+    { id: 'email', type: 'email' },
+    { id: 'phone', type: 'phone' },
+  ];
+  const answers = { blank: { first: '  ' }, name: { first: 'Cherie', last: 'Ashby' }, email: ' Cherie@Bigpond.com ', phone: '0400 000 000' };
+  assert.deepEqual(completionIdentity(questions, answers, {}), {
+    name: 'Cherie Ashby', email: 'cherie@bigpond.com', phone: '0400 000 000',
+  });
+  assert.deepEqual(completionIdentity([], {}, { name: ' Dene ', email: 'INFO@XERTFITNESS.COM.AU' }), {
+    name: 'Dene', email: 'info@xertfitness.com.au', phone: '',
+  });
+});
+
+test('the terms form is the agreement, gated behind the PEQ, ending in accept or decline', () => {
+  const definition = XERT_TERMS_FORM_DEFINITION;
+  assert.equal(validateXertTermsFormDefinition(), null);
+  assert.equal(definition.slug, 'terms-and-conditions', 'the printed QR code points here');
+  assert.equal(XERT_TERMS_FORM_PREREQUISITE_ID, XERT_PEQ_FORM_ID);
+  assert.ok(definition.collect_name_required && definition.collect_email_required);
+
+  const ids = definition.questions.map(question => question.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const section of XERT_TERMS_SECTIONS) {
+    assert.ok(ids.includes(section.id), `${section.title} is missing from the form`);
+  }
+
+  const accept = definition.questions.find(question => question.id === 'tc-accept');
+  assert.ok(accept.required);
+  assert.deepEqual(accept.options, ['I accept the Terms and Conditions', 'I decline']);
+  assert.deepEqual(accept.skip_rules, [{ option: 'I decline', skip_to: definition.questions.length + 1 }],
+    'declining ends the form instead of asking for a signature');
+  const minor = definition.questions.find(question => question.id === 'tc-minor');
+  assert.deepEqual(minor.skip_rules, [{ option: 'No', skip_to: definition.questions.length + 1 }],
+    'guardian fields are only asked for a member under 18');
+  assert.equal(definition.questions.at(-1).id, 'tc-guardian-signature');
+  assert.equal(definition.questions.find(question => question.id === 'tc-signature').type, 'signature');
+});
+
+test('the published agreement and the signed agreement come from one module', async () => {
+  const page = await read('../src/pages/MembershipTerms.jsx');
+  assert.match(page, /XERT_TERMS_SECTIONS/);
+  const app = await read('../src/App.jsx');
+  assert.match(app, /path="\/membership-terms"/);
+  const agreement = await read('../src/lib/xertTermsAgreement.js');
+  assert.match(agreement, /ABN 65 327 079 634/);
+  assert.match(agreement, /XERT FITNESS MEMBERSHIP OPTIONS/, 'the membership table image is transcribed as text');
+  assert.match(agreement, /48 HOUR COOLING OFF PERIOD/);
+});
+
+test('the public form page enforces the gate, hands over and carries details across', async () => {
+  const source = await read('../src/pages/PublicForm.jsx');
+  assert.match(source, /prerequisiteRedirect\(form\)/);
+  assert.match(source, /if \(gatePath\) navigate\(gatePath, \{ replace: true \}\)/);
+  assert.match(source, /writeFormCompletion\(slug, completionIdentity\(formItems, kept, \{ name, email, phone \}\)\)/);
+  assert.match(source, /const handoff = nextFormSlug\(search\)/);
+  assert.match(source, /readFormCompletion\(data\.prerequisite_slug\)/);
+  assert.match(source, /role="region"/, 'a long agreement scrolls inside its own panel');
+
+  const sql = await read('../supabase/migrations/20260904010000_form_prerequisites.sql');
+  assert.match(sql, /add column if not exists prerequisite_form_id uuid references public\.xert_forms\(id\) on delete set null/);
+  assert.match(sql, /check \(prerequisite_form_id is null or prerequisite_form_id <> id\)/);
+  assert.match(sql, /prerequisite_slug text/);
+  assert.match(sql, /on p\.id = f\.prerequisite_form_id and p\.is_active = true and p\.archived_at is null/,
+    'a paused prerequisite must not lock people out');
+
+  const forms = await read('../src/lib/xertForms.js');
+  assert.match(forms, /'tags', 'prerequisite_form_id'/);
+  const manager = await read('../src/components/admin/FormsSurveysManager.jsx');
+  assert.match(manager, /Complete this form first/);
+});

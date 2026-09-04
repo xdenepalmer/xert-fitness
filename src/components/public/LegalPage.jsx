@@ -26,7 +26,7 @@ export default function LegalPage({ eyebrow, title, updated, intro, sections }) 
             {sections.map(section => (
               <section key={section.title} className="xert-card-flat p-5 sm:p-6">
                 <h2 className="font-display text-2xl uppercase text-xert-offwhite">{section.title}</h2>
-                <div className="font-body text-sm leading-7 mt-3 space-y-3 max-w-prose text-xert-pale/70">
+                <div className="font-body text-sm leading-7 mt-3 space-y-3 max-w-prose break-words text-xert-pale/70">
                   {section.content.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
                 </div>
               </section>

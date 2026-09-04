@@ -2,21 +2,21 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import {
-  XERT_TERMS_FORM_DEFINITION,
-  XERT_TERMS_FORM_ID,
-  validateXertTermsFormDefinition,
-} from '../src/lib/xertTermsForm.js';
+  XERT_PEQ_FORM_DEFINITION,
+  XERT_PEQ_FORM_ID,
+  validateXertPeqFormDefinition,
+} from '../src/lib/xertPeqForm.js';
 
-test('the XERT Terms definition upgrades the existing live record safely', () => {
-  assert.equal(XERT_TERMS_FORM_ID, '0173f880-7bee-4a2e-bb0c-ac15af40ad9e');
-  assert.equal(XERT_TERMS_FORM_DEFINITION.slug, 'terms-and-conditions');
-  assert.equal(XERT_TERMS_FORM_DEFINITION.form_type, 'waiver');
-  assert.equal(validateXertTermsFormDefinition(), null);
-  assert.ok(XERT_TERMS_FORM_DEFINITION.questions.length <= 100);
+test('the PEQ definition upgrades the existing live record safely', () => {
+  assert.equal(XERT_PEQ_FORM_ID, '0173f880-7bee-4a2e-bb0c-ac15af40ad9e');
+  assert.equal(XERT_PEQ_FORM_DEFINITION.slug, 'peq');
+  assert.equal(XERT_PEQ_FORM_DEFINITION.form_type, 'waiver');
+  assert.equal(validateXertPeqFormDefinition(), null);
+  assert.ok(XERT_PEQ_FORM_DEFINITION.questions.length <= 100);
 });
 
 test('the pre-exercise screen requires explicit Yes or No for every reference question', () => {
-  const healthQuestions = XERT_TERMS_FORM_DEFINITION.questions.filter(question => question.type === 'yes_no')
+  const healthQuestions = XERT_PEQ_FORM_DEFINITION.questions.filter(question => question.type === 'yes_no')
     .filter(question => !/under 18|Friends Train Free|photos or video/i.test(question.question));
   assert.equal(healthQuestions.length, 8);
   assert.ok(healthQuestions.every(question => question.required));
@@ -27,7 +27,7 @@ test('the pre-exercise screen requires explicit Yes or No for every reference qu
 });
 
 test('the declaration mirrors the supplied paper structure and uses conditional guardian and referral fields', () => {
-  const allText = XERT_TERMS_FORM_DEFINITION.questions
+  const allText = XERT_PEQ_FORM_DEFINITION.questions
     .map(question => `${question.question}\n${question.content}\n${question.description}`)
     .join('\n');
   assert.match(allText, /Risk warning & participant acknowledgement/i);
@@ -38,8 +38,8 @@ test('the declaration mirrors the supplied paper structure and uses conditional 
   assert.match(allText, /Friends Train Free Saturdays campaign/i);
   assert.match(allText, /consent to XERT using identifiable photos or video/i);
 
-  const minorQuestion = XERT_TERMS_FORM_DEFINITION.questions.find(question => /under 18/i.test(question.question));
-  const referralQuestion = XERT_TERMS_FORM_DEFINITION.questions.find(question => /Friends Train Free/i.test(question.question));
+  const minorQuestion = XERT_PEQ_FORM_DEFINITION.questions.find(question => /under 18/i.test(question.question));
+  const referralQuestion = XERT_PEQ_FORM_DEFINITION.questions.find(question => /Friends Train Free/i.test(question.question));
   assert.deepEqual(minorQuestion.skip_rules, [{ option: 'No', skip_to: 36 }]);
   assert.deepEqual(referralQuestion.skip_rules, [{ option: 'No', skip_to: 43 }]);
 });

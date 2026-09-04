@@ -31,6 +31,7 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const Terms = lazy(() => import('./pages/Terms'));
+const MembershipTerms = lazy(() => import('./pages/MembershipTerms'));
 const AppLanding = lazy(() => import('./pages/AppLanding'));
 const WorkoutDisplay = lazy(() => import('./pages/WorkoutDisplay'));
 const CheckoutReturn = lazy(() => import('./pages/CheckoutReturn'));
@@ -70,6 +71,7 @@ const AppRoutes = () => (
       <Route path="/display" element={<WorkoutDisplay />} />
       <Route path="/checkout-return" element={<CheckoutReturn />} />
       <Route path="/open/*" element={<NativeTaskBridge />} />
+      <Route path="/membership-terms" element={<MembershipTerms />} />
       <Route path="/forms/:slug" element={<PublicForm />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/training-guide" element={<TrainingGuide />} />
