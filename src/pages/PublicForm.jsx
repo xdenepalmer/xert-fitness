@@ -240,12 +240,25 @@ export default function PublicForm() {
   // the prerequisite settles that, so an adult is never shown them and a minor
   // cannot skip them. Without a usable date of birth they stay askable and
   // optional rather than being silently dropped.
-  const audience = useMemo(() => minorStatus(carried), [carried]);
-  const formItems = useMemo(
-    () => (form?.questions || []).filter(item => !(item.minor_only && audience === 'adult')),
-    [audience, form],
+  // Age comes from the date of birth this form asks for, and otherwise from the
+  // one given on the form that led here, so neither document asks it twice.
+  const answeredBirthday = useMemo(() => {
+    const birthday = (form?.questions || []).find(item => item.type === 'date' && /birth/i.test(String(item.question || '')));
+    return birthday ? answers[birthday.id] : null;
+  }, [answers, form]);
+  const audience = useMemo(
+    () => minorStatus({ date_of_birth: answeredBirthday || carried?.date_of_birth || '' }),
+    [answeredBirthday, carried],
   );
-  const formFlow = useMemo(() => buildPublicFormSteps(formItems, answers), [answers, formItems]);
+  const formItems = useMemo(() => form?.questions || [], [form]);
+  const notApplicable = useMemo(
+    () => (audience === 'adult' ? formItems.filter(item => item.minor_only).map(item => item.id) : []),
+    [audience, formItems],
+  );
+  const formFlow = useMemo(
+    () => buildPublicFormSteps(formItems, answers, notApplicable),
+    [answers, formItems, notApplicable],
+  );
   const { skipped, steps } = formFlow;
   const currentStep = step > 0 ? steps[step - 1] : null;
   const question = currentStep?.question || null;
@@ -284,7 +297,10 @@ export default function PublicForm() {
     try {
       await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: kept, name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
       writeFormCompletion(slug, completionIdentity(formItems, kept, { name, email, phone }));
-      const handoff = nextFormSlug(search);
+      // Either the form that sent them here, or the form that names this one as
+      // its prerequisite: opening the questionnaire directly must still lead to
+      // the agreement, and a questionnaire with nothing after it must not.
+      const handoff = nextFormSlug(search) || form.follow_on_slug || null;
       if (handoff && handoff !== slug) { setHandingOver(true); navigate(formPath(handoff), { replace: true }); return; }
       setSubmitted(true);
       if (safeURL(form.redirect_url)) window.setTimeout(() => window.location.assign(form.redirect_url), 1400);

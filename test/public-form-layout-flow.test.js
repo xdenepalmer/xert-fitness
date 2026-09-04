@@ -13,7 +13,7 @@ test('public forms display statement and section content in the respondent step 
 });
 
 test('public skip logic uses the complete builder sequence before grouping response steps', () => {
-  assert.match(source, /buildPublicFormSteps\(formItems, answers\)/);
+  assert.match(source, /buildPublicFormSteps\(formItems, answers, notApplicable\)/);
   assert.doesNotMatch(source, /computeSkippedQuestionIDs\(questions, answers\)/);
 });
 

@@ -34,16 +34,24 @@ test('the declaration mirrors the supplied paper structure and uses conditional 
   assert.match(allText, /maximum extent permitted by applicable law/i);
   assert.match(allText, /cannot lawfully be excluded/i);
   assert.doesNotMatch(allText, /XERT representative/i, 'staff sign-off belongs on paper, not in the member\u2019s form');
-  // Age and guardian sign-off belong to the agreement, not the health screen:
-  // the PEQ already records a date of birth, and a guardian signs the
-  // agreement they are taking responsibility for.
-  assert.doesNotMatch(allText, /under 18/i, 'the PEQ records a date of birth instead');
+  // No age question: the date of birth decides it. The guardian signs here and
+  // again on the agreement, because they are two separate documents.
+  assert.doesNotMatch(allText, /Is the participant under 18/i);
+  const guardians = XERT_PEQ_FORM_DEFINITION.questions.filter(question => question.minor_only);
+  assert.deepEqual(guardians.map(question => question.question),
+    ['Parent or guardian first and last name', 'Parent or guardian signature']);
+  assert.ok(guardians.every(question => question.required === false),
+    'an adult submission must be accepted without them');
+  // The full name is asked once, in Participant details.
+  assert.doesNotMatch(allText, /Participant name/i);
+  // Nothing is asked twice: the date of birth is the age, and it is the only
+  // thing that decides whether a guardian must sign.
+  assert.equal(XERT_PEQ_FORM_DEFINITION.questions.filter(question => /^age/i.test(question.question || '')).length, 0);
   // The complimentary trial is a membership term, not a health question.
   // A signature carries its own date, so nobody is asked to type one.
   assert.doesNotMatch(allText, /Date signed/i);
   assert.equal(XERT_PEQ_FORM_DEFINITION.questions.filter(question => question.type === 'date').length, 1);
   assert.doesNotMatch(allText, /free trial/i);
-  assert.doesNotMatch(allText, /Parent or guardian/i);
   assert.match(allText, /Friends Train Free Saturdays campaign/i);
   assert.match(allText, /consent to XERT using identifiable photos or video/i);
 

@@ -82,11 +82,30 @@ test('the guardian questions follow that answer instead of asking again', async 
     'the database must accept an adult submission that omits them');
 
   const source = await read('../src/pages/PublicForm.jsx');
-  assert.match(source, /const audience = useMemo\(\(\) => minorStatus\(carried\), \[carried\]\);/);
-  assert.match(source, /\.filter\(item => !\(item\.minor_only && audience === 'adult'\)\)/,
+  assert.match(source, /const audience = useMemo\(\s*\(\) => minorStatus\(\{ date_of_birth: answeredBirthday \|\| carried\?\.date_of_birth \|\| '' \}\)/);
+  // Positions in the published definition drive the skip destinations, so a
+  // question that does not apply is skipped rather than removed from the list.
+  assert.match(source, /audience === 'adult' \? formItems\.filter\(item => item\.minor_only\)\.map\(item => item\.id\) : \[\]/,
     'an adult is never shown a guardian question');
+  assert.match(source, /buildPublicFormSteps\(formItems, answers, notApplicable\)/);
   assert.match(source, /question\?\.minor_only && audience === 'minor'/,
     'a member under 18 cannot continue without one');
+  assert.match(source, /const birthday = \(form\?\.questions \|\| \[\]\)\.find\(item => item\.type === 'date' && \/birth\/i\.test/,
+    'a form that asks for a date of birth uses its own answer');
+  assert.match(source, /answeredBirthday \|\| carried\?\.date_of_birth/,
+    'and otherwise the one carried from the form before it');
+
+  // Both questionnaires ask a guardian to sign; only the membership one leads
+  // to the agreement, which asks again in its own right.
+  const { XERT_CASUAL_PEQ_FORM_DEFINITION, XERT_PEQ_FORM_DEFINITION } = await import('../src/lib/xertPeqForm.js');
+  assert.equal(XERT_CASUAL_PEQ_FORM_DEFINITION.slug, 'peq-casual');
+  for (const definition of [XERT_PEQ_FORM_DEFINITION, XERT_CASUAL_PEQ_FORM_DEFINITION]) {
+    assert.equal(definition.questions.filter(question => question.minor_only).length, 2);
+  }
+  const followOn = await read('../supabase/migrations/20260904020000_form_follow_on.sql');
+  assert.match(followOn, /where n\.prerequisite_form_id = f\.id/, 'a form knows what follows it');
+  assert.match(source, /nextFormSlug\(search\) \|\| form\.follow_on_slug \|\| null/,
+    'opening the questionnaire directly still leads to the agreement');
   assert.match(source, /A parent or guardian must complete this for a member under 18\./);
 });
 

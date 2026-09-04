@@ -25,12 +25,18 @@ export function computeSkippedQuestionIDs(questions, answers) {
 /**
  * Groups informational layout blocks with the next answer field while keeping
  * the builder's complete, one-based skip destination sequence authoritative.
+ * `omitted` names questions this respondent is not asked at all.
  * A trailing statement becomes its own review step so it is never silently
  * omitted before submission.
  */
-export function buildPublicFormSteps(questions, answers) {
+export function buildPublicFormSteps(questions, answers, omitted = []) {
   const items = Array.isArray(questions) ? questions : [];
+  // Questions that do not apply to this respondent join the skipped set rather
+  // than being removed from the list: skip destinations are one-based
+  // positions in the published definition, and dropping an item would silently
+  // move every destination after it.
   const skipped = computeSkippedQuestionIDs(items, answers || {});
+  for (const id of omitted) skipped.add(id);
   const steps = [];
   let information = [];
 

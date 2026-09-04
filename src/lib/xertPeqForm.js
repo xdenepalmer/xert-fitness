@@ -15,10 +15,6 @@ const questions = [
   ),
   required('84703ad7-a28d-4904-9868-6c832ce38055', 'name_fields', 'Full name'),
   required('5c82d136-9308-5dd9-99e7-eb7308421522', 'date', 'Date of birth'),
-  required('f2d5b64e-774a-4f5e-95ca-0af9b05b0301', 'number', 'Age', {
-    description: 'Enter your age in completed years.',
-    placeholder: 'Age',
-  }),
   required('5d5d7d53-d5ea-4743-8f94-22ecd5fd6ded', 'phone', 'Mobile'),
   required('e4c4e161-43e3-5462-a865-f27c411ac809', 'email', 'Email'),
   required('b6e0fb34-f230-5b3d-91be-7f4892c72243', 'address', 'Address', {
@@ -86,9 +82,19 @@ const questions = [
     'Participant declaration and signatures',
     'Signatures are captured in black ink for clear printable records.',
   ),
-  required('9ed92db0-5fc6-4acf-9e4f-baa280143401', 'short_text', 'Participant name'),
   required('576cbb02-2819-488f-a7d8-1719d8d53840', 'signature', 'Participant signature', {
     description: 'By signing, you confirm that you have read and agreed to the declarations above. Today’s date is recorded with your signature, so there is no date to fill in.',
+  }),
+  // Only for a participant under 18, decided by the date of birth above. The
+  // agreement asks again in its own right: a guardian signs the health screen
+  // and the membership agreement separately, as two documents.
+  field('4ef80570-b87e-49c7-872c-0ddc9da43701', 'short_text', 'Parent or guardian first and last name', {
+    minor_only: true,
+    description: 'Asked because the date of birth above makes the participant under 18.',
+  }),
+  field('d239489b-99f4-4c36-921e-6d72f6f43801', 'signature', 'Parent or guardian signature', {
+    minor_only: true,
+    description: 'A parent or legal guardian signing here consents to the participant training at XERT and confirms the health answers above.',
   }),
 
   section(
@@ -127,6 +133,21 @@ export const XERT_PEQ_FORM_DEFINITION = Object.freeze({
   one_response_per_email: false,
   notify_admin: true,
   tags: ['peq', 'waiver', 'pre-exercise', 'participant-acknowledgement'],
+});
+
+// ─── Casual visitors ────────────────────────────────────────────────────────
+// A casual or three-day-pass visitor is screened exactly the same way, but has
+// no membership to agree to. This record is deliberately not the terms form's
+// prerequisite, which is what stops it leading anyone into the agreement.
+export const XERT_CASUAL_PEQ_FORM_ID = 'e90f30f7-b0d2-56e7-8e1d-8b290721e234';
+
+export const XERT_CASUAL_PEQ_FORM_DEFINITION = Object.freeze({
+  ...XERT_PEQ_FORM_DEFINITION,
+  title: 'Pre-Exercise Questionnaire — Casual Visit',
+  description: 'For a casual visit, three-day pass or a guest session. Please complete every section and sign below. There is no membership agreement to sign afterwards.',
+  slug: 'peq-casual',
+  thank_you_message: 'Thanks — your completed participant acknowledgement has been received. A XERT team member will review any health or safety concerns before you train. There is nothing else to sign for a casual visit.',
+  tags: ['peq', 'waiver', 'pre-exercise', 'casual-visit'],
 });
 
 export function validateXertPeqFormDefinition(definition = XERT_PEQ_FORM_DEFINITION) {
