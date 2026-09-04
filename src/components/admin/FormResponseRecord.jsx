@@ -3,6 +3,7 @@ import { ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, Printer } from '
 import {
   fieldsForResponseRecord, formatResponseAnswer, formDefinitionForResponse,
   responseAnswerIsPresent, responseFileDetails, safeResponseMediaURL, safeResponseSignatureURL,
+  respondentLabel,
 } from '@/lib/formResponseRecord';
 import { waitForPrintableImages } from '@/lib/printReady';
 
@@ -129,7 +130,7 @@ export default function FormResponseRecord({ form, response, responses, onSelect
   const responseIndex = responses.findIndex(item => item.id === response.id);
   const newer = responseIndex > 0 ? responses[responseIndex - 1] : null;
   const older = responseIndex >= 0 && responseIndex < responses.length - 1 ? responses[responseIndex + 1] : null;
-  const respondent = response.respondent_name || response.respondent_email || 'Anonymous response';
+  const respondent = respondentLabel(response, definition);
   const pageTitle = useMemo(() => printableTitle(definition, response), [definition.title, response.completed_at]);
   const printRecord = async () => {
     await waitForPrintableImages(recordRef.current);

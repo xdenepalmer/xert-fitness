@@ -87,9 +87,11 @@ test('choice breakdowns name the people behind each option', async () => {
   assert.match(source, /function OptionBreakdown\(/);
   assert.match(source, /const share = total \? Math\.round\(\(count \/ total\) \* 100\) : 0;/);
   assert.match(source, /aria-expanded=\{isOpen\}/);
-  assert.match(source, /person\.respondent_name \|\| 'Anonymous response'/);
-  assert.match(source, /href=\{`mailto:\$\{person\.respondent_email\}`\}/);
-  assert.match(source, /href=\{`tel:\$\{String\(person\.respondent_phone\)\.replace\(\/\\s\+\/g, ''\)\}`\}/);
+  // The label now reads the answers when a form asks for the name as one of
+  // its questions rather than in a separate contact block.
+  assert.match(source, /respondentLabel\(person\)/);
+  assert.match(source, /href=\{`mailto:\$\{respondentIdentity\(person\)\.email\}`\}/);
+  assert.match(source, /href=\{`tel:\$\{String\(respondentIdentity\(person\)\.phone\)\.replace\(\/\\s\+\/g, ''\)\}`\}/);
 
   // An option nobody chose cannot be opened.
   assert.match(source, /disabled=\{count === 0\}/);

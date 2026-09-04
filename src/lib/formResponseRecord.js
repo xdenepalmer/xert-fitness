@@ -156,3 +156,39 @@ export function safeResponseSignatureURL(value) {
   if (typeof value !== 'string' || value.length > MAX_SIGNATURE_DATA_URL_LENGTH) return null;
   return /^data:image\/(?:png|jpeg);base64,[a-z0-9+/]+={0,2}$/i.test(value) ? value : null;
 }
+
+/**
+ * How to label a response. A form that collects contact details separately
+ * has them on the row; a form that asks for a name as one of its questions —
+ * the questionnaire does — keeps it in the answers, and reading it from there
+ * is the difference between a list of names and a list of "Anonymous
+ * response". Falls back to the answers only when the contact fields are blank.
+ */
+export function respondentIdentity(response, definition = null) {
+  const answers = isRecord(response?.answers) ? response.answers : {};
+  const questions = Array.isArray(definition?.questions)
+    ? definition.questions
+    : (Array.isArray(response?.form_snapshot?.questions) ? response.form_snapshot.questions : []);
+  const present = value => value !== undefined && value !== null && String(value).trim() !== '';
+  const answerFor = type => {
+    const match = questions.find(question => question?.type === type
+      && (type === 'name_fields'
+        ? present(answers[question.id]?.first) || present(answers[question.id]?.last)
+        : present(answers[question.id])));
+    return match ? answers[match.id] : null;
+  };
+  const names = answerFor('name_fields') || {};
+  const fromQuestions = [names.first, names.last].filter(present).join(' ').trim();
+  const text = value => (present(value) ? String(value).trim() : '');
+  return {
+    name: text(response?.respondent_name) || fromQuestions,
+    email: text(response?.respondent_email) || text(answerFor('email')),
+    phone: text(response?.respondent_phone) || text(answerFor('phone')),
+  };
+}
+
+/** The best single label for a response, never "anonymous" when a name exists. */
+export function respondentLabel(response, definition = null) {
+  const identity = respondentIdentity(response, definition);
+  return identity.name || identity.email || identity.phone || 'Anonymous response';
+}

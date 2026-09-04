@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, BellRing, CalendarDays, CheckCheck, ClipboardCheck, Copy, Download, List, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, getBlackoutPeriods, getClassTemplates, createClassTemplate } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, adminSearchMembers, staffBookMemberIntoClass, getBlackoutPeriods, getClassTemplates, createClassTemplate } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
 import { classSessionFromTemplate, classSessionSeedForDate, classTemplateFromSession } from '@/lib/classCalendar';
@@ -494,6 +494,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [expandedBookings, setExpandedBookings] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [attendeeResults, setAttendeeResults] = useState([]);
+  const [addingAttendeeId, setAddingAttendeeId] = useState('');
   const [boardRosterSessionId, setBoardRosterSessionId] = useState(null);
   const [boardRosterLoading, setBoardRosterLoading] = useState(false);
   const [allSignups, setAllSignups] = useState([]);
@@ -679,6 +682,41 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   // The roster is open either in the list view (expandedBookings) or in the
   // calendar view (boardRosterSessionId); status changes must work in both.
   const activeRosterSessionId = () => expandedBookings || boardRosterSessionId;
+
+  // Front-desk booking: search the member directory, then book the chosen
+  // member in. The database takes the credit and writes their private notice,
+  // so a staff booking is a member booking made by somebody else.
+  useEffect(() => {
+    const term = attendeeSearch.trim();
+    if (term.length < 2) { setAttendeeResults([]); return undefined; }
+    let active = true;
+    const timer = setTimeout(() => {
+      adminSearchMembers(term)
+        .then(found => { if (active) setAttendeeResults(found); })
+        .catch(() => { if (active) setAttendeeResults([]); });
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [attendeeSearch]);
+
+  const addAttendee = async (session, member) => {
+    setAddingAttendeeId(member.id);
+    try {
+      const receipt = await staffBookMemberIntoClass(session.id, member.id);
+      toast({
+        title: receipt.booking_status === 'waitlisted' ? 'Added to the waitlist' : 'Added to the class',
+        description: receipt.warning
+          || `${member.full_name || member.email} is ${receipt.booking_status} for ${session.title || 'this class'}. Their notice is in the member app.`,
+        variant: receipt.warning ? 'destructive' : undefined,
+      });
+      setAttendeeSearch('');
+      setAttendeeResults([]);
+      await Promise.all([refreshRoster(session.id), refreshBookings(session.id)]);
+    } catch (error) {
+      toast({ title: 'Could not add that member', description: error.message, variant: 'destructive' });
+    } finally {
+      setAddingAttendeeId('');
+    }
+  };
 
   const handleRosterStatus = async (bookingId, status) => {
     const sessionId = activeRosterSessionId();
@@ -1176,6 +1214,39 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                       <p className="font-body text-xs text-xert-concrete/40">Waitlisting, declining, or cancelling a request returns its reserved credit.</p>
                     </div>
                   )}
+
+                  <div className="mb-5 border border-xert-steel/20 bg-xert-ink p-3">
+                    <label htmlFor={`add-attendee-${s.id}`} className="block font-body text-xs uppercase tracking-wider text-xert-concrete/50">
+                      Add an attendee
+                    </label>
+                    <p className="mt-1 mb-2 font-body text-xs text-xert-concrete/40">
+                      Books a member in from here using one of their credits, the same as if they had booked it themselves.
+                    </p>
+                    <input id={`add-attendee-${s.id}`} value={attendeeSearch} onChange={e => setAttendeeSearch(e.target.value)}
+                      placeholder="Search a member by name or email"
+                      className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-steel" />
+                    {attendeeSearch.trim().length >= 2 && attendeeResults.length === 0 && (
+                      <p className="mt-2 font-body text-xs text-xert-concrete/40">No member matches that. Members must have an account before they can be booked in.</p>
+                    )}
+                    {attendeeResults.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {attendeeResults.map(member => (
+                          <li key={member.id}>
+                            <button type="button" disabled={Boolean(addingAttendeeId)} onClick={() => addAttendee(s, member)}
+                              className="flex min-h-11 w-full items-center justify-between gap-3 border border-xert-steel/25 px-3 py-2 text-left transition-colors hover:border-xert-steel disabled:opacity-50">
+                              <span className="min-w-0">
+                                <span className="block truncate font-body text-sm text-xert-offwhite">{member.full_name || member.email}</span>
+                                <span className="block truncate font-body text-xs text-xert-concrete/45">{member.email}{member.credits_remaining !== undefined ? ` · ${member.credits_remaining} credits` : ''}</span>
+                              </span>
+                              <span className="shrink-0 font-body text-xs uppercase tracking-wider text-xert-steel">
+                                {addingAttendeeId === member.id ? 'Adding…' : 'Add'}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
 
                   <h4 className="font-display text-sm text-xert-concrete/60 uppercase mb-3">Booking requests ({bookings.length})</h4>
                   {bookings.length === 0 ? (

@@ -613,6 +613,41 @@ export async function getMemberBookingRequests(filters = {}) {
   }));
 }
 
+/**
+ * Book a member into a class from the Command Centre — the front desk adding
+ * someone who turned up, or a name taken over the phone. The database does it
+ * atomically: it takes a credit, respects capacity and the waitlist order, and
+ * writes a private notice for the member, so a staff booking is exactly a
+ * member booking made by somebody else.
+ */
+export async function staffBookMemberIntoClass(sessionId, memberId, requestId = globalThis.crypto?.randomUUID?.()) {
+  if (!sessionId || !memberId) throw new Error('Choose a class and a member first.');
+  if (!requestId) throw new Error('A secure booking request ID could not be created. Refresh and try again.');
+  const { data, error } = await supabase.rpc('admin_book_member_into_class', {
+    p_session_id: sessionId,
+    p_member_id: memberId,
+    p_request_id: requestId,
+  });
+  if (error) {
+    const message = error.message || '';
+    if (error.code === 'PGRST202' || /admin_book_member_into_class.*(?:not found|schema cache|does not exist)/i.test(message)) {
+      throw new Error('Apply the staff-assisted booking migration before adding members to a class.');
+    }
+    if (/SESSION_FULL/i.test(message)) throw new Error('That class is full. The member can join the waitlist from their account.');
+    if (/NO_CREDITS/i.test(message)) throw new Error('That member has no session credits left. Add credits first.');
+    if (/ALREADY_BOOKED/i.test(message)) throw new Error('That member already has a place in this class.');
+    if (/SESSION_IN_PAST|SESSION_NOT_BOOKABLE/i.test(message)) throw new Error('That class is not open for bookings.');
+    throw new Error(message);
+  }
+  const receipt = Array.isArray(data) ? data[0] : data;
+  if (!receipt || receipt.request_id !== requestId || receipt.session_id !== sessionId || receipt.member_id !== memberId) {
+    throw new Error('The booking completed without a verifiable receipt. Refresh the roster before continuing.');
+  }
+  if (!receipt.announcement_id) return { ...receipt, push: null, warning: null };
+  const delivery = await notifyTargetedAnnouncementPush(receipt.announcement_id);
+  return { ...receipt, push: delivery.push, warning: delivery.warning || null };
+}
+
 export async function updateMemberBookingStatus(id, status) {
   return adminSetBookingStatus(id, status);
 }
