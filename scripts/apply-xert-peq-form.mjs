@@ -25,21 +25,41 @@ endpoint.searchParams.set('select', 'id,title,slug,updated_at,response_count,is_
 const currentResponse = await fetch(endpoint, { headers });
 if (!currentResponse.ok) throw new Error(`Could not inspect the PEQ form (${currentResponse.status}).`);
 const matches = await currentResponse.json();
-if (matches.length !== 1) throw new Error(`Expected one active PEQ form record; found ${matches.length}.`);
+if (matches.length > 1) throw new Error(`Expected at most one PEQ form record; found ${matches.length}.`);
 
 const [current] = matches;
 console.log(JSON.stringify({
   mode: apply ? 'apply' : 'check',
-  id: current.id,
-  currentTitle: current.title,
+  action: current ? 'update' : 'create',
+  id: XERT_PEQ_FORM_ID,
+  currentTitle: current?.title || null,
   nextTitle: XERT_PEQ_FORM_DEFINITION.title,
-  responseCountPreserved: current.response_count,
-  activeStatePreserved: current.is_active,
+  responseCountPreserved: current?.response_count ?? 0,
+  activeStatePreserved: current?.is_active ?? true,
   nextFieldCount: XERT_PEQ_FORM_DEFINITION.questions.length,
 }, null, 2));
 
 if (!apply) {
   console.log('Dry run only. Re-run with --apply to update this exact record.');
+  process.exit(0);
+}
+
+if (!current) {
+  // A brand-new record needs an explicit owner: the service role has no auth.uid().
+  const ownerLookup = new URL('/rest/v1/xert_forms', supabaseURL);
+  ownerLookup.searchParams.set('select', 'created_by');
+  ownerLookup.searchParams.set('created_by', 'not.is.null');
+  ownerLookup.searchParams.set('limit', '1');
+  const [owner] = await (await fetch(ownerLookup, { headers })).json();
+  const insertEndpoint = new URL('/rest/v1/xert_forms', supabaseURL);
+  insertEndpoint.searchParams.set('select', 'id,slug,updated_at,response_count,is_active');
+  const created = await fetch(insertEndpoint, {
+    method: 'POST',
+    headers: { ...headers, Prefer: 'return=representation' },
+    body: JSON.stringify({ ...XERT_PEQ_FORM_DEFINITION, id: XERT_PEQ_FORM_ID, is_active: true, created_by: owner?.created_by }),
+  });
+  if (!created.ok) throw new Error(`Could not create the PEQ form (${created.status}): ${(await created.text()).slice(0, 300)}`);
+  console.log(JSON.stringify({ created: true, ...(await created.json())[0] }, null, 2));
   process.exit(0);
 }
 

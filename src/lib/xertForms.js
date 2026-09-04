@@ -129,7 +129,7 @@ export async function archiveOwnerForm(form) {
 const FORM_RESPONSE_PAGE_SIZE = 500;
 const FORM_RESPONSE_LIST_FIELDS = [
   'id', 'form_id', 'answers', 'respondent_name', 'respondent_email', 'respondent_phone',
-  'status', 'completed_at', 'time_taken_seconds', 'created_at', 'archived_at',
+  'status', 'completed_at', 'time_taken_seconds', 'created_at', 'archived_at', 'form_snapshot',
 ].join(',');
 
 export async function listFormResponses(formID) {
@@ -183,8 +183,30 @@ export async function submitPublicForm({ slug, formUpdatedAt, answers, name, ema
   return data;
 }
 
+/**
+ * One column per question anyone was actually asked. Each response carries the
+ * definition it was submitted against, so a form that has been edited — or a
+ * record that predates the current wording — still exports its real answers
+ * instead of a row of blanks under today's questions.
+ */
+export function responseCSVColumns(form, responses) {
+  const columns = [];
+  const seen = new Set();
+  const add = question => {
+    if (!question || seen.has(question.id) || question.hidden || !INPUT_TYPES.has(question.type)) return;
+    seen.add(question.id);
+    columns.push({ id: question.id, label: String(question.question || question.content || question.id) });
+  };
+  for (const response of responses || []) {
+    const snapshot = response?.form_snapshot;
+    if (Array.isArray(snapshot?.questions)) snapshot.questions.forEach(add);
+  }
+  activeQuestions(form).forEach(add);
+  return columns.length ? columns : activeQuestions(form).map(question => ({ id: question.id, label: question.question }));
+}
+
 export function responseCSV(form, responses) {
-  const questions = activeQuestions(form);
+  const questions = responseCSVColumns(form, responses);
   const escape = value => `"${protectCSVFormula(value).replace(/"/g, '""')}"`;
   const display = value => {
     if (Array.isArray(value)) return value.join('; ');
@@ -192,7 +214,7 @@ export function responseCSV(form, responses) {
     return value ?? '';
   };
   const rows = [
-    ['Submitted', 'Name', 'Email', 'Phone', 'Status', 'Time (seconds)', ...questions.map(question => question.question)],
+    ['Submitted', 'Name', 'Email', 'Phone', 'Status', 'Time (seconds)', ...questions.map(question => question.label)],
     ...responses.map(response => [
       response.completed_at, response.respondent_name, response.respondent_email,
       response.respondent_phone, response.status, response.time_taken_seconds,

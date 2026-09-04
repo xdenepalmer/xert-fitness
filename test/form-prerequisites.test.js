@@ -82,6 +82,26 @@ test('the terms form is the agreement, gated behind the PEQ, ending in accept or
   assert.equal(definition.questions.find(question => question.id === 'tc-signature').type, 'signature');
 });
 
+test('signed responses stay on the form that collected them', async () => {
+  // Submitted records are immutable by design: the database refuses to move a
+  // response between forms. The terms form therefore keeps the id that has
+  // been collecting signed agreements since August 2026, and the PEQ was given
+  // a record of its own rather than the history being rewritten.
+  const { XERT_TERMS_FORM_ID } = await import('../src/lib/xertTermsForm.js');
+  assert.equal(XERT_TERMS_FORM_ID, '0173f880-7bee-4a2e-bb0c-ac15af40ad9e');
+  assert.notEqual(XERT_PEQ_FORM_ID, XERT_TERMS_FORM_ID);
+
+  const guard = await read('../supabase/migrations/20260813010000_xert_form_response_snapshots.sql');
+  assert.match(guard, /new\.form_id is distinct from old\.form_id/);
+  assert.match(guard, /Submitted form records are immutable/);
+
+  // An exported record must show the questions its respondent actually saw.
+  const forms = await read('../src/lib/xertForms.js');
+  assert.match(forms, /export function responseCSVColumns\(form, responses\)/);
+  assert.match(forms, /const snapshot = response\?\.form_snapshot;/);
+  assert.match(forms, /'archived_at', 'form_snapshot'/);
+});
+
 test('the published agreement and the signed agreement come from one module', async () => {
   const page = await read('../src/pages/MembershipTerms.jsx');
   assert.match(page, /XERT_TERMS_SECTIONS/);

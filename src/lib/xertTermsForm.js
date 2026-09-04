@@ -59,7 +59,11 @@ function decisionQuestions(total) {
 const blocks = agreementBlocks();
 const questions = [...blocks, ...decisionQuestions(blocks.length + 6)];
 
-export const XERT_TERMS_FORM_ID = '8126e6a2-1147-54e3-9e60-3f33144a1fd9';
+// This is the record members have been signing since August 2026, when it was
+// titled "Terms and Conditions". It was briefly repurposed as the PEQ; the PEQ
+// now has its own record and this one carries the full agreement, so every
+// historical acceptance still sits under the terms form that collected it.
+export const XERT_TERMS_FORM_ID = '0173f880-7bee-4a2e-bb0c-ac15af40ad9e';
 export const XERT_TERMS_FORM_PREREQUISITE_ID = XERT_PEQ_FORM_ID;
 
 export const XERT_TERMS_FORM_DEFINITION = Object.freeze({

@@ -33,11 +33,6 @@ async function readJSON(response, what) {
   return response.json();
 }
 
-const record = {
-  ...XERT_TERMS_FORM_DEFINITION,
-  prerequisite_form_id: XERT_TERMS_FORM_PREREQUISITE_ID,
-};
-
 const lookup = new URL('/rest/v1/xert_forms', supabaseURL);
 lookup.searchParams.set('id', `eq.${XERT_TERMS_FORM_ID}`);
 lookup.searchParams.set('select', 'id,title,slug,updated_at,response_count,is_active,prerequisite_form_id');
@@ -49,7 +44,14 @@ const prerequisiteLookup = new URL('/rest/v1/xert_forms', supabaseURL);
 prerequisiteLookup.searchParams.set('id', `eq.${XERT_TERMS_FORM_PREREQUISITE_ID}`);
 prerequisiteLookup.searchParams.set('select', 'id,slug,created_by');
 const [prerequisite] = await readJSON(await fetch(prerequisiteLookup, { headers }), 'Inspecting the prerequisite form');
-if (!prerequisite) throw new Error('The prerequisite form is missing. Publish the PEQ before the terms form.');
+// The PEQ may not exist yet on a first run, and it cannot be created while the
+// terms slug is still held elsewhere. Publish without the gate, then re-run.
+if (!prerequisite) console.warn('The prerequisite form does not exist yet. Publishing without the gate: create the PEQ, then run this again.');
+
+const record = {
+  ...XERT_TERMS_FORM_DEFINITION,
+  prerequisite_form_id: prerequisite ? XERT_TERMS_FORM_PREREQUISITE_ID : null,
+};
 
 console.log(JSON.stringify({
   mode: apply ? 'apply' : 'check',
@@ -57,8 +59,8 @@ console.log(JSON.stringify({
   id: XERT_TERMS_FORM_ID,
   slug: record.slug,
   fields: record.questions.length,
-  prerequisiteFormId: record.prerequisite_form_id,
-  prerequisiteSlug: prerequisite.slug,
+  prerequisiteFormId: record.prerequisite_form_id ?? null,
+  prerequisiteSlug: prerequisite?.slug ?? null,
   responseCountPreserved: current?.response_count ?? 0,
 }, null, 2));
 
@@ -84,7 +86,7 @@ if (current) {
   const rows = await readJSON(await fetch(insert, {
     method: 'POST',
     headers: { ...headers, Prefer: 'return=representation' },
-    body: JSON.stringify({ ...record, id: XERT_TERMS_FORM_ID, is_active: true, created_by: prerequisite.created_by }),
+    body: JSON.stringify({ ...record, id: XERT_TERMS_FORM_ID, is_active: true, created_by: prerequisite?.created_by }),
   }), 'Creating the terms form');
   [saved] = rows;
 }

@@ -128,7 +128,10 @@ const questions = [
   }),
 ];
 
-export const XERT_PEQ_FORM_ID = '0173f880-7bee-4a2e-bb0c-ac15af40ad9e';
+// A record of its own. The form that used to carry this definition holds the
+// signed terms responses from August and September 2026, and stays the terms
+// form; submitted responses are immutable and never move between forms.
+export const XERT_PEQ_FORM_ID = '000cc2da-1c51-59bf-a33e-c76bee4d7188';
 
 export const XERT_PEQ_FORM_DEFINITION = Object.freeze({
   title: 'Pre-Exercise Questionnaire, Risk Warning & Participant Acknowledgement',

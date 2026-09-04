@@ -7,8 +7,8 @@ import {
   validateXertPeqFormDefinition,
 } from '../src/lib/xertPeqForm.js';
 
-test('the PEQ definition upgrades the existing live record safely', () => {
-  assert.equal(XERT_PEQ_FORM_ID, '0173f880-7bee-4a2e-bb0c-ac15af40ad9e');
+test('the PEQ has a record of its own, separate from the signed terms history', () => {
+  assert.equal(XERT_PEQ_FORM_ID, '000cc2da-1c51-59bf-a33e-c76bee4d7188');
   assert.equal(XERT_PEQ_FORM_DEFINITION.slug, 'peq');
   assert.equal(XERT_PEQ_FORM_DEFINITION.form_type, 'waiver');
   assert.equal(validateXertPeqFormDefinition(), null);
