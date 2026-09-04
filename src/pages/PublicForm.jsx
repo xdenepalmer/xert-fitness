@@ -226,6 +226,12 @@ export default function PublicForm() {
       if (details) {
         setCarried(details);
         setName(details.name || ''); setEmail(details.email || ''); setPhone(details.phone || '');
+        // A question can ask for something the previous form already recorded.
+        // Seeding the answer saves typing it twice while leaving it editable.
+        const seeded = Object.fromEntries((data.questions || [])
+          .filter(item => item.prefill && details[item.prefill])
+          .map(item => [item.id, details[item.prefill]]));
+        if (Object.keys(seeded).length) setAnswers(seeded);
       }
     }).catch(err => active && setError(err.message)).finally(() => active && setLoading(false));
     return () => { active = false; };

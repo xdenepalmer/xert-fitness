@@ -44,6 +44,12 @@ function decisionQuestions(total) {
       options: [TERMS_ACCEPT_OPTION, TERMS_DECLINE_OPTION],
       skip_rules: [{ option: TERMS_DECLINE_OPTION, skip_to: end }],
     }),
+    // Named before signed, and before any guardian is asked for theirs, so the
+    // signature block reads the way the paper agreement always has.
+    required('tc-member-name', 'short_text', 'Member first and last name', {
+      prefill: 'name',
+      description: 'The member these terms apply to. Carried across from the questionnaire — change it if it is not right.',
+    }),
     required('tc-signature', 'signature', 'Member signature', {
       description: 'Sign with your finger, mouse or Apple Pencil.',
     }),
@@ -62,7 +68,7 @@ function decisionQuestions(total) {
 }
 
 const blocks = agreementBlocks();
-const questions = [...blocks, ...decisionQuestions(blocks.length + 5)];
+const questions = [...blocks, ...decisionQuestions(blocks.length + 6)];
 
 // This is the record members have been signing since August 2026, when it was
 // titled "Terms and Conditions". It was briefly repurposed as the PEQ; the PEQ

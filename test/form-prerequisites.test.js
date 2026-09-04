@@ -109,7 +109,7 @@ test('the guardian questions follow that answer instead of asking again', async 
   assert.match(source, /A parent or guardian must complete this for a member under 18\./);
 });
 
-test('the terms form is the agreement, gated behind the PEQ, ending in accept or decline', () => {
+test('the terms form is the agreement, gated behind the PEQ, ending in accept or decline', async () => {
   const definition = XERT_TERMS_FORM_DEFINITION;
   assert.equal(validateXertTermsFormDefinition(), null);
   assert.equal(definition.slug, 'terms-and-conditions', 'the printed QR code points here');
@@ -137,7 +137,17 @@ test('the terms form is the agreement, gated behind the PEQ, ending in accept or
   assert.match(guardianName.description, /because the member is under 18/);
   const heading = definition.questions.find(question => question.id === 'tc-00-agreement');
   assert.equal(heading.content, 'XERT Fitness Terms and Conditions', 'no date in the heading to go stale');
-  assert.equal(definition.questions.at(-1).id, 'tc-guardian-signature');
+  // The signature block reads as it does on paper: the member is named, then
+  // signs, and only then is a guardian asked for a name and a signature.
+  assert.deepEqual(
+    definition.questions.slice(-4).map(question => question.id),
+    ['tc-member-name', 'tc-signature', 'tc-guardian-name', 'tc-guardian-signature'],
+  );
+  const memberName = definition.questions.find(question => question.id === 'tc-member-name');
+  assert.equal(memberName.required, true);
+  assert.equal(memberName.prefill, 'name', 'carried from the questionnaire rather than typed twice');
+  const source = await read('../src/pages/PublicForm.jsx');
+  assert.match(source, /\.filter\(item => item\.prefill && details\[item\.prefill\]\)/);
   assert.equal(definition.questions.find(question => question.id === 'tc-signature').type, 'signature');
 });
 
