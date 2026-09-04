@@ -9,7 +9,7 @@
 //
 // Apply changes with: node scripts/apply-xert-terms-form.mjs --apply
 
-import { required, section, statement, validateXertFormDefinition } from './xertFormFields.js';
+import { field, required, section, statement, validateXertFormDefinition } from './xertFormFields.js';
 import { XERT_TERMS_INTRO, XERT_TERMS_SECTIONS, XERT_TERMS_UPDATED, termsSectionText } from './xertTermsAgreement.js';
 import { XERT_PEQ_FORM_ID } from './xertPeqForm.js';
 
@@ -20,7 +20,7 @@ function agreementBlocks() {
   const blocks = [
     section(
       'tc-00-agreement',
-      `XERT Fitness Terms and Conditions (${XERT_TERMS_UPDATED})`,
+      'XERT Fitness Terms and Conditions',
       'Read the agreement below, then accept or decline at the end. Take as long as you need — the text scrolls inside its own panel.',
     ),
     statement('tc-00-agreement-intro', XERT_TERMS_INTRO),
@@ -47,17 +47,19 @@ function decisionQuestions(total) {
     required('tc-signature', 'signature', 'Member signature', {
       description: 'Sign with your finger, mouse or Apple Pencil.',
     }),
-    required('tc-minor', 'yes_no', 'Is the member under 18 years of age?', {
-      description: 'A parent or legal guardian must also sign for anyone under 18, and accepts legal responsibility for the member’s obligations under this Agreement.',
-      skip_rules: [{ option: 'No', skip_to: end }],
+    // No age question: a guardian signature is itself the record that the
+    // member is under 18, and their date of birth is already on the PEQ.
+    field('tc-guardian-name', 'short_text', 'Parent or guardian first and last name', {
+      description: 'Only for a member under 18. Everyone else can continue past this.',
     }),
-    required('tc-guardian-name', 'short_text', 'Parent or guardian first and last name'),
-    required('tc-guardian-signature', 'signature', 'Parent or guardian signature'),
+    field('tc-guardian-signature', 'signature', 'Parent or guardian signature', {
+      description: 'Only for a member under 18. A parent or legal guardian signing here accepts legal responsibility for the member’s obligations under this Agreement.',
+    }),
   ];
 }
 
 const blocks = agreementBlocks();
-const questions = [...blocks, ...decisionQuestions(blocks.length + 6)];
+const questions = [...blocks, ...decisionQuestions(blocks.length + 5)];
 
 // This is the record members have been signing since August 2026, when it was
 // titled "Terms and Conditions". It was briefly repurposed as the PEQ; the PEQ

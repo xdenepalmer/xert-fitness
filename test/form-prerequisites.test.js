@@ -75,9 +75,16 @@ test('the terms form is the agreement, gated behind the PEQ, ending in accept or
   assert.deepEqual(accept.options, ['I accept the Terms and Conditions', 'I decline']);
   assert.deepEqual(accept.skip_rules, [{ option: 'I decline', skip_to: definition.questions.length + 1 }],
     'declining ends the form instead of asking for a signature');
-  const minor = definition.questions.find(question => question.id === 'tc-minor');
-  assert.deepEqual(minor.skip_rules, [{ option: 'No', skip_to: definition.questions.length + 1 }],
-    'guardian fields are only asked for a member under 18');
+  // A guardian signature is itself the record of a member under 18, so the
+  // agreement asks for it rather than asking anyone to state their age twice.
+  assert.equal(definition.questions.find(question => question.id === 'tc-minor'), undefined);
+  const guardianName = definition.questions.find(question => question.id === 'tc-guardian-name');
+  const guardianSignature = definition.questions.find(question => question.id === 'tc-guardian-signature');
+  assert.equal(guardianName.required, false);
+  assert.equal(guardianSignature.required, false);
+  assert.match(guardianName.description, /Only for a member under 18/);
+  const heading = definition.questions.find(question => question.id === 'tc-00-agreement');
+  assert.equal(heading.content, 'XERT Fitness Terms and Conditions', 'no date in the heading to go stale');
   assert.equal(definition.questions.at(-1).id, 'tc-guardian-signature');
   assert.equal(definition.questions.find(question => question.id === 'tc-signature').type, 'signature');
 });

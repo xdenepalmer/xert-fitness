@@ -96,14 +96,6 @@ const questions = [
     description: 'By signing, you confirm that you have read and agreed to the declarations above.',
   }),
   required('caeec366-3dfc-4ea5-86d2-7119f0313501', 'date', 'Date signed'),
-  required('3c644456-f0ea-4f65-9d2f-80ea5f473601', 'yes_no', 'Is the participant under 18 years of age?', {
-    skip_rules: [{ option: 'No', skip_to: 36 }],
-  }),
-  required('4ef80570-b87e-49c7-872c-0ddc9da43701', 'short_text', 'Parent or guardian name'),
-  required('d239489b-99f4-4c36-921e-6d72f6f43801', 'signature', 'Parent or guardian signature', {
-    description: 'Required when the participant is under 18.',
-  }),
-  required('9eb7a8d3-a51d-4f1c-9220-5acc4f163901', 'date', 'Parent or guardian date signed'),
 
   section(
     '584f206f-300f-4722-b655-fb576c8b4401',
@@ -111,7 +103,7 @@ const questions = [
     'These answers do not affect your ability to participate.',
   ),
   required('f27341c0-c910-4434-b07a-7e3fd09a4501', 'yes_no', 'Are you visiting as part of the Friends Train Free Saturdays campaign?', {
-    skip_rules: [{ option: 'No', skip_to: 39 }],
+    skip_rules: [{ option: 'No', skip_to: 35 }],
   }),
   required('2486526d-cee2-57c1-aafc-89ccb655480c', 'short_text', 'Referring member’s first and last name'),
   required('eefcd865-5ac9-4cab-af9e-158f5c7fe605', 'yes_no', 'Do you consent to XERT using identifiable photos or video of you in its marketing?', {

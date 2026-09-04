@@ -17,7 +17,7 @@ test('the PEQ has a record of its own, separate from the signed terms history', 
 
 test('the pre-exercise screen requires explicit Yes or No for every reference question', () => {
   const healthQuestions = XERT_PEQ_FORM_DEFINITION.questions.filter(question => question.type === 'yes_no')
-    .filter(question => !/under 18|Friends Train Free|photos or video/i.test(question.question));
+    .filter(question => !/Friends Train Free|photos or video/i.test(question.question));
   assert.equal(healthQuestions.length, 8);
   assert.ok(healthQuestions.every(question => question.required));
   assert.match(healthQuestions.map(question => question.question).join('\n'), /stroke/i);
@@ -33,15 +33,17 @@ test('the declaration mirrors the supplied paper structure and uses conditional 
   assert.match(allText, /Risk warning & participant acknowledgement/i);
   assert.match(allText, /maximum extent permitted by applicable law/i);
   assert.match(allText, /cannot lawfully be excluded/i);
-  assert.match(allText, /Parent or guardian signature/i);
   assert.doesNotMatch(allText, /XERT representative/i, 'staff sign-off belongs on paper, not in the member\u2019s form');
+  // Age and guardian sign-off belong to the agreement, not the health screen:
+  // the PEQ already records a date of birth, and a guardian signs the
+  // agreement they are taking responsibility for.
+  assert.doesNotMatch(allText, /under 18/i, 'the PEQ records a date of birth instead');
+  assert.doesNotMatch(allText, /Parent or guardian/i);
   assert.match(allText, /Friends Train Free Saturdays campaign/i);
   assert.match(allText, /consent to XERT using identifiable photos or video/i);
 
-  const minorQuestion = XERT_PEQ_FORM_DEFINITION.questions.find(question => /under 18/i.test(question.question));
   const referralQuestion = XERT_PEQ_FORM_DEFINITION.questions.find(question => /Friends Train Free/i.test(question.question));
-  assert.deepEqual(minorQuestion.skip_rules, [{ option: 'No', skip_to: 36 }]);
-  assert.deepEqual(referralQuestion.skip_rules, [{ option: 'No', skip_to: 39 }]);
+  assert.deepEqual(referralQuestion.skip_rules, [{ option: 'No', skip_to: 35 }]);
 });
 
 test('digital Yes/No and one-option consents show visible checkbox controls while retaining radio semantics', async () => {
