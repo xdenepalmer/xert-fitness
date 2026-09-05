@@ -5,6 +5,7 @@ import {
   stripeModeForSecret,
 } from '../src/lib/commerceRuntime.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
+import { casualVisitPaymentFromCheckout } from '../src/lib/casualVisit.js';
 
 // Stripe calls this after a successful checkout. We verify the signature,
 // record the paid order, and grant the member their session credits.
@@ -421,6 +422,20 @@ export async function processStripeEvent(admin, event, {
 
     let handled = false;
     let orderId = null;
+
+    // A casual visit is a door fee with no account, credit or order behind it.
+    // It is recorded on its own, and never enters member fulfilment.
+    if (FULFILLMENT_EVENT_TYPES.has(event?.type)) {
+      const casualVisit = casualVisitPaymentFromCheckout(event.data?.object);
+      if (casualVisit) {
+        const { error } = await admin
+          .from('casual_visit_payments')
+          .upsert(casualVisit, { onConflict: 'stripe_checkout_session_id' });
+        if (error) throw new Error(`Casual visit payment could not be recorded: ${error.message}`);
+        return { duplicate: false, requiresReview: false, handled: true, orderId: null };
+      }
+    }
+
     const fulfillment = checkoutFulfillmentForEvent(event);
     if (fulfillment) {
       const settlement = await persistCheckoutFulfillment(admin, fulfillment);

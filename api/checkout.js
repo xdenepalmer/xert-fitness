@@ -16,6 +16,9 @@ import {
   paymentActivationAllowsCheckout,
 } from '../src/lib/paymentActivation.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
+import {
+  CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, normalizeCasualVisitPriceCents, normalizeCasualVisitor,
+} from '../src/lib/casualVisit.js';
 
 // Vercel serverless function using the default Node request/response signature.
 // Creates a Stripe Checkout Session for a session pack, attributed to the
@@ -520,10 +523,25 @@ export default async function handler(request, response) {
     return json({ error: 'Checkout service is unavailable.' }, 503);
   }
 
+  let payload;
+  try {
+    payload = await requestJson(request);
+  } catch (error) {
+    return json({ error: error.message || 'The request body could not be read.' }, 400);
+  }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+  // A casual visit is a door fee paid by a walk-in on their own phone. There is
+  // no account, no credit and no order behind it, so it takes none of the
+  // member fulfilment path below — and needs no session to reach it.
+  if (payload && payload.action === CASUAL_VISIT_ACTION) {
+    return handleCasualVisitCheckout({ payload, request, admin, json });
+  }
+
   const authHeader = requestHeader(request, 'authorization');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return json({ error: 'Not authenticated.' }, 401);
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
   try {
     const { data: { user }, error: userErr } = await admin.auth.getUser(token);
@@ -606,7 +624,7 @@ export default async function handler(request, response) {
 
     let checkoutRequest;
     try {
-      checkoutRequest = normalizeCheckoutRequest(await requestJson(request));
+      checkoutRequest = normalizeCheckoutRequest(payload);
     } catch (error) {
       return json({ error: error.message }, 400);
     }
@@ -745,5 +763,56 @@ export default async function handler(request, response) {
       stripeRequestId: String(e?.requestId || ''),
     });
     return json({ error: failure.message }, failure.status);
+  }
+}
+
+async function handleCasualVisitCheckout({ payload, request, admin, json }) {
+  let visitor;
+  try {
+    visitor = normalizeCasualVisitor(payload);
+  } catch (error) {
+    return json({ error: error.message }, 400);
+  }
+
+  const { data: settings, error: settingsError } = await admin
+    .from('admin_settings')
+    .select('casual_payments_enabled, casual_visit_price_cents')
+    .limit(1)
+    .maybeSingle();
+  if (settingsError) {
+    return json({ error: 'Casual visit payments are unavailable right now.' }, 503);
+  }
+  if (settings && settings.casual_payments_enabled === false) {
+    return json({ error: 'Casual visit payments are switched off. Please pay at the front desk.' }, 503);
+  }
+
+  const stripeMode = stripeModeForSecret(process.env.STRIPE_SECRET_KEY);
+  let returnURLs;
+  try {
+    const origin = resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || '', {
+      stripeMode,
+      expectedHost: XERT_VERCEL_HOST,
+    });
+    returnURLs = {
+      success: new URL('/casual?paid=1', origin).toString(),
+      cancel: new URL('/casual?cancelled=1', origin).toString(),
+    };
+  } catch (error) {
+    return json({ error: error.message }, 400);
+  }
+
+  // The amount is read from the database every time: a price in the browser is
+  // a suggestion, and this one has to be the club's.
+  const priceCents = normalizeCasualVisitPriceCents(settings?.casual_visit_price_cents);
+  const stripe = createXertStripeClient(process.env.STRIPE_SECRET_KEY);
+  try {
+    const session = await stripe.checkout.sessions.create(
+      casualVisitCheckoutParameters({ visitor, priceCents, returnURLs }),
+      { idempotencyKey: `casual-${visitor.email}-${priceCents}-${Math.floor(Date.now() / 60000)}` },
+    );
+    if (!session?.url) throw new Error('Stripe did not return a payment page.');
+    return json({ url: session.url, amount_cents: priceCents });
+  } catch (error) {
+    return json({ error: error?.message || 'The payment page could not be opened. Please try again.' }, 502);
   }
 }

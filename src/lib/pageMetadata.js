@@ -33,6 +33,8 @@ const PUBLIC_METADATA = Object.freeze({
 // television cannot sign in) but has no business appearing in search results.
 const NOINDEX_TITLES = Object.freeze({
   '/display': 'Workout Display | XERT Fitness',
+  // Reached from a QR code at the front desk, not from a search result.
+  '/casual': 'Casual visit | XERT Fitness',
 });
 
 const NOINDEX_PATHS = new Set([

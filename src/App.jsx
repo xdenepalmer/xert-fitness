@@ -31,6 +31,7 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const Terms = lazy(() => import('./pages/Terms'));
+const CasualVisit = lazy(() => import('./pages/CasualVisit'));
 const AppLanding = lazy(() => import('./pages/AppLanding'));
 const WorkoutDisplay = lazy(() => import('./pages/WorkoutDisplay'));
 const CheckoutReturn = lazy(() => import('./pages/CheckoutReturn'));
@@ -72,6 +73,7 @@ const AppRoutes = () => (
       <Route path="/open/*" element={<NativeTaskBridge />} />
       {/* The agreement moved onto /terms; anything already pointing here still lands. */}
       <Route path="/membership-terms" element={<Navigate to="/terms" replace />} />
+      <Route path="/casual" element={<CasualVisit />} />
       <Route path="/forms/:slug" element={<PublicForm />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/training-guide" element={<TrainingGuide />} />
