@@ -169,3 +169,44 @@ export function summarizeCasualVisits(rows = [], now = new Date()) {
     mixedCurrencies: currencies.length > 1,
   };
 }
+
+// ─── Remembering a visitor across the questionnaire ─────────────────────────
+// Somebody who has not done the questionnaire is sent to fill it in before
+// they pay. Their typed details wait here so the payment form is not blank
+// when they come back. sessionStorage, so it belongs to one person in one
+// sitting and a shared phone starts clean.
+
+export const CASUAL_VISITOR_KEY = 'xert-casual-visitor';
+export const CASUAL_VISITOR_TTL_MS = 12 * 60 * 60 * 1000;
+
+function visitorStorage() {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberCasualVisitor(visitor, { storage = visitorStorage(), now = Date.now() } = {}) {
+  if (!storage) return false;
+  try {
+    storage.setItem(CASUAL_VISITOR_KEY, JSON.stringify({ ...visitor, at: now }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function recallCasualVisitor({ storage = visitorStorage(), now = Date.now() } = {}) {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(CASUAL_VISITOR_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const at = Number(parsed?.at);
+    if (!Number.isFinite(at) || now - at > CASUAL_VISITOR_TTL_MS || now < at) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}

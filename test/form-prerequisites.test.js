@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   FORM_COMPLETION_TTL_MS, ageInYears, completionIdentity, formPath, minorStatus, nextFormSlug,
-  prerequisiteRedirect, readFormCompletion, writeFormCompletion,
+  prerequisiteRedirect, readFormCompletion, returnPathAfterForm, writeFormCompletion,
 } from '../src/lib/formPrerequisites.js';
 import { XERT_TERMS_FORM_DEFINITION, XERT_TERMS_FORM_PREREQUISITE_ID, validateXertTermsFormDefinition } from '../src/lib/xertTermsForm.js';
 import { XERT_PEQ_FORM_ID } from '../src/lib/xertPeqForm.js';
@@ -223,4 +223,24 @@ test('the public form page enforces the gate, hands over and carries details acr
   assert.match(forms, /'tags', 'prerequisite_form_id'/);
   const manager = await read('../src/components/admin/FormsSurveysManager.jsx');
   assert.match(manager, /Complete this form first/);
+});
+
+test('a form can hand back to the page that sent someone to it, but only a page we own', async () => {
+  assert.equal(returnPathAfterForm('?return=casual'), '/casual');
+  assert.equal(returnPathAfterForm(''), null);
+  assert.equal(returnPathAfterForm('?next=terms-and-conditions'), null);
+
+  // A crafted link must never bounce anyone off the site or onto another form.
+  assert.equal(returnPathAfterForm('?return=https://evil.example.com'), null);
+  assert.equal(returnPathAfterForm('?return=//evil.example.com'), null);
+  assert.equal(returnPathAfterForm('?return=/admin'), null);
+  assert.equal(returnPathAfterForm('?return=constructor'), null, 'inherited keys are not paths');
+
+  // The chained form still wins: a questionnaire that gates the agreement
+  // hands over to it, and only a form with nothing after it goes back.
+  const page = await read('../src/pages/PublicForm.jsx');
+  const handoff = page.indexOf('if (handoff && handoff !== slug)');
+  const back = page.indexOf('returnPathAfterForm(search)');
+  assert.ok(handoff > 0 && back > handoff, 'the follow-on form is offered first');
+  assert.match(page, /if \(returnPath\) \{ setHandingOver\(true\); navigate\(returnPath, \{ replace: true \}\); return; \}/);
 });

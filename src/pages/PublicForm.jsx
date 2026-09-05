@@ -4,7 +4,8 @@ import { ArrowLeft, ArrowRight, Check, ExternalLink, FileUp, LoaderCircle, Star 
 import { answerIsPresent, loadPublicForm, submitPublicForm } from '@/lib/xertForms';
 import { buildPublicFormSteps } from '@/lib/formBranching';
 import {
-  completionIdentity, formPath, minorStatus, nextFormSlug, prerequisiteRedirect, readFormCompletion, writeFormCompletion,
+  completionIdentity, formPath, minorStatus, nextFormSlug, prerequisiteRedirect, readFormCompletion,
+  returnPathAfterForm, writeFormCompletion,
 } from '@/lib/formPrerequisites';
 import { answerValidationMessage, firstInvalidAnswer } from '@/lib/formAnswerValidation';
 
@@ -308,6 +309,9 @@ export default function PublicForm() {
       // the agreement, and a questionnaire with nothing after it must not.
       const handoff = nextFormSlug(search) || form.follow_on_slug || null;
       if (handoff && handoff !== slug) { setHandingOver(true); navigate(formPath(handoff), { replace: true }); return; }
+      // Someone sent here mid-way through paying goes back to finish paying.
+      const returnPath = returnPathAfterForm(search);
+      if (returnPath) { setHandingOver(true); navigate(returnPath, { replace: true }); return; }
       setSubmitted(true);
       if (safeURL(form.redirect_url)) window.setTimeout(() => window.location.assign(form.redirect_url), 1400);
     } catch (err) { setError(err.message); } finally { setSubmitting(false); }

@@ -1,24 +1,52 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, CreditCard, LoaderCircle } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { supabase } from '@/lib/supabase';
 import {
   CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice, normalizeCasualVisitPriceCents,
+  recallCasualVisitor, rememberCasualVisitor,
 } from '@/lib/casualVisit';
+import { readFormCompletion } from '@/lib/formPrerequisites';
+
+const CASUAL_PEQ_SLUG = 'peq-casual';
 
 // Pay for a single visit on your own phone. The club never handles anyone's
 // card: the visitor fills this in, and Stripe takes the payment with their
 // name, email and phone already carried across.
 export default function CasualVisit() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [visitor, setVisitor] = useState({ first_name: '', last_name: '', email: '', phone: '' });
+  const [questionnaire, setQuestionnaire] = useState('');
   const [priceCents, setPriceCents] = useState(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const paid = params.get('paid') === '1';
   const cancelled = params.get('cancelled') === '1';
+
+  // Coming back from the questionnaire, or from a half-finished attempt: their
+  // details are waiting, and the questionnaire answer is already known.
+  useEffect(() => {
+    const completed = readFormCompletion(CASUAL_PEQ_SLUG);
+    const remembered = recallCasualVisitor();
+    const carried = { ...(remembered || {}) };
+    if (completed) {
+      const [first, ...rest] = String(completed.name || '').trim().split(' ');
+      if (first) carried.first_name = first;
+      if (rest.length) carried.last_name = rest.join(' ');
+      if (completed.email) carried.email = completed.email;
+      if (completed.phone) carried.phone = completed.phone;
+    }
+    setVisitor(current => ({
+      first_name: carried.first_name || current.first_name,
+      last_name: carried.last_name || current.last_name,
+      email: carried.email || current.email,
+      phone: carried.phone || current.phone,
+    }));
+    if (completed) setQuestionnaire('done');
+  }, []);
 
   useEffect(() => {
     document.title = 'Casual visit | XERT Fitness';
@@ -36,6 +64,14 @@ export default function CasualVisit() {
     event.preventDefault();
     setError('');
     if (validation) { setError(validation); return; }
+    if (!questionnaire) { setError('Tell us whether you have completed the pre-exercise questionnaire.'); return; }
+    // Nobody trains without being screened, so the questionnaire comes before
+    // the payment rather than being an afterthought on the receipt page.
+    if (questionnaire === 'not-done') {
+      rememberCasualVisitor(visitor);
+      navigate(`/forms/${CASUAL_PEQ_SLUG}?return=casual`);
+      return;
+    }
     setSending(true);
     try {
       const response = await fetch('/api/checkout', {
@@ -116,12 +152,38 @@ export default function CasualVisit() {
                     value={visitor.phone} onChange={event => update('phone', event.target.value)} placeholder="0400 000 000" />
                 </label>
 
+                <fieldset className="border border-xert-steel/20 p-4">
+                  <legend className="px-2 font-body text-xs uppercase tracking-wider text-xert-pale/60">Pre-exercise questionnaire</legend>
+                  <div className="space-y-2" role="radiogroup" aria-label="Pre-exercise questionnaire">
+                    {[
+                      ['done', 'I have already completed the pre-exercise questionnaire'],
+                      ['not-done', 'I have not completed it yet'],
+                    ].map(([value, label]) => (
+                      <label key={value} className={`flex min-h-12 cursor-pointer items-center gap-3 border p-3 transition-colors ${questionnaire === value ? 'border-xert-steel bg-xert-steel/10' : 'border-xert-steel/20 hover:border-xert-steel/50'}`}>
+                        <input type="radio" name="questionnaire" value={value} checked={questionnaire === value}
+                          onChange={() => { setQuestionnaire(value); setError(''); }} className="peer sr-only" />
+                        <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 ${questionnaire === value ? 'border-xert-steel bg-xert-steel text-xert-navy' : 'border-xert-steel/40'} peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite`}>
+                          {questionnaire === value && <span className="text-xs">&#10003;</span>}
+                        </span>
+                        <span className="font-body text-sm text-xert-offwhite">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {questionnaire === 'not-done' && (
+                    <p className="mt-3 font-body text-xs leading-relaxed text-xert-pale/60">
+                      No problem — the next button opens it. It takes a couple of minutes, and you come straight back here to pay.
+                    </p>
+                  )}
+                </fieldset>
+
                 {error && <p role="alert" className="border border-red-300/30 bg-red-300/10 p-3 font-body text-sm text-red-100">{error}</p>}
 
                 <button type="submit" disabled={sending}
                   className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 bg-xert-steel px-5 font-display text-sm uppercase tracking-wide text-xert-navy transition-colors hover:bg-xert-pale disabled:opacity-50">
                   {sending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                  {sending ? 'Opening secure payment…' : priceCents ? `Pay ${formatCasualVisitPrice(priceCents)}` : 'Continue to payment'}
+                  {sending ? 'Opening secure payment…'
+                    : questionnaire === 'not-done' ? 'Fill in the questionnaire first'
+                    : priceCents ? `Pay ${formatCasualVisitPrice(priceCents)}` : 'Continue to payment'}
                 </button>
                 <p className="font-body text-xs leading-relaxed text-xert-pale/45">
                   Payment is taken by Stripe on their secure page. XERT never sees or stores your card details.

@@ -100,6 +100,16 @@ export function nextFormSlug(search) {
   return SLUG_PATTERN.test(raw) ? raw : null;
 }
 
+// A form can also hand back to a page rather than another form. Only these
+// are ever accepted, so a crafted link can never bounce someone off the site.
+const RETURN_PATHS = Object.freeze({ casual: '/casual' });
+
+/** Where a finished form should return to, taken from ?return= */
+export function returnPathAfterForm(search) {
+  const raw = new URLSearchParams(search || '').get('return') || '';
+  return Object.prototype.hasOwnProperty.call(RETURN_PATHS, raw) ? RETURN_PATHS[raw] : null;
+}
+
 export function formPath(slug, nextSlug = null) {
   const next = SLUG_PATTERN.test(String(nextSlug || '')) ? `?next=${encodeURIComponent(nextSlug)}` : '';
   return `/forms/${encodeURIComponent(slug)}${next}`;

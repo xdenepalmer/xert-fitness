@@ -4,7 +4,8 @@ import test from 'node:test';
 import {
   CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, casualVisitPaymentFromCheckout,
   casualVisitValidationError, formatCasualVisitPrice, normalizeCasualVisitPriceCents,
-  normalizeCasualVisitor, normalizeVisitorPhone, summarizeCasualVisits,
+  CASUAL_VISITOR_KEY, CASUAL_VISITOR_TTL_MS, normalizeCasualVisitor, normalizeVisitorPhone,
+  recallCasualVisitor, rememberCasualVisitor, summarizeCasualVisits,
 } from '../src/lib/casualVisit.js';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
@@ -149,4 +150,50 @@ test('the club owns the door fee: price and switch live in Settings', async () =
   assert.match(screen, /field="casual_payments_enabled"/);
   assert.match(screen, /htmlFor="casual-visit-price"/);
   assert.match(screen, /never from their browser/);
+});
+
+test('nobody trains unscreened: the questionnaire is answered before Stripe is opened', async () => {
+  const page = await read('../src/pages/CasualVisit.jsx');
+
+  // Two options, and neither is pre-selected — the visitor has to say which.
+  assert.match(page, /useState\(''\)/);
+  assert.match(page, /\['done', 'I have already completed the pre-exercise questionnaire'\]/);
+  assert.match(page, /\['not-done', 'I have not completed it yet'\]/);
+  assert.match(page, /role="radiogroup"/);
+
+  // Leaving it blank stops the submit before any network call is made.
+  const guard = page.indexOf("Tell us whether you have completed the pre-exercise questionnaire.");
+  const detour = page.indexOf("questionnaire === 'not-done'");
+  const checkout = page.indexOf("fetch('/api/checkout'");
+  assert.ok(guard > 0 && detour > guard && checkout > detour,
+    'the blank guard and the detour both come before the checkout call');
+  assert.match(page, /navigate\(`\/forms\/\$\{CASUAL_PEQ_SLUG\}\?return=casual`\)/);
+  assert.match(page, /const CASUAL_PEQ_SLUG = 'peq-casual'/,
+    'the casual questionnaire, not the membership one');
+  assert.match(page, /'Fill in the questionnaire first'/,
+    'the button says where it is about to take them');
+
+  // Coming back, their details are already in the form and the answer is set.
+  assert.match(page, /readFormCompletion\(CASUAL_PEQ_SLUG\)/);
+  assert.match(page, /recallCasualVisitor\(\)/);
+  assert.match(page, /if \(completed\) setQuestionnaire\('done'\)/);
+});
+
+test('a visitor sent off to the questionnaire comes back to a form that still knows them', () => {
+  const data = new Map();
+  const storage = { getItem: key => (data.has(key) ? data.get(key) : null), setItem: (key, value) => data.set(key, value) };
+  const typed = { first_name: 'Casey', last_name: 'Doe', email: 'casey@example.com', phone: '0400 111 222' };
+
+  assert.equal(recallCasualVisitor({ storage }), null, 'a fresh phone starts blank');
+  assert.equal(rememberCasualVisitor(typed, { storage, now: 1_000 }), true);
+  assert.deepEqual(recallCasualVisitor({ storage, now: 2_000 }), { ...typed, at: 1_000 });
+
+  assert.equal(recallCasualVisitor({ storage, now: 1_000 + CASUAL_VISITOR_TTL_MS + 1 }), null,
+    'yesterday\'s visitor is not offered to today\'s');
+  assert.equal(recallCasualVisitor({ storage, now: 0 }), null, 'a marker from the future is ignored');
+
+  data.set(CASUAL_VISITOR_KEY, 'not json');
+  assert.equal(recallCasualVisitor({ storage }), null, 'a corrupt marker never breaks the payment page');
+  assert.equal(rememberCasualVisitor(typed, { storage: null }), false, 'a browser with no storage still pays');
+  assert.equal(recallCasualVisitor({ storage: null }), null);
 });
