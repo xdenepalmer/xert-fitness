@@ -18,6 +18,9 @@ const normalizeLoadedSettings = loadedSettings => ({
 export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   const defaults = getDefaultSettings();
   const [settings, setSettings] = useState(defaults);
+  // The price is edited in dollars and stored in cents, so the field keeps its
+  // own text while somebody is part-way through typing.
+  const [casualPriceInput, setCasualPriceInput] = useState('');
   const [savedSettings, setSavedSettings] = useState(defaults);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,6 +44,10 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setCasualPriceInput(((settings.casual_visit_price_cents ?? 1560) / 100).toFixed(2));
+  }, [settings.casual_visit_price_cents]);
 
   useEffect(() => {
     load();
@@ -213,6 +220,37 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
             className="w-full bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
           <p className="font-body text-xs text-xert-concrete/40 mt-2">
             Paste the signup or booking link Fitbox gives you for XERT. It must start with https://.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-xert-ink border border-xert-steel/20 p-6 space-y-5 mb-6">
+        <h3 className="font-display text-sm uppercase tracking-wider text-xert-offwhite">Casual visits</h3>
+        <p className="font-body text-xs text-xert-concrete/40">
+          A walk-in scans the front-desk code, enters their details and pays for one visit on their own phone.
+          Nothing here grants a session credit.
+        </p>
+        <Toggle label="Casual visit payments" desc="When off, /casual tells visitors to pay at the front desk instead." field="casual_payments_enabled" />
+        <div>
+          <label htmlFor="casual-visit-price" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Casual visit price</label>
+          <div className="flex items-center gap-2">
+            <span className="font-body text-sm text-xert-concrete/50">$</span>
+            <input id="casual-visit-price" type="text" inputMode="decimal"
+              value={casualPriceInput}
+              onChange={e => setCasualPriceInput(e.target.value)}
+              onBlur={() => {
+                const cents = Math.round(Number.parseFloat(String(casualPriceInput).replace(/[^\d.]/g, '')) * 100);
+                if (Number.isInteger(cents) && cents >= 100 && cents <= 100000) {
+                  set('casual_visit_price_cents', cents);
+                  setCasualPriceInput((cents / 100).toFixed(2));
+                } else {
+                  setCasualPriceInput(((settings.casual_visit_price_cents ?? 1560) / 100).toFixed(2));
+                }
+              }}
+              className="w-32 bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+          </div>
+          <p className="font-body text-xs text-xert-concrete/40 mt-2">
+            Charged once, per visit. The amount is read from here every time somebody pays, never from their browser.
           </p>
         </div>
       </div>

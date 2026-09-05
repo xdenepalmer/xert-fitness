@@ -7,6 +7,7 @@ import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '
 import { formatPackPrice } from '@/lib/products';
 import { formatCasualVisitPrice, summarizeCasualVisits } from '@/lib/casualVisit';
 import AdminLoadError from '@/components/admin/AdminLoadError';
+import FormQRCode from '@/components/admin/FormQRCode';
 import { ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const STATUS_COLORS = {
@@ -65,6 +66,10 @@ export default function OrdersManager() {
     return () => { active = false; };
   }, []);
   const casualSummary = useMemo(() => summarizeCasualVisits(casualVisits.rows), [casualVisits.rows]);
+  const casualVisitURL = useMemo(
+    () => new URL('/casual', window.location.origin).toString(),
+    [],
+  );
 
   const currencies = useMemo(() => [...new Set(orders.map(order => String(order.currency || 'aud').toLowerCase()))].sort(), [orders]);
   const filteredOrders = useMemo(() => filterOrders(orders, { search, status: statusFilter, currency: currencyFilter, days: daysFilter }), [currencyFilter, daysFilter, orders, search, statusFilter]);
@@ -205,6 +210,32 @@ export default function OrdersManager() {
           </div>
         ))}
       </div>
+
+      {/* Front-desk QR for the casual visit payment page */}
+      {casualVisits.installed && (
+        <div className="mb-8 grid gap-4 lg:grid-cols-[minmax(0,22rem)_1fr]">
+          <FormQRCode
+            form={{ slug: 'casual-visit', title: 'Casual visit' }}
+            publicURL={casualVisitURL}
+            title="Casual visit QR"
+            description="Print it for the front desk. A walk-in scans it and pays for today's visit on their own phone."
+            onNotice={message => toast({ title: message })}
+          />
+          <div className="border border-xert-steel/20 bg-xert-ink p-5">
+            <h3 className="font-display text-sm uppercase tracking-wider text-xert-offwhite">How a casual visit works</h3>
+            <ol className="mt-3 space-y-2 font-body text-sm leading-relaxed text-xert-concrete/60">
+              <li>1. They scan the code and enter their name, email and phone.</li>
+              <li>2. Stripe takes the payment on their phone, with those details already filled in. Nobody at XERT handles their card.</li>
+              <li>3. You get an email the moment it is paid, and the visit appears below.</li>
+              <li>4. First time in? Send them to the casual questionnaire before they train.</li>
+            </ol>
+            <p className="mt-4 font-body text-xs text-xert-concrete/40">
+              The price and the on/off switch live in Business → Settings. Nothing here grants a session credit:
+              a casual visit is entry paid for, not a pack.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Casual visits paid at the door */}
       {casualVisits.installed && casualVisits.rows.length > 0 && (

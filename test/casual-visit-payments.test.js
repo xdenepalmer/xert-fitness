@@ -121,4 +121,32 @@ test('the owner sees door takings beside orders, counted only when actually paid
   assert.match(orders, /summarizeCasualVisits\(casualVisits\.rows\)/);
   assert.match(orders, /casualVisits\.installed && casualVisits\.rows\.length > 0/,
     'an empty list adds nothing to the screen');
+
+  // The front desk needs a code to print, whether or not anyone has paid yet.
+  assert.match(orders, /title="Casual visit QR"/);
+  assert.match(orders, /new URL\('\/casual', window\.location\.origin\)/);
+  assert.match(orders, /slug: 'casual-visit'/, 'the download is named for what it is');
+  const qr = await read('../src/components/admin/FormQRCode.jsx');
+  assert.match(qr, /title = 'Branded QR code'/, 'the form screens keep their wording');
+  assert.match(qr, /<h2 className="font-display text-2xl uppercase text-white">\{title\}<\/h2>/);
+});
+
+test('the club owns the door fee: price and switch live in Settings', async () => {
+  const { normalizeCasualPrice, normalizeLaunchSettings, launchSettingsChanged } = await import('../src/lib/launchSettings.js');
+  assert.equal(normalizeCasualPrice('15.60'), 1560);
+  assert.equal(normalizeCasualPrice(2000), 2000);
+  assert.equal(normalizeCasualPrice(''), 1560, 'an empty field keeps the default rather than clearing the price');
+  assert.throws(() => normalizeCasualPrice('50'), /between \$1 and \$1,000/);
+  assert.throws(() => normalizeCasualPrice('abc'), /in dollars/);
+
+  const normalized = normalizeLaunchSettings({ casual_visit_price_cents: 1560, target_launch_date: '2026-09-05' });
+  assert.equal(normalized.casual_payments_enabled, true, 'on unless switched off');
+  assert.equal(normalized.casual_visit_price_cents, 1560);
+  assert.ok(launchSettingsChanged({ casual_visit_price_cents: 2000 }, { casual_visit_price_cents: 1560 }),
+    'changing the price must enable Save');
+
+  const screen = await read('../src/components/admin/SoftLaunchSettings.jsx');
+  assert.match(screen, /field="casual_payments_enabled"/);
+  assert.match(screen, /htmlFor="casual-visit-price"/);
+  assert.match(screen, /never from their browser/);
 });

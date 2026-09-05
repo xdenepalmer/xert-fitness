@@ -77,7 +77,21 @@ export function normalizeLaunchSettings(settings = {}) {
     announcement_banner_text: announcement || null,
     fitbox_enabled: Boolean(settings.fitbox_enabled),
     fitbox_booking_url: fitboxUrl,
+    casual_payments_enabled: settings.casual_payments_enabled !== false,
+    casual_visit_price_cents: normalizeCasualPrice(settings.casual_visit_price_cents),
   };
+}
+
+/**
+ * The door fee, in cents. Kept inside the range the database will accept so a
+ * typo is refused here with an explanation rather than by a constraint later.
+ */
+export function normalizeCasualPrice(value, fallback = 1560) {
+  if (value === '' || value === null || value === undefined) return fallback;
+  const cents = typeof value === 'number' ? Math.round(value) : Number.parseInt(String(value).replace(/[^\d]/g, ''), 10);
+  if (!Number.isInteger(cents)) throw new Error('Enter the casual visit price in dollars, for example 15.60.');
+  if (cents < 100 || cents > 100000) throw new Error('The casual visit price must be between $1 and $1,000.');
+  return cents;
 }
 
 export function launchSettingsChanged(current = {}, saved = {}) {
@@ -91,6 +105,8 @@ export function launchSettingsChanged(current = {}, saved = {}) {
     'announcement_banner_text',
     'fitbox_enabled',
     'fitbox_booking_url',
+    'casual_payments_enabled',
+    'casual_visit_price_cents',
   ];
   return fields.some(field => String(current[field] ?? '') !== String(saved[field] ?? ''));
 }

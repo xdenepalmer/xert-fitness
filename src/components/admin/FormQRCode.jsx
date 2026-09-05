@@ -4,7 +4,13 @@ import { formQRFilename, qrCanvasBlob, renderBrandedFormQR } from '@/lib/branded
 
 const action = 'inline-flex min-h-11 items-center justify-center gap-2 border border-xert-steel/25 px-4 text-sm font-semibold text-xert-pale transition-colors hover:border-xert-steel hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 
-export default function FormQRCode({ form, publicURL, onNotice }) {
+export default function FormQRCode({
+  form,
+  publicURL,
+  onNotice,
+  title = 'Branded QR code',
+  description = 'For posters, the front desk or social posts. The QR always opens this form’s public link.',
+}) {
   const canvasRef = useRef(null);
   const qrFileRef = useRef(null);
   const generationRef = useRef(0);
@@ -71,10 +77,10 @@ export default function FormQRCode({ form, publicURL, onNotice }) {
 
   return (
     <section className="border border-xert-steel/20 bg-xert-ink p-5">
-      <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center bg-xert-steel/10 text-xert-steel"><QrCode className="h-5 w-5" /></span><div><h2 className="font-display text-2xl uppercase text-white">Branded QR code</h2><p className="mt-1 text-sm text-xert-pale/50">For posters, the front desk or social posts. The QR always opens this form’s public link.</p></div></div>
+      <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center bg-xert-steel/10 text-xert-steel"><QrCode className="h-5 w-5" /></span><div><h2 className="font-display text-2xl uppercase text-white">{title}</h2><p className="mt-1 text-sm text-xert-pale/50">{description}</p></div></div>
       <div className="mx-auto mt-5 max-w-72 bg-white p-3">
         <div className="relative aspect-square w-full">
-          <canvas ref={canvasRef} aria-label={`QR code for ${form.title}`} className={`h-full w-full transition-opacity ${ready ? 'opacity-100' : 'opacity-0'}`} />
+          <canvas ref={canvasRef} aria-label={`QR code for ${form.title || title}`} className={`h-full w-full transition-opacity ${ready ? 'opacity-100' : 'opacity-0'}`} />
           {!ready && !error && <div role="status" className="absolute inset-0 grid place-items-center text-sm text-slate-600"><span><LoaderCircle className="mr-2 inline h-5 w-5 animate-spin" />Creating QR…</span></div>}
         </div>
       </div>

@@ -23,6 +23,9 @@ test('normalizes every live platform control, including the server payment switc
     announcement_banner_text: 'Foundation registrations open',
     fitbox_enabled: true,
     fitbox_booking_url: 'https://portal.fitboxcorp.com/xert',
+    // The casual door fee is a live control too, defaulting to on at $15.60.
+    casual_payments_enabled: true,
+    casual_visit_price_cents: 1560,
   });
 });
 
