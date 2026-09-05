@@ -620,6 +620,24 @@ export async function getMemberBookingRequests(filters = {}) {
  * writes a private notice for the member, so a staff booking is exactly a
  * member booking made by somebody else.
  */
+/**
+ * Casual visits paid at the door, on the visitor's own phone. Kept apart from
+ * orders because nothing is fulfilled: no account, no credits, just entry paid
+ * for. Returns installed:false until the migration is applied so the screen can
+ * say so instead of failing.
+ */
+export async function listCasualVisits({ limit = 200 } = {}) {
+  const { data, error } = await supabase.from('casual_visit_payments')
+    .select('id, full_name, email, phone, amount_cents, currency, status, created_at, stripe_payment_intent_id')
+    .order('created_at', { ascending: false })
+    .limit(Math.min(Math.max(Number(limit) || 200, 1), 500));
+  if (error) {
+    if (missingFitboxMirror(error) || error.code === 'PGRST205') return { installed: false, rows: [] };
+    throw new Error(error.message);
+  }
+  return { installed: true, rows: data || [] };
+}
+
 export async function staffBookMemberIntoClass(sessionId, memberId, requestId = globalThis.crypto?.randomUUID?.()) {
   if (!sessionId || !memberId) throw new Error('Choose a class and a member first.');
   if (!requestId) throw new Error('A secure booking request ID could not be created. Refresh and try again.');

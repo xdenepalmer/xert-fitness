@@ -147,3 +147,25 @@ export function casualVisitPaymentFromCheckout(checkout) {
     status: 'paid',
   };
 }
+
+/** Totals for the owner's screen: today, this month, and everything shown. */
+export function summarizeCasualVisits(rows = [], now = new Date()) {
+  const paid = (rows || []).filter(row => row?.status === 'paid');
+  const day = new Date(now); day.setHours(0, 0, 0, 0);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const total = list => list.reduce((sum, row) => sum + (Number(row.amount_cents) || 0), 0);
+  const since = start => paid.filter(row => new Date(row.created_at) >= start);
+  const today = since(day);
+  const month = since(monthStart);
+  const currencies = [...new Set(paid.map(row => String(row.currency || 'aud').toLowerCase()))];
+  return {
+    count: paid.length,
+    revenue: total(paid),
+    todayCount: today.length,
+    todayRevenue: total(today),
+    monthCount: month.length,
+    monthRevenue: total(month),
+    currency: currencies.length === 1 ? currencies[0] : 'aud',
+    mixedCurrencies: currencies.length > 1,
+  };
+}

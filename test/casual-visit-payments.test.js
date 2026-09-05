@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, casualVisitPaymentFromCheckout,
   casualVisitValidationError, formatCasualVisitPrice, normalizeCasualVisitPriceCents,
-  normalizeCasualVisitor, normalizeVisitorPhone,
+  normalizeCasualVisitor, normalizeVisitorPhone, summarizeCasualVisits,
 } from '../src/lib/casualVisit.js';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
@@ -92,4 +92,33 @@ test('the door fee never touches the member fulfilment path', async () => {
   assert.match(page, /forms\/peq-casual/, 'a first-time visitor is pointed at the questionnaire');
   const app = await read('../src/App.jsx');
   assert.match(app, /path="\/casual"/);
+});
+
+test('the owner sees door takings beside orders, counted only when actually paid', async () => {
+  const now = new Date('2026-09-05T10:00:00+10:00');
+  const summary = summarizeCasualVisits([
+    { status: 'paid', amount_cents: 1560, currency: 'aud', created_at: '2026-09-05T00:30:00Z' },
+    { status: 'paid', amount_cents: 1560, currency: 'aud', created_at: '2026-09-02T00:30:00Z' },
+    { status: 'refunded', amount_cents: 1560, currency: 'aud', created_at: '2026-09-02T00:30:00Z' },
+    { status: 'paid', amount_cents: 1560, currency: 'aud', created_at: '2026-08-20T00:30:00Z' },
+  ], now);
+  assert.equal(summary.count, 3, 'a refunded visit is not takings');
+  assert.equal(summary.todayCount, 1);
+  assert.equal(summary.todayRevenue, 1560);
+  assert.equal(summary.monthCount, 2);
+  assert.equal(summary.monthRevenue, 3120);
+  assert.deepEqual(summarizeCasualVisits([], now).revenue, 0);
+
+  const data = await read('../src/lib/adminData.js');
+  assert.match(data, /export async function listCasualVisits/);
+  assert.match(data, /from\('casual_visit_payments'\)/);
+  assert.match(data, /return \{ installed: false, rows: \[\] \}/,
+    'the screen says so rather than failing before the migration is applied');
+
+  const orders = await read('../src/components/admin/OrdersManager.jsx');
+  assert.match(orders, /Casual visits/);
+  assert.match(orders, /Paid at the door on the visitor&apos;s own phone/);
+  assert.match(orders, /summarizeCasualVisits\(casualVisits\.rows\)/);
+  assert.match(orders, /casualVisits\.installed && casualVisits\.rows\.length > 0/,
+    'an empty list adds nothing to the screen');
 });

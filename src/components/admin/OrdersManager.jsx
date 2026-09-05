@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { ChevronLeft, ChevronRight, Copy, Download, RefreshCw, RotateCcw, X } from 'lucide-react';
-import { getAllOrders, reconcileOrder, refundOrder } from '@/lib/adminData';
+import { getAllOrders, listCasualVisits, reconcileOrder, refundOrder } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '@/lib/orderAnalytics';
 import { formatPackPrice } from '@/lib/products';
+import { formatCasualVisitPrice, summarizeCasualVisits } from '@/lib/casualVisit';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import { ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
@@ -39,6 +40,7 @@ export default function OrdersManager() {
   const [refundConfirmation, setRefundConfirmation] = useState('');
   const [refunding, setRefunding] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [casualVisits, setCasualVisits] = useState({ installed: true, rows: [] });
 
   const load = async () => {
     setLoading(true);
@@ -53,6 +55,16 @@ export default function OrdersManager() {
   };
 
   useEffect(() => { void load(); }, []);
+  // Door fees sit beside orders rather than inside them: nothing is fulfilled,
+  // so they never belong in a ledger that grants credits.
+  useEffect(() => {
+    let active = true;
+    listCasualVisits()
+      .then(result => { if (active) setCasualVisits(result); })
+      .catch(() => { if (active) setCasualVisits({ installed: true, rows: [] }); });
+    return () => { active = false; };
+  }, []);
+  const casualSummary = useMemo(() => summarizeCasualVisits(casualVisits.rows), [casualVisits.rows]);
 
   const currencies = useMemo(() => [...new Set(orders.map(order => String(order.currency || 'aud').toLowerCase()))].sort(), [orders]);
   const filteredOrders = useMemo(() => filterOrders(orders, { search, status: statusFilter, currency: currencyFilter, days: daysFilter }), [currencyFilter, daysFilter, orders, search, statusFilter]);
@@ -193,6 +205,51 @@ export default function OrdersManager() {
           </div>
         ))}
       </div>
+
+      {/* Casual visits paid at the door */}
+      {casualVisits.installed && casualVisits.rows.length > 0 && (
+        <div className="mb-8 border border-xert-steel/20 bg-xert-ink">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-xert-steel/15 p-4">
+            <h3 className="font-display text-sm uppercase tracking-wider text-xert-offwhite">Casual visits</h3>
+            <p className="font-body text-xs text-xert-concrete/45">
+              Paid at the door on the visitor&apos;s own phone. No account, no credits.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-px bg-xert-steel/10 lg:grid-cols-4">
+            {[
+              { label: 'Today', value: `${formatCasualVisitPrice(casualSummary.todayRevenue, casualSummary.currency)}` },
+              { label: 'Visits today', value: casualSummary.todayCount },
+              { label: 'This month', value: formatCasualVisitPrice(casualSummary.monthRevenue, casualSummary.currency) },
+              { label: 'Visits this month', value: casualSummary.monthCount },
+            ].map(item => (
+              <div key={item.label} className="bg-xert-ink p-4">
+                <p className="font-display text-2xl tabular-nums text-xert-offwhite">{item.value}</p>
+                <p className="mt-1 font-body text-xs uppercase tracking-wider text-xert-concrete/40">{item.label}</p>
+              </div>
+            ))}
+          </div>
+          <ul className="max-h-72 divide-y divide-xert-steel/10 overflow-y-auto">
+            {casualVisits.rows.slice(0, 50).map(visit => (
+              <li key={visit.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="truncate font-body text-sm text-xert-offwhite">{visit.full_name}</p>
+                  <p className="truncate font-body text-xs text-xert-concrete/45">
+                    <a className="hover:text-xert-steel" href={`mailto:${visit.email}`}>{visit.email}</a>
+                    {visit.phone ? <> · <a className="hover:text-xert-steel" href={`tel:${visit.phone}`}>{visit.phone}</a></> : null}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-body text-sm tabular-nums text-xert-offwhite">{formatCasualVisitPrice(visit.amount_cents, visit.currency)}</p>
+                  <p className="font-body text-xs text-xert-concrete/40">
+                    {new Date(visit.created_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}
+                    {visit.status === 'refunded' ? ' · refunded' : ''}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* 30-day revenue chart */}
       {!loading && stats.currencies.length <= 1 && filteredOrders.some(o => o.status === 'paid') && (
