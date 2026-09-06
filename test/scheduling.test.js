@@ -191,3 +191,41 @@ test('builds a complete repeat block for one atomic insert', () => {
   assert.equal(copies[0].public_visible, false);
   assert.equal('id' in copies[0], false);
 });
+
+test('a class that has already started can still be corrected', () => {
+  const started = {
+    class_type: 'XERT Engine', title: 'Morning Engine', status: 'published',
+    booking_mode: 'instant_book', intensity_level: 'High', capacity: 8,
+    duration_minutes: 45, public_visible: true,
+    start_time: '2026-09-06T20:00:00Z', end_time: '2026-09-06T20:45:00Z',
+  };
+  const now = Date.parse('2026-09-07T00:00:00Z');
+
+  // Creating a published class in the past is still a mistake.
+  assert.throws(() => normalizeClassSession(started, { now }), /must start in the future/i);
+
+  // Editing one that has already run is not: the owner fixes the coach name.
+  const edited = normalizeClassSession({ ...started, coach_name: 'Kirra' }, { now, allowPastStart: true });
+  assert.equal(edited.coach_name, 'Kirra');
+  assert.equal(edited.status, 'published');
+});
+
+test('marking a class full keeps it on the public timetable', () => {
+  const full = normalizeClassSession({
+    class_type: 'XERT Engine', title: 'Morning Engine', status: 'full',
+    booking_mode: 'instant_book', intensity_level: 'High', capacity: 8,
+    duration_minutes: 45, public_visible: true,
+    start_time: '2027-09-06T20:00:00Z', end_time: '2027-09-06T20:45:00Z',
+  });
+  // Previously this flipped to false, which deleted the class from the
+  // timetable instead of showing it as full.
+  assert.equal(full.public_visible, true);
+
+  const cancelled = normalizeClassSession({
+    class_type: 'XERT Engine', title: 'Morning Engine', status: 'cancelled',
+    booking_mode: 'instant_book', intensity_level: 'High', capacity: 8,
+    duration_minutes: 45, public_visible: true,
+    start_time: '2027-09-06T20:00:00Z', end_time: '2027-09-06T20:45:00Z',
+  });
+  assert.equal(cancelled.public_visible, false);
+});

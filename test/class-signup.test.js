@@ -38,19 +38,60 @@ test('each booking mode offers the matching public action', () => {
   assert.equal(signup.detail, '3 spots left');
 });
 
-test('sign-ups close once the last spot is taken', () => {
+test('a full class offers the waitlist instead of a dead button', () => {
   const full = classSignupState({
     session: session({ booking_mode: 'instant_book' }),
     availability: { spots_left: 0 },
     now: NOW,
   });
-  assert.equal(full.kind, 'full');
-  assert.equal(full.actionable, false);
+  assert.equal(full.kind, 'waitlist');
+  assert.equal(full.label, 'Join the waitlist');
+  // Still actionable — it just never holds a place.
+  assert.equal(full.actionable, true);
   assert.equal(full.takesSpot, false);
+  assert.equal(full.joinWaitlist, true);
 
   // An admin-flagged full class closes even when a count is unavailable.
   const flagged = classSignupState({ session: session({ booking_mode: 'instant_book', status: 'full' }), now: NOW });
-  assert.equal(flagged.kind, 'full');
+  assert.equal(flagged.kind, 'waitlist');
+
+  // A member queued for the class takes priority over a walk-up, so the public
+  // page must not offer the spot even though the count says one is free.
+  const queued = classSignupState({
+    session: session({ booking_mode: 'instant_book' }),
+    availability: { spots_left: 2, waiting: 1 },
+    now: NOW,
+  });
+  assert.equal(queued.kind, 'waitlist');
+
+  // The database's own verdict wins over the local arithmetic.
+  const refused = classSignupState({
+    session: session({ booking_mode: 'instant_book' }),
+    availability: { spots_left: 4, can_take_spot: false },
+    now: NOW,
+  });
+  assert.equal(refused.kind, 'waitlist');
+});
+
+test('the booking switch carried by availability governs the button', () => {
+  // The row says bookings are shut even though the caller passed the default.
+  const paused = classSignupState({
+    session: session({ booking_mode: 'instant_book' }),
+    availability: { spots_left: 5, bookings_open: false },
+    now: NOW,
+  });
+  assert.equal(paused.kind, 'interest');
+  assert.equal(paused.takesSpot, false);
+
+  // And the other way around: the row says open, so a real spot is offered.
+  const open = classSignupState({
+    session: session({ booking_mode: 'instant_book' }),
+    availability: { spots_left: 5, bookings_open: true, can_take_spot: true },
+    bookingsEnabled: false,
+    now: NOW,
+  });
+  assert.equal(open.kind, 'signup');
+  assert.equal(open.takesSpot, true);
 });
 
 test('an unknown remaining count never blocks a sign-up the database would allow', () => {
@@ -155,4 +196,63 @@ test('the sign-up RPC holds spots atomically and demands contact details', async
   assert.match(sql, /grant execute on function public\.submit_class_signup[\s\S]*to anon, authenticated/);
   assert.match(sql, /grant execute on function public\.public_class_availability\(\) to anon, authenticated/);
   assert.match(sql, /security definer/);
+});
+
+test('a missing availability row never promises a spot the database may refuse', () => {
+  // The RPC failed, so nothing is known about this class. Offering "Sign up"
+  // here is the one case the module documents itself as avoiding.
+  const outage = classSignupState({
+    session: session({ booking_mode: 'instant_book' }),
+    availability: undefined,
+    now: NOW,
+  });
+  assert.equal(outage.kind, 'request');
+  assert.equal(outage.takesSpot, false);
+
+  // Unlimited capacity is a different thing entirely and still takes a spot.
+  const unlimited = classSignupState({
+    session: session({ booking_mode: 'instant_book', capacity: null }),
+    availability: { spots_left: null, capacity: null },
+    now: NOW,
+  });
+  assert.equal(unlimited.kind, 'signup');
+  assert.equal(unlimited.takesSpot, true);
+});
+
+test('a full request-to-book class stops inviting requests staff cannot accept', () => {
+  const full = classSignupState({
+    session: session({ booking_mode: 'request_to_book' }),
+    availability: { spots_left: 0, capacity: 8 },
+    now: NOW,
+  });
+  assert.equal(full.kind, 'waitlist');
+  assert.equal(full.joinWaitlist, true);
+
+  const queued = classSignupState({
+    session: session({ booking_mode: 'request_to_book' }),
+    availability: { spots_left: 3, capacity: 8, waiting: 2 },
+    now: NOW,
+  });
+  assert.equal(queued.kind, 'waitlist');
+
+  // With room it is still an ordinary request.
+  const open = classSignupState({
+    session: session({ booking_mode: 'request_to_book' }),
+    availability: { spots_left: 3, capacity: 8, waiting: 0 },
+    now: NOW,
+  });
+  assert.equal(open.kind, 'request');
+});
+
+test('the confirmation carries the handle that releases the spot again', () => {
+  const held = signupOutcomeMessage({ took_spot: true, spots_left: 4, cancel_token: 'tok-1' });
+  assert.equal(held.cancelToken, 'tok-1');
+
+  const waitlisted = signupOutcomeMessage({ took_spot: false, waitlisted: true });
+  assert.equal(waitlisted.title, "You're on the waitlist");
+
+  // A submission made while bookings are paused must never claim a spot.
+  const paused = signupOutcomeMessage({ took_spot: false, bookings_open: false, booking_mode: 'instant_book' });
+  assert.equal(paused.title, 'Interest registered');
+  assert.match(paused.body, /no spot is held/i);
 });

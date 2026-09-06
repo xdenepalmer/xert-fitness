@@ -710,7 +710,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       });
       setAttendeeSearch('');
       setAttendeeResults([]);
-      await Promise.all([refreshRoster(session.id), refreshBookings(session.id)]);
+      // refreshBookings loads both the public sign-ups and the member roster.
+      await refreshBookings(session.id);
     } catch (error) {
       toast({ title: 'Could not add that member', description: error.message, variant: 'destructive' });
     } finally {

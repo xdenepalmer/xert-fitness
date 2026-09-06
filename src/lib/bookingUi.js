@@ -45,7 +45,10 @@ export function classActionLabel({ booking, conflict, full, bookingMode }) {
   if (booking?.status === 'requested') return 'Requested';
   if (booking?.status === 'waitlisted') return 'Waitlisted';
   if (booking?.status === 'confirmed') return 'Booked';
-  if (full) return 'Join waitlist';
+  // A clash with a class the member already holds outranks fullness: joining a
+  // waitlist for an overlapping class only defers the collision to promotion
+  // time, when a credit is spent and they end up double-booked.
   if (conflict) return 'Time conflict';
+  if (full) return 'Join waitlist';
   return bookingMode === 'request_to_book' ? 'Request spot' : 'Book';
 }

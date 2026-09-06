@@ -51,17 +51,6 @@ export async function submitPartnerInterest(formData) {
   return { success: true };
 }
 
-export async function requestClassBooking(formData) {
-  if (isHoneypotFilled(formData)) return { success: true };
-  const payload = {
-    ...stripHoneypot(formData),
-    status: 'requested',
-  };
-  const { error } = await supabase.from('class_bookings').insert([payload]);
-  if (error) throw new Error(error.message);
-  return { success: true };
-}
-
 /**
  * Submits a public sign-up for one class. The class's own booking_mode decides
  * whether this holds a real spot (instant_book) or only records interest, and
@@ -79,7 +68,22 @@ export async function submitClassSignup(formData) {
     p_consent: formData.consent_to_contact === true,
     p_training_level: formData.training_level || null,
     p_notes: formData.notes || null,
+    p_join_waitlist: formData.join_waitlist === true,
   });
+  if (error) throw new Error(error.message);
+  return { success: true, ...(data || {}) };
+}
+
+/**
+ * Releases a spot taken through the public timetable, using the one-time token
+ * the sign-up returned. Anonymous visitors have no account, so this token is
+ * the only handle they have on their own place — without it a class reads full
+ * while the room is not.
+ */
+export async function cancelClassSignup(token) {
+  const trimmed = String(token || '').trim();
+  if (!trimmed) throw new Error('SIGNUP_NOT_FOUND');
+  const { data, error } = await supabase.rpc('cancel_class_signup', { p_token: trimmed });
   if (error) throw new Error(error.message);
   return { success: true, ...(data || {}) };
 }

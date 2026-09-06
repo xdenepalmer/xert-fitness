@@ -82,17 +82,24 @@ test('shiftMonth wraps across year boundaries', () => {
   assert.deepEqual(shiftMonth({ year: 2026, monthIndex: 0 }, -1), { year: 2025, monthIndex: 11 });
 });
 
-test('sessions group by local day, sort by start time, and isolate undated drafts', () => {
+test('sessions group by the gym day, sort by start time, and isolate undated drafts', () => {
+  // Brisbane is UTC+10 all year, so these are 5:00 pm and 6:00 am on the 5th,
+  // and 6:00 am on the 6th, at the gym — regardless of the machine's own clock.
   const sessions = [
-    { id: 'b', title: 'Later', start_time: new Date(2026, 8, 5, 17, 0).toISOString() },
-    { id: 'a', title: 'Earlier', start_time: new Date(2026, 8, 5, 6, 0).toISOString() },
-    { id: 'c', title: 'Other day', start_time: new Date(2026, 8, 6, 6, 0).toISOString() },
+    { id: 'b', title: 'Later', start_time: '2026-09-05T07:00:00Z' },
+    { id: 'a', title: 'Earlier', start_time: '2026-09-04T20:00:00Z' },
+    { id: 'c', title: 'Other day', start_time: '2026-09-05T20:00:00Z' },
     { id: 'd', title: 'No time yet', start_time: null },
   ];
   const { byDay, undated } = groupSessionsByDay(sessions);
   assert.deepEqual(byDay['2026-09-05'].map(s => s.id), ['a', 'b']);
   assert.deepEqual(byDay['2026-09-06'].map(s => s.id), ['c']);
   assert.deepEqual(undated.map(s => s.id), ['d']);
+
+  // The whole point: a UTC process files the 6:00 am class under the 4th if it
+  // uses the machine clock. The gym's morning class belongs to the gym's day.
+  assert.equal(new Date('2026-09-04T20:00:00Z').toISOString().slice(0, 10), '2026-09-04');
+  assert.ok(byDay['2026-09-04'] === undefined);
 
   const stats = monthSessionStats({
     '2026-09-05': [{ status: 'published' }, { status: 'draft' }],

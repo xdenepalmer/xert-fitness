@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { countdownVisibility } from '../src/lib/launchSettings.js';
+import { countdownVisibility, launchTargetTime } from '../src/lib/launchSettings.js';
 
 const SOURCE = new URL('../src/components/public/Countdown.jsx', import.meta.url);
 const NOW = new Date('2026-07-26T00:00:00Z');
@@ -57,4 +57,16 @@ test('the fallback opening date lives in one place', async () => {
     assert.doesNotMatch(source, /target_launch_date.*'\d{4}-\d{2}-\d{2}'|targetDate\s*=\s*'\d{4}-\d{2}-\d{2}'|\|\|\s*'\d{4}-\d{2}-\d{2}'/,
       `${file} must use DEFAULT_TARGET_LAUNCH_DATE, not its own hardcoded date`);
   }
+});
+
+test('the countdown ends at midnight in Kingaroy, not 10am', () => {
+  // The gym opens at the start of its own day. Parsing the bare date as UTC
+  // left the "opening in stages" block ticking through the opening morning.
+  assert.equal(countdownVisibility('2026-09-14', true, new Date('2026-09-13T23:59:00+10:00')), 'counting');
+  assert.equal(countdownVisibility('2026-09-14', true, new Date('2026-09-14T00:01:00+10:00')), 'hidden');
+  assert.equal(countdownVisibility('2026-09-14', true, new Date('2026-09-14T09:59:00+10:00')), 'hidden');
+
+  // The instant is the same one the clock counts to.
+  assert.equal(launchTargetTime('2026-09-14'), Date.parse('2026-09-14T00:00:00+10:00'));
+  assert.ok(Number.isNaN(launchTargetTime('not-a-date')));
 });

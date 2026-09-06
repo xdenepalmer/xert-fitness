@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 
-import { countdownVisibility, DEFAULT_TARGET_LAUNCH_DATE } from '@/lib/launchSettings';
+import { countdownVisibility, DEFAULT_TARGET_LAUNCH_DATE, launchTargetTime } from '@/lib/launchSettings';
 
 function getTimeLeft(targetDate) {
   const now = new Date().getTime();
-  const target = new Date(targetDate).getTime();
+  // Same instant countdownVisibility uses, so the clock and the show/hide rule
+  // cannot disagree by ten hours.
+  const target = launchTargetTime(targetDate);
   const diff = target - now;
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
   return {

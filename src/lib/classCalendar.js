@@ -2,6 +2,8 @@
 // Everything here is pure so the admin calendar, public calendar and node
 // tests share one behaviour for dates, grouping and template validation.
 
+import { gymDateKey } from './gymTime.js';
+
 const CLASS_TYPES = new Set(['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team']);
 const BOOKING_MODES = new Set(['interest_only', 'request_to_book', 'instant_book']);
 const INTENSITY_LEVELS = new Set(['Low', 'Moderate', 'High', 'Very high']);
@@ -48,7 +50,9 @@ export function monthGrid(year, monthIndex, { now = new Date() } = {}) {
   const leadingDays = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const totalCells = Math.ceil((leadingDays + daysInMonth) / 7) * 7;
-  const currentKey = localDateKey(now);
+  // "Today" means today at the gym, so a UTC process (CI, a server render) or a
+  // viewer on another clock still highlights the same cell the owner sees.
+  const currentKey = gymDateKey(now) || localDateKey(now);
 
   const days = Array.from({ length: totalCells }, (_, index) => {
     const date = new Date(year, monthIndex, 1 - leadingDays + index);
@@ -83,7 +87,9 @@ export function groupSessionsByDay(sessions = []) {
       undated.push(session);
       continue;
     }
-    const key = localDateKey(new Date(ms));
+    // Bucket by the gym's calendar day, not the viewer's: a 6:00 am Brisbane
+    // class belongs to that morning for everyone looking at the timetable.
+    const key = gymDateKey(new Date(ms)) || localDateKey(new Date(ms));
     (byDay[key] ||= []).push(session);
   }
   for (const key of Object.keys(byDay)) {
@@ -280,7 +286,7 @@ export function classSessionSeedForDate(dateKey, { startMinute = DEFAULT_CLASS_S
 }
 
 export function upcomingDayKeys(byDay, { now = new Date(), limit = 3 } = {}) {
-  const todayKey = localDateKey(now);
+  const todayKey = gymDateKey(now) || localDateKey(now);
   return Object.keys(byDay)
     .filter(key => key >= todayKey)
     .sort()

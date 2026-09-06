@@ -414,9 +414,21 @@ export async function updateLegacyBookingNotes(id, adminNotes) {
 
 // ─── Classes ──────────────────────────────────────────────────────────────────
 
-export async function getClassSessions(publicOnly = false) {
+/**
+ * `publicOnly` is the timetable's view of the world, so it matches what the
+ * member RPC already did: classes that are open to the public, still to come,
+ * and including the ones the owner has marked full so their card can say so.
+ * Without the time bound the List view opened on the oldest class in the
+ * database and the month counter included classes that had long since run.
+ */
+export async function getClassSessions(publicOnly = false, { now = new Date() } = {}) {
   let query = supabase.from('class_sessions').select('*').order('start_time', { ascending: true });
-  if (publicOnly) query = query.eq('public_visible', true).eq('status', 'published');
+  if (publicOnly) {
+    query = query
+      .eq('public_visible', true)
+      .in('status', ['published', 'full'])
+      .gt('start_time', new Date(now).toISOString());
+  }
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
@@ -438,7 +450,10 @@ export async function createClassSessions(sessionData) {
 }
 
 export async function updateClassSession(id, updates) {
-  const payload = normalizeClassSession(updates);
+  // An edit to a class that has already started is ordinary business (a coach
+  // name, a note, the capacity for a walk-in); only creating one in the past is
+  // a mistake worth blocking.
+  const payload = normalizeClassSession(updates, { allowPastStart: true });
   const guarded = await supabase.rpc('admin_update_class_session', {
     p_session_id: id,
     p_session: payload,

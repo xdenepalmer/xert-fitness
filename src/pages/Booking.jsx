@@ -497,7 +497,9 @@ export default function Booking() {
                         const existingBooking = memberBookingsBySession.get(s.id);
                         const isInterestOnly = s.booking_mode === 'interest_only';
                         const isRequest = s.booking_mode === 'request_to_book';
-                        const timeConflict = !full && !existingBooking ? bookingTimeConflict(s, myBookings) : null;
+                        // Computed even for a full class: joining its waitlist
+                        // would still land the member in two classes at once.
+                        const timeConflict = existingBooking ? null : bookingTimeConflict(s, myBookings);
                         const actionLabel = classActionLabel({ booking: existingBooking, conflict: timeConflict, full, bookingMode: s.booking_mode });
                         return (
                           <div
