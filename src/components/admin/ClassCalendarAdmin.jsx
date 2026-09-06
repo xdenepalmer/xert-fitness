@@ -654,15 +654,19 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     let active = true;
     const openIntent = async () => {
       try {
-        const { members } = await refreshBookings(target.id);
+        const { members, requests } = await refreshBookings(target.id);
         if (!active) return;
         setView('list');
         setTimeFilter(new Date(target.start_time).getTime() < Date.now() ? 'past' : 'upcoming');
         setExpandedBookings(target.id);
         if (initialAction === 'attendance') {
-          const eligible = members.some(member => ['confirmed', 'attended', 'no_show'].includes(member.status));
+          // Everyone in the room, not just the credit members — otherwise Today
+          // offers a Roll call button for a class the timetable filled and this
+          // answers "Roll call is not ready" for the very people in it.
+          const roll = attendanceRoll(members, requests);
+          const eligible = roll.some(person => ['confirmed', 'attended', 'no_show'].includes(person.status));
           if (new Date(target.start_time).getTime() <= Date.now() && eligible) {
-            setAttendanceDraft(createAttendanceDraft(members));
+            setAttendanceDraft(createAttendanceDraft(roll));
             setAttendanceSession(target);
           } else {
             toast({ title: 'Roll call is not ready', description: 'The roster is open so you can review this class.' });
@@ -1183,7 +1187,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             const activeRosterCount = roster.filter(member => ['requested', 'confirmed'].includes(member.status)).length;
             const waitlistedRoster = roster.filter(member => member.status === 'waitlisted');
             const promotionItem = waitlistOverview.find(item => item.session_id === s.id) || null;
-            const hasOpenPlace = s.capacity == null || activeRosterCount < s.capacity;
+            // The database's own count of both doors into the room. Counting
+            // credit members alone showed "Class roster (0/8)" and a live
+            // Promote next button for a class the timetable had filled to 8/8 —
+            // and the promotion was then refused with SESSION_FULL.
+            const placesTaken = capacityById[s.id]?.taken ?? activeRosterCount;
+            const hasOpenPlace = s.capacity == null || placesTaken < s.capacity;
             return (
             <div id={`class-session-${s.id}`} key={s.id} className="bg-xert-ink border border-xert-steel/20 scroll-mt-20">
               <div className="p-4">
@@ -1240,7 +1249,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                   {/* Credit-based member roster */}
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <h4 className="font-display text-sm text-xert-concrete/60 uppercase">
-                      Class roster ({activeRosterCount}{s.capacity ? `/${s.capacity}` : ''})
+                      Class roster ({placesTaken}{s.capacity ? `/${s.capacity}` : ''})
+                      {placesTaken !== activeRosterCount && (
+                        <span className="ml-2 font-body text-xs normal-case text-xert-concrete/40">
+                          {activeRosterCount} with credits · {placesTaken - activeRosterCount} from the timetable
+                        </span>
+                      )}
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {s.status === 'published' && new Date(s.start_time).getTime() > now && hasOpenPlace && waitlistedRoster.length > 0 && promotionItem && (

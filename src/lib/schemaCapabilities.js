@@ -58,6 +58,7 @@ export const REQUIRED_SCHEMA_CAPABILITIES = Object.freeze({
   email_notifications: 'Apply supabase/migrations/20260903010000_email_notifications.sql in Supabase.',
   form_prerequisites: 'Apply supabase/migrations/20260904010000_form_prerequisites.sql in Supabase.',
   booking_integrity_overhaul: 'Apply supabase/migrations/20260906010000_booking_integrity_overhaul.sql in Supabase.',
+  booking_overhaul_repair: 'Apply supabase/migrations/20260906020000_booking_overhaul_repair.sql in Supabase.',
 });
 
 export function summarizeSchemaCapabilities(rows) {

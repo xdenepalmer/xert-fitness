@@ -135,8 +135,14 @@ test('the queue goes first, and neither client shows a bare database code', asyn
   assert.match(bookingData, /BOOKINGS_PAUSED: 'Bookings are not open yet/);
 
   // Better than a good error: don't offer the button the database will refuse.
-  assert.match(page, /const queued = Number\(s\.waiting_count\) > 0;/);
-  assert.match(page, /const full = queued \|\| \(s\.spots_left !== null && s\.spots_left <= 0\);/);
+  // And decide it in ONE place — computing it separately for the label and for
+  // the action is exactly how a button reading "Join waitlist" came to call
+  // book_session.
+  const ui = await read('../src/lib/bookingUi.js');
+  assert.match(ui, /export function classIsClosedToBooking\(session\)/);
+  assert.match(ui, /if \(Number\(session\?\.waiting_count\) > 0\) return true;/);
+  assert.match(page, /const full = classIsClosedToBooking\(s\);/);
+  assert.match(page, /const joiningWaitlist = classIsClosedToBooking\(s\);/);
   assert.match(models, /if \(waiting_count \?\? 0\) > 0 \{ return true \}/);
   // And the count stays honest rather than being rewritten to zero.
   assert.match(page, /\$\{s\.waiting_count\} waiting/);

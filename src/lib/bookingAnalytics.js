@@ -63,6 +63,23 @@ export function bookingSelectionKey(booking) {
   return `${source}:${id}`;
 }
 
+/**
+ * Places held in one class, counting both doors into the room: member bookings
+ * that have committed a credit, and confirmed public timetable sign-ups.
+ *
+ * `admin_daily_operations` computes this as `places_held`; the fallback is for
+ * a database that has not taken the migration yet, and for the older shape
+ * where the public side was simply absent.
+ */
+export function classPlacesHeld(operation) {
+  if (operation?.places_held !== null && operation?.places_held !== undefined) {
+    return Number(operation.places_held) || 0;
+  }
+  return (Number(operation?.requested_count) || 0)
+    + (Number(operation?.confirmed_count) || 0)
+    + (Number(operation?.public_confirmed_count) || 0);
+}
+
 const BOOKING_MODE_NOTE = {
   interest_only: 'interest only — confirming this does not give anyone a place',
   request_to_book: 'request to book',
