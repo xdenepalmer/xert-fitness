@@ -16,7 +16,7 @@ import { pricesComingSoon } from '@/lib/launchSettings';
 import { PLATFORM_PROVIDERS, resolvePlatformProvider } from '@/lib/platformProvider';
 import { BOOKING_DEFAULTS } from '@/lib/contentDefaults';
 import { formatPackPrice, formatPackValidity, packCta, PRICES_COMING_SOON_LABEL } from '@/lib/products';
-import { activeBookingsBySession, bookingTimeConflict, classActionLabel } from '@/lib/bookingUi';
+import { activeBookingsBySession, bookingTimeConflict, classActionLabel, classIsClosedToBooking } from '@/lib/bookingUi';
 import { clearPendingWebCheckout } from '@/lib/webCheckoutRecovery';
 
 const nativeSteps = [
@@ -242,7 +242,12 @@ export default function Booking() {
     }
     setBookingId(s.id);
     try {
-      const joiningWaitlist = s.spots_left !== null && s.spots_left <= 0;
+      // The same rule the button label uses, and the same one book_session
+      // enforces: a class with anyone queued for it is closed to new bookings
+      // even when places have freed up, because the queue goes first. Deciding
+      // this twice, differently, is how a button labelled "Join waitlist" came
+      // to call book_session and answer SESSION_WAITLIST_FIRST.
+      const joiningWaitlist = classIsClosedToBooking(s);
       if (joiningWaitlist) await joinSessionWaitlist(s.id);
       else await bookSession(s.id);
       const requested = s.booking_mode === 'request_to_book';
@@ -493,11 +498,14 @@ export default function Booking() {
                     </div>
                     <div className="space-y-2">
                       {list.map(s => {
-                        const full = s.spots_left !== null && s.spots_left <= 0;
+                        const queued = Number(s.waiting_count) > 0;
+                        const full = classIsClosedToBooking(s);
                         const existingBooking = memberBookingsBySession.get(s.id);
                         const isInterestOnly = s.booking_mode === 'interest_only';
                         const isRequest = s.booking_mode === 'request_to_book';
-                        const timeConflict = !full && !existingBooking ? bookingTimeConflict(s, myBookings) : null;
+                        // Computed even for a full class: joining its waitlist
+                        // would still land the member in two classes at once.
+                        const timeConflict = existingBooking ? null : bookingTimeConflict(s, myBookings);
                         const actionLabel = classActionLabel({ booking: existingBooking, conflict: timeConflict, full, bookingMode: s.booking_mode });
                         return (
                           <div
@@ -530,7 +538,9 @@ export default function Booking() {
                             </div>
                             {s.spots_left !== null && (
                               <span className={`xert-chip shrink-0 ${full ? 'opacity-70' : ''}`}>
-                                {full ? 'Full' : `${s.spots_left} spot${s.spots_left === 1 ? '' : 's'} left`}
+                                {queued && s.spots_left > 0
+                                  ? `${s.waiting_count} waiting`
+                                  : full ? 'Full' : `${s.spots_left} spot${s.spots_left === 1 ? '' : 's'} left`}
                               </span>
                             )}
                             {isInterestOnly ? (

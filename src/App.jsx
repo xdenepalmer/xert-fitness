@@ -15,6 +15,7 @@ const ThankYou = lazy(() => import('./pages/ThankYou'));
 const TrainerInterest = lazy(() => import('./pages/TrainerInterest'));
 const PartnerInterest = lazy(() => import('./pages/PartnerInterest'));
 const SoftLaunchTimetable = lazy(() => import('./pages/SoftLaunchTimetable'));
+const ReleaseClassSpot = lazy(() => import('./pages/ReleaseClassSpot'));
 const AdminCommandCentre = lazy(() => import('./pages/AdminCommandCentre'));
 // Dev-only owner shell preview with fixture data; never routed in production builds.
 const AdminPreview = import.meta.env.DEV ? lazy(() => import('./pages/AdminPreview')) : null;
@@ -54,6 +55,7 @@ const AppRoutes = () => (
       <Route path="/trainer-interest" element={<TrainerInterest />} />
       <Route path="/partner-interest" element={<PartnerInterest />} />
       <Route path="/timetable" element={<SoftLaunchTimetable />} />
+      <Route path="/timetable/release" element={<ReleaseClassSpot />} />
       <Route path="/about" element={<About />} />
       <Route path="/coaches" element={<Coaches />} />
       <Route path="/events" element={<Events />} />

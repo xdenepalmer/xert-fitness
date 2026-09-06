@@ -2,6 +2,7 @@ import ClassSignupRoster from '@/components/admin/ClassSignupRoster';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Archive, CalendarPlus, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { blackoutsOverlappingSession } from '@/lib/scheduling';
+import { gymDateKey, gymTimeLabel } from '@/lib/gymTime';
 import {
   WEEKDAY_LABELS,
   dateFromKey,
@@ -32,7 +33,9 @@ const STATUS_DOT = {
   completed: 'bg-xert-steel/25',
 };
 
-const chipTime = value => new Date(value).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false });
+// The gym's clock, not the device's: the owner reading this on a phone that
+// picked up Sydney time must still see the hour the class actually runs.
+const chipTime = value => gymTimeLabel(value) || '—';
 
 function dayBlackouts(dayKey, blackouts) {
   const day = dateFromKey(dayKey);
@@ -86,6 +89,28 @@ function TemplateQuickAddRow({ template, dayKey, onQuickAdd }) {
   );
 }
 
+/**
+ * One line answering "how full is this?" from the shared capacity count, which
+ * includes member credit bookings and public timetable sign-ups alike.
+ */
+export function occupancyLine(counts, capacity) {
+  const taken = Number(counts?.taken) || 0;
+  const pending = Number(counts?.pending) || 0;
+  const waiting = Number(counts?.waiting) || 0;
+  const parts = [`${taken}${capacity ? ` / ${capacity}` : ''} in the class`];
+  if (pending > 0) parts.push(`${pending} awaiting decision`);
+  if (waiting > 0) parts.push(`${waiting} on the waitlist`);
+  if (capacity && taken >= capacity && waiting === 0) parts.push('full');
+  return parts.join(' · ');
+}
+
+export function occupancyTone(counts, capacity) {
+  const taken = Number(counts?.taken) || 0;
+  if (capacity && taken >= capacity) return 'text-xert-orange';
+  if (taken > 0) return 'text-xert-steel';
+  return 'text-xert-concrete/40';
+}
+
 export default function ClassCalendarBoard({
   sessions,
   blackouts,
@@ -113,7 +138,7 @@ export default function ClassCalendarBoard({
   savingToBankId,
 }) {
   const [month, setMonth] = useState(() => monthOf(new Date()));
-  const [selectedDayKey, setSelectedDayKey] = useState(() => localDateKey(new Date()));
+  const [selectedDayKey, setSelectedDayKey] = useState(() => gymDateKey(new Date()) || localDateKey(new Date()));
   const panelRef = useRef(null);
   const skipInitialScroll = useRef(true);
 
@@ -137,10 +162,25 @@ export default function ClassCalendarBoard({
     }
   };
 
+  // Moving to another month used to leave the day panel headed with a date from
+  // the month you just left, with a live "New class this day" button and live
+  // bank quick-adds still aimed at it — so planning October could quietly
+  // create a class back in September.
+  const changeMonth = delta => {
+    setMonth(current => {
+      const next = shiftMonth(current, delta);
+      const day = dateFromKey(selectedDayKey);
+      if (day && (day.getFullYear() !== next.year || day.getMonth() !== next.monthIndex)) {
+        setSelectedDayKey(localDateKey(new Date(next.year, next.monthIndex, 1)));
+      }
+      return next;
+    });
+  };
+
   const goToday = () => {
     const now = new Date();
     setMonth(monthOf(now));
-    setSelectedDayKey(localDateKey(now));
+    setSelectedDayKey(gymDateKey(now) || localDateKey(now));
   };
 
   const selectedDate = dateFromKey(selectedDayKey);
@@ -156,11 +196,11 @@ export default function ClassCalendarBoard({
       {/* Month navigation */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setMonth(current => shiftMonth(current, -1))} aria-label="Previous month"
+          <button type="button" onClick={() => changeMonth(-1)} aria-label="Previous month"
             className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/30 text-xert-concrete/60 hover:border-xert-steel hover:text-xert-offwhite transition-colors">
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => setMonth(current => shiftMonth(current, 1))} aria-label="Next month"
+          <button type="button" onClick={() => changeMonth(1)} aria-label="Next month"
             className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/30 text-xert-concrete/60 hover:border-xert-steel hover:text-xert-offwhite transition-colors">
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -293,13 +333,12 @@ export default function ClassCalendarBoard({
                       {session.end_time ? `–${chipTime(session.end_time)}` : ''} · {session.class_type}
                       {session.coach_name ? ` · ${session.coach_name}` : ''} · Cap {session.capacity}
                     </p>
-                    {signupCounts[session.id]?.taken > 0 && (
-                      <p className="mt-1 font-body text-xs text-xert-steel">
-                        {signupCounts[session.id].taken}
-                        {session.capacity ? ` / ${session.capacity}` : ''} signed up
-                        {signupCounts[session.id].pending > 0 ? ` · ${signupCounts[session.id].pending} awaiting decision` : ''}
-                      </p>
-                    )}
+                    {/* Always shown, so an empty class reads as empty rather
+                        than as a class with no line at all — the owner cannot
+                        answer "is Thursday 6am worth running?" from a blank. */}
+                    <p className={`mt-1 font-body text-xs ${occupancyTone(signupCounts[session.id], session.capacity)}`}>
+                      {occupancyLine(signupCounts[session.id], session.capacity)}
+                    </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap justify-end gap-2">
                     <button type="button" onClick={() => onOpenRoster(session)}

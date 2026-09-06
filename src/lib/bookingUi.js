@@ -41,11 +41,32 @@ export function bookingTimeConflict(session, bookings) {
   }) || null;
 }
 
+/**
+ * Is this class closed to new bookings?
+ *
+ * A class with anyone queued for it counts as closed even when places have
+ * since freed up: the queue goes first, and book_session enforces that with
+ * SESSION_WAITLIST_FIRST. The place count itself stays honest — "3 spots · 1
+ * waiting" is the truth — so this is the one place that turns the count and the
+ * queue into a single answer.
+ *
+ * Both the button's label and the action it performs read this. Deciding it
+ * twice is how a button labelled "Join waitlist" came to call book_session.
+ */
+export function classIsClosedToBooking(session) {
+  if (Number(session?.waiting_count) > 0) return true;
+  const left = session?.spots_left;
+  return left !== null && left !== undefined && Number(left) <= 0;
+}
+
 export function classActionLabel({ booking, conflict, full, bookingMode }) {
   if (booking?.status === 'requested') return 'Requested';
   if (booking?.status === 'waitlisted') return 'Waitlisted';
   if (booking?.status === 'confirmed') return 'Booked';
-  if (full) return 'Join waitlist';
+  // A clash with a class the member already holds outranks fullness: joining a
+  // waitlist for an overlapping class only defers the collision to promotion
+  // time, when a credit is spent and they end up double-booked.
   if (conflict) return 'Time conflict';
+  if (full) return 'Join waitlist';
   return bookingMode === 'request_to_book' ? 'Request spot' : 'Book';
 }

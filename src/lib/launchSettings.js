@@ -126,9 +126,28 @@ export function launchSettingsChanged(current = {}, saved = {}) {
  * (`announcement_banner_text` / `announcement_banner_enabled`), which is
  * admin-authored and can be switched off again.
  */
+/**
+ * `target_launch_date` is a bare calendar date, and `new Date('2026-09-14')`
+ * reads it as UTC midnight — which is 10:00 am in Kingaroy. The countdown
+ * therefore kept ticking through the opening morning and then vanished
+ * mid-morning, and the day counter dropped to "00 Days" from 10:00 am the day
+ * before. The gym opens at the start of its own day, so that is what we count
+ * down to: midnight in Brisbane, which is 14:00 UTC the day before.
+ */
+export function launchTargetTime(targetDate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(targetDate || '').trim());
+  if (!match) {
+    const loose = new Date(targetDate).getTime();
+    return Number.isFinite(loose) ? loose : NaN;
+  }
+  const [, year, month, day] = match.map(Number);
+  // Brisbane is UTC+10 all year — no daylight saving to track.
+  return Date.UTC(year, month - 1, day, 0, 0, 0) - 10 * 60 * 60 * 1000;
+}
+
 export function countdownVisibility(targetDate, enabled, now = new Date()) {
   if (!enabled) return 'hidden';
-  const target = new Date(targetDate).getTime();
+  const target = launchTargetTime(targetDate);
   if (!Number.isFinite(target)) return 'hidden';
   return target - now.getTime() <= 0 ? 'hidden' : 'counting';
 }

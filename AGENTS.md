@@ -23,3 +23,8 @@ Start with `README.md` for local setup, environment variables and deployment wor
 - Keep Supabase environment variables prefixed with `VITE_` when they must be available in the browser.
 - Never commit Supabase service-role keys or other secrets.
 - Run the relevant checks from `package.json` before finishing code changes.
+- Run `npm run sql:check` after touching anything under `supabase/migrations/` or
+  `src/supabase/`. It parses every statement and every function body — plpgsql
+  included — with PostgreSQL's own grammar. The test suite never sees a
+  migration, so without this the first place a syntax error shows up is the
+  Supabase SQL editor, against the live gym database.

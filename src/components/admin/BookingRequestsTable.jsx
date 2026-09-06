@@ -2,13 +2,15 @@ import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Download, RefreshCw, Undo2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import {
+  adminClassCapacity,
   getClassBookings, getMemberBookingRequests, updateBookingStatus,
   updateMemberBookingStatus, updateLegacyBookingNotes,
 } from '@/lib/adminData';
+import { gymDateTimeLabel } from '@/lib/gymTime';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import { downloadCsv } from '@/lib/csv';
-import { bookingCsvRows, bookingSelectionKey, bulkBookingStatusOptions, filterAdminBookings, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
+import { bookingActionKey, bookingCsvRows, bookingSelectionKey, classCapacityLine, bulkBookingStatusOptions, classHasStarted, filterAdminBookings, hiddenBookingCount, selectedBookingKeys, summarizeAdminBookings } from '@/lib/bookingAnalytics';
 import { adminBulkConfirmation, settleAdminMutations } from '@/lib/adminBulk';
 import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
@@ -41,15 +43,21 @@ export default function BookingRequestsTable() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkConfirmationOpen, setBulkConfirmationOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [capacityById, setCapacityById] = useState({});
+  const [overbook, setOverbook] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     try {
-      const [legacy, members] = await Promise.all([
+      const [legacy, members, capacity] = await Promise.all([
         getClassBookings(),
         getMemberBookingRequests(),
+        // How full each class is, so a decision to confirm is made with the
+        // room in view rather than blind.
+        adminClassCapacity().catch(() => ({ byId: {} })),
       ]);
+      setCapacityById(capacity?.byId || {});
       const rows = [
         ...legacy.map(booking => ({
           ...booking,
@@ -84,6 +92,10 @@ export default function BookingRequestsTable() {
     days: daysFilter,
   }), [bookings, daysFilter, search, sourceFilter, statusFilter]);
   const summary = useMemo(() => summarizeAdminBookings(filteredBookings), [filteredBookings]);
+  const hiddenByDate = useMemo(
+    () => hiddenBookingCount(bookings, { search, status: statusFilter, source: sourceFilter, days: daysFilter }),
+    [bookings, daysFilter, search, sourceFilter, statusFilter],
+  );
   const pageCount = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
   const visibleBookings = useMemo(() => filteredBookings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filteredBookings, page]);
   const firstResult = filteredBookings.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
@@ -115,15 +127,26 @@ export default function BookingRequestsTable() {
     setSelectedKeys(new Set());
   }, [daysFilter, search, sourceFilter, statusFilter]);
 
-  const handleStatusUpdate = async (booking, status) => {
-    const actionKey = `${booking.source}-${booking.id}`;
+  const handleStatusUpdate = async (booking, status, { allowOverbook = false } = {}) => {
+    const actionKey = bookingActionKey(booking);
     setUpdatingKey(actionKey);
     try {
       let result = null;
       if (booking.source === 'member') {
         result = await updateMemberBookingStatus(booking.id, status);
       } else {
-        await updateBookingStatus(booking.id, status);
+        result = await updateBookingStatus(booking.id, status, { allowOverbook });
+        // The database returns nothing when the row already had this status,
+        // and the queue used to announce a change it had not made.
+        if (result && result.changed === false) {
+          toast({
+            title: 'Already up to date',
+            description: `${booking.full_name || 'This booking'} was already ${status.replace(/_/g, ' ')}. Someone may have changed it while this page was open.`,
+          });
+          await load();
+          setPage(1);
+          return;
+        }
       }
       const memberNotice = result?.warning
         || (result?.notice_created
@@ -138,6 +161,13 @@ export default function BookingRequestsTable() {
       await load();
       setPage(1);
     } catch (e) {
+      // Confirming into a full class is refused rather than silently
+      // overselling. Squeezing someone in is still allowed — it just has to be
+      // asked for, so the owner knows the room will be over its capacity.
+      if (/CLASS_FULL|CLASS_WAITLISTED/i.test(e.message || '')) {
+        setOverbook({ booking, status, reason: e.message });
+        return;
+      }
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
     } finally {
       setUpdatingKey('');
@@ -215,7 +245,7 @@ export default function BookingRequestsTable() {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search member, contact or class" aria-label="Search bookings"
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, contact, class or note" aria-label="Search bookings"
           className="sm:col-span-2 bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite placeholder-xert-concrete/30 focus:outline-none focus:border-xert-red" />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} aria-label="Filter bookings by status"
           className="bg-xert-ink border border-xert-steel/40 px-4 py-2.5 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
@@ -235,6 +265,16 @@ export default function BookingRequestsTable() {
           </button>
         </div>
       </div>
+
+      {hiddenByDate > 0 && (
+        <button type="button" onClick={() => setDaysFilter('all')}
+          className="mb-6 flex w-full flex-wrap items-center gap-2 border border-xert-orange/40 bg-xert-orange/[0.06] p-3 text-left transition-colors hover:border-xert-orange">
+          <span className="font-body text-sm text-xert-offwhite">
+            {hiddenByDate} older {hiddenByDate === 1 ? 'booking is' : 'bookings are'} hidden by the date filter.
+          </span>
+          <span className="font-body text-xs uppercase tracking-wider text-xert-orange">Show all time</span>
+        </button>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         {[
@@ -308,7 +348,16 @@ export default function BookingRequestsTable() {
                   </div>
                   {b.session && (
                     <p className="font-body text-xs text-xert-concrete/40 mt-1">
-                      {b.session.title} · {b.session.start_time ? new Date(b.session.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                      {b.session.title} · {gymDateTimeLabel(b.session.start_time)}
+                    </p>
+                  )}
+                  {/* Staff used to decide Confirm or Decline with no idea
+                      whether the class had two places left or twenty, and an
+                      interest-only registration looked exactly like a real
+                      request to book. */}
+                  {classCapacityLine(capacityById[b.class_session_id]) && (
+                    <p className="font-body text-xs text-xert-steel mt-1">
+                      {classCapacityLine(capacityById[b.class_session_id])}
                     </p>
                   )}
                   {b.admin_notes && <p className="font-body text-xs text-xert-concrete/30 mt-1 italic">{b.admin_notes}</p>}
@@ -317,53 +366,61 @@ export default function BookingRequestsTable() {
                 <div className="flex flex-wrap gap-2 sm:justify-end sm:shrink-0">
                   {b.status === 'requested' && (
                     <>
-                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
+                      <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'confirmed')}
                         className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
                         Confirm
                       </button>
-                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'waitlisted')}
+                      <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'waitlisted')}
                         className="min-h-11 px-3 py-2.5 border border-yellow-600/40 font-body text-xs text-yellow-400 hover:bg-yellow-900/20 transition-colors">
                         Waitlist
                       </button>
-                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'declined')}
+                      <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'declined')}
                         className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         Decline
                       </button>
                     </>
                   )}
-                  {b.status === 'confirmed' && (
+                  {/* Marking someone off frees their place in every count, so
+                      a mis-tap on a class three days away used to resell the
+                      room out from under them. */}
+                  {b.status === 'confirmed' && classHasStarted(b) && (
                     <>
-                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'attended')}
+                      <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'attended')}
                         className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">
                         Attended
                       </button>
-                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'no_show')}
+                      <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'no_show')}
                         className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         No show
                       </button>
                     </>
                   )}
+                  {b.status === 'confirmed' && !classHasStarted(b) && (
+                    <span className="self-center font-body text-[11px] text-xert-concrete/35">
+                      Roll call opens when the class starts
+                    </span>
+                  )}
                   {b.status === 'waitlisted' && (
                     <>
-                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
+                      <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'confirmed')}
                         className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
                         Confirm
                       </button>
-                      <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'declined')}
+                      <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'declined')}
                         className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">
                         Decline
                       </button>
                     </>
                   )}
                   {(b.status === 'attended' || b.status === 'no_show') && (
-                    <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'confirmed')}
+                    <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'confirmed')}
                       title={`Marked ${b.status === 'no_show' ? 'no show' : 'attended'} by mistake? Put them back to confirmed.`}
                       className="min-h-11 px-3 py-2.5 border border-xert-steel/40 font-body text-xs text-xert-pale hover:border-xert-steel hover:text-xert-offwhite transition-colors">
                       <Undo2 className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> Undo {b.status === 'no_show' ? 'no show' : 'attended'}
                     </button>
                   )}
-                  {(b.status === 'declined' || b.status === 'cancelled') && (
-                    <button disabled={Boolean(updatingKey)} onClick={() => handleStatusUpdate(b, 'requested')}
+                  {(b.status === 'declined' || b.status === 'cancelled') && !classHasStarted(b) && (
+                    <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'requested')}
                       title="Reopen this as a request so it can be confirmed or waitlisted again."
                       className="min-h-11 px-3 py-2.5 border border-xert-steel/40 font-body text-xs text-xert-pale hover:border-xert-steel hover:text-xert-offwhite transition-colors">
                       <Undo2 className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> Reopen
@@ -416,6 +473,24 @@ export default function BookingRequestsTable() {
           </div>
         </div>
       )}
+      <AdminConfirmDialog
+        open={Boolean(overbook)}
+        onOpenChange={open => { if (!open) setOverbook(null); }}
+        title="This class is already full"
+        description={overbook
+          ? `${overbook.booking.full_name || 'This person'} would be an extra place in ${overbook.booking.session?.title || 'this class'}, which is already at capacity.`
+          : ''}
+        warning={overbook
+          ? `${overbook.reason} Confirming anyway puts more people in the room than the class is set up for. Everyone already booked keeps their place.`
+          : ''}
+        confirmLabel="Squeeze them in"
+        onConfirm={() => {
+          const pending = overbook;
+          setOverbook(null);
+          if (pending) void handleStatusUpdate(pending.booking, pending.status, { allowOverbook: true });
+        }}
+        busy={Boolean(updatingKey)}
+      />
       <AdminConfirmDialog
         open={bulkConfirmationOpen}
         onOpenChange={setBulkConfirmationOpen}

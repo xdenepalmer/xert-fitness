@@ -6,6 +6,7 @@ import {
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminDailyOperations, getDashboardStats, getSoftLaunchSettings } from '@/lib/adminData';
 import { buildAdminActionQueue } from '@/lib/adminActionQueue';
+import { classPlacesHeld } from '@/lib/bookingAnalytics';
 import { ADMIN_QUICK_ACTIONS } from '@/lib/adminWorkspaces';
 import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_PANEL, ADMIN_TEXT } from '@/components/admin/ui';
 
@@ -162,9 +163,14 @@ export default function AdminToday({ onNavigate, preview = null }) {
               </div>
             </div>
             <div className="relative mt-5 grid grid-cols-3 gap-2 sm:max-w-md">
-              <Stat value={`${Number(focus.confirmed_count || 0)}${focus.capacity ? `/${focus.capacity}` : ''}`} label="Confirmed" />
+              {/* Both doors into the room. The Requested tile already added the
+                  public side; Confirmed and Waiting did not, so a class the
+                  timetable had filled read 0/8 on the first screen the owner
+                  sees. places_held is the same count the capacity guards use,
+                  so the tile and the guard cannot disagree. */}
+              <Stat value={`${classPlacesHeld(focus)}${focus.capacity ? `/${focus.capacity}` : ''}`} label="Confirmed" />
               <Stat value={Number(focus.requested_count || 0) + Number(focus.public_request_count || 0)} label="Requested" tone="text-amber-200" />
-              <Stat value={Number(focus.waitlist_count || 0)} label="Waiting" tone="text-xert-steel" />
+              <Stat value={Number(focus.waitlist_count || 0) + Number(focus.public_waitlist_count || 0)} label="Waiting" tone="text-xert-steel" />
             </div>
             {todayCount > 1 && (
               <button type="button" onClick={() => onNavigate?.('calendar')}

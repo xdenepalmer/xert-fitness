@@ -10,9 +10,15 @@
  *   instant_book     sign-ups accepted: the first `capacity` people take a spot
  *
  * Remaining places come from `public_class_availability()`, which counts
- * confirmed public sign-ups alongside member bookings. The database is what
- * actually enforces capacity; this module only decides what to show, and fails
- * safe to the non-committal option when availability is unknown.
+ * confirmed public sign-ups alongside member bookings and reports a class as
+ * having no places while a member is waitlisted for it. That function also
+ * reports the owner's site-wide booking switch (`bookings_open`) and whether a
+ * real spot can be taken right now (`can_take_spot`), so the button and the
+ * database agree about what pressing it will do.
+ *
+ * The database is what actually enforces capacity; this module only decides
+ * what to show, and fails safe to the non-committal option when availability is
+ * unknown.
  */
 
 export const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
@@ -43,8 +49,34 @@ export function spotsLabel(availability) {
 }
 
 /**
+ * Unlimited capacity and "we could not load availability" both arrive as a null
+ * remaining count, and they mean opposite things: the first is safe to offer a
+ * spot on, the second is not. This tells them apart by whether the row exists.
+ */
+export function availabilityKnown(availability) {
+  if (!availability || typeof availability !== 'object') return false;
+  return 'spots_left' in availability || 'capacity' in availability || 'can_take_spot' in availability;
+}
+
+/** How many people are queued ahead of a new sign-up, when the view reports it. */
+export function waitingCount(availability) {
+  const waiting = Number(availability?.waiting);
+  return Number.isFinite(waiting) ? Math.max(0, Math.trunc(waiting)) : 0;
+}
+
+/**
+ * The owner's site-wide booking switch. `public_class_availability` carries it
+ * per row so the timetable cannot show a bookable class from one source while
+ * the switch that governs it came from another.
+ */
+function bookingsAreOpen(availability, bookingsEnabled) {
+  if (availability && typeof availability.bookings_open === 'boolean') return availability.bookings_open;
+  return Boolean(bookingsEnabled);
+}
+
+/**
  * @returns {{kind: string, label: string, detail: string|null, spotsLeft: number|null,
- *            takesSpot: boolean, actionable: boolean}}
+ *            takesSpot: boolean, actionable: boolean, joinWaitlist: boolean}}
  */
 export function classSignupState({
   session = null,
@@ -61,6 +93,7 @@ export function classSignupState({
       spotsLeft: null,
       takesSpot: false,
       actionable: false,
+      joinWaitlist: false,
     };
   }
 
@@ -72,6 +105,7 @@ export function classSignupState({
       spotsLeft: null,
       takesSpot: false,
       actionable: true,
+      joinWaitlist: false,
     };
   }
 
@@ -84,15 +118,30 @@ export function classSignupState({
       spotsLeft: null,
       takesSpot: false,
       actionable: false,
+      joinWaitlist: false,
     };
   }
 
   const mode = normalizeBookingMode(session?.booking_mode);
   const spotsLeft = spotsRemaining(availability);
+  const known = availabilityKnown(availability);
+  const bookingsOpen = bookingsAreOpen(availability, bookingsEnabled);
+  const noPlacesLeft = known && (spotsLeft === 0 || waitingCount(availability) > 0);
+
+  const waitlistState = detail => ({
+    kind: 'waitlist',
+    label: 'Join the waitlist',
+    detail,
+    spotsLeft: 0,
+    takesSpot: false,
+    actionable: true,
+    joinWaitlist: true,
+  });
 
   // A site-wide booking pause never blocks interest capture: the class can
-  // still collect names, it just cannot hold a place.
-  if (!bookingsEnabled) {
+  // still collect names, it just cannot hold a place. The database enforces the
+  // same rule, so the promise on the button is the promise that is kept.
+  if (!bookingsOpen) {
     return {
       kind: 'interest',
       label: 'Register interest',
@@ -100,6 +149,7 @@ export function classSignupState({
       spotsLeft,
       takesSpot: false,
       actionable: true,
+      joinWaitlist: false,
     };
   }
 
@@ -111,18 +161,32 @@ export function classSignupState({
       spotsLeft,
       takesSpot: false,
       actionable: true,
+      joinWaitlist: false,
     };
   }
 
   if (mode === 'instant_book') {
-    if (session?.status === 'full' || spotsLeft === 0) {
+    // can_take_spot is the database's own answer, and it knows about the member
+    // waitlist and the class start time as well as the count.
+    const full = session?.status === 'full' || noPlacesLeft || availability?.can_take_spot === false;
+
+    if (full) {
+      // Never a dead end: the same form records "contact me if a place frees
+      // up", which holds no spot and is what the copy has always promised.
+      return waitlistState('Every spot is taken. Leave your details and we will contact you the moment one frees up.');
+    }
+    // Only promise a held spot when we actually know the class has room. When
+    // the availability call failed there is no count to trust, so fall back to
+    // the request the owner can accept or decline by hand.
+    if (!known) {
       return {
-        kind: 'full',
-        label: 'Class full',
-        detail: 'Every spot is taken. Register interest and we will contact you if one frees up.',
-        spotsLeft: 0,
+        kind: 'request',
+        label: 'Request spot',
+        detail: 'Staff confirm this booking.',
+        spotsLeft: null,
         takesSpot: false,
-        actionable: false,
+        actionable: true,
+        joinWaitlist: false,
       };
     }
     return {
@@ -132,7 +196,15 @@ export function classSignupState({
       spotsLeft,
       takesSpot: true,
       actionable: true,
+      joinWaitlist: false,
     };
+  }
+
+  // request_to_book still consumes the same room, and staff cannot confirm a
+  // request into a class that has no place for it — so offering "Request spot"
+  // on a full class is a promise nobody can keep.
+  if (noPlacesLeft) {
+    return waitlistState('This class is full. Leave your details and we will contact you if a place frees up.');
   }
 
   return {
@@ -142,6 +214,7 @@ export function classSignupState({
     spotsLeft,
     takesSpot: false,
     actionable: true,
+    joinWaitlist: false,
   };
 }
 
@@ -153,6 +226,19 @@ export function signupOutcomeMessage(result) {
     return {
       title: "You're in",
       body: `Your spot is confirmed and we have your details.${tail}`,
+      cancelToken: result?.cancel_token || null,
+    };
+  }
+  if (result?.waitlisted) {
+    return {
+      title: "You're on the waitlist",
+      body: 'This class is full. We have your details and will contact you the moment a spot frees up.',
+    };
+  }
+  if (result?.bookings_open === false) {
+    return {
+      title: 'Interest registered',
+      body: 'Bookings are not open yet, so no spot is held. We have your details and will contact you first when they open.',
     };
   }
   if (result?.booking_mode === 'interest_only') {
@@ -169,8 +255,10 @@ export function signupOutcomeMessage(result) {
 
 /** Maps database errors to copy a member can act on. */
 export const SIGNUP_ERRORS = {
-  CLASS_FULL: 'That was the last spot — this class just filled up. Register interest and we will contact you if one frees up.',
+  CLASS_FULL: 'That was the last spot — this class just filled up. Join the waitlist and we will contact you if one frees up.',
+  CLASS_WAITLISTED: 'Someone is already waiting for a place in this class, so they go first. Join the waitlist to be next in line.',
   ALREADY_SIGNED_UP: 'That email is already signed up for this class.',
+  ALREADY_BOOKED_AS_MEMBER: 'You already have a place in this class through your XERT account.',
   CLASS_STARTED: 'This class has already started.',
   CLASS_NOT_OPEN: 'This class is not open for sign-ups.',
   CLASS_NOT_FOUND: 'This class is no longer on the timetable.',
@@ -179,6 +267,8 @@ export const SIGNUP_ERRORS = {
   EMAIL_REQUIRED: 'Enter a valid email address.',
   PHONE_REQUIRED: 'Enter a valid phone number.',
   NOTES_TOO_LONG: 'Please shorten your note.',
+  SIGNUP_NOT_FOUND: 'We could not find that sign-up. It may already have been cancelled.',
+  SIGNUP_ALREADY_MARKED: 'This class has already been marked off, so it can no longer be cancelled here.',
 };
 
 export function friendlySignupError(error) {

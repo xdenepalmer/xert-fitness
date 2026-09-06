@@ -51,9 +51,18 @@ export default function CasualVisit() {
   useEffect(() => {
     document.title = 'Casual visit | XERT Fitness';
     let active = true;
-    supabase.from('admin_settings').select('casual_visit_price_cents, casual_payments_enabled').limit(1).maybeSingle()
-      .then(({ data }) => { if (active && data) setPriceCents(normalizeCasualVisitPriceCents(data.casual_visit_price_cents)); })
-      .catch(() => {});
+    // PostgREST's builder is a thenable, not a Promise, so it has no .catch.
+    // The price is a nicety here — the server reads it again before charging
+    // anyone — so a failure just leaves the default in place.
+    void (async () => {
+      try {
+        const { data } = await supabase.from('admin_settings')
+          .select('casual_visit_price_cents, casual_payments_enabled').limit(1).maybeSingle();
+        if (active && data) setPriceCents(normalizeCasualVisitPriceCents(data.casual_visit_price_cents));
+      } catch {
+        // Leave the default price showing.
+      }
+    })();
     return () => { active = false; };
   }, []);
 

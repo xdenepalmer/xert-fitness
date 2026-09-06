@@ -8,11 +8,15 @@ import {
   localDateKey,
   monthGrid,
   monthOf,
+  shiftDayKey,
   shiftMonth,
   upcomingDayKeys,
 } from '@/lib/classCalendar';
+import { gymDateKey, gymDayLabel, gymTimeLabel } from '@/lib/gymTime';
 
-const chipTime = value => new Date(value).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false });
+// The gym's clock: a 6:00 am Brisbane class must not read as 7:00 am to a
+// visitor whose phone picked up Sydney time.
+const chipTime = value => gymTimeLabel(value) || '';
 
 const monthNavClasses = 'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-xert-steel/25 bg-white/[0.03] text-xert-pale/70 hover:border-xert-steel hover:text-xert-offwhite transition-colors';
 
@@ -24,27 +28,42 @@ function dayNumberClasses({ isSelected, isToday, hasSessions }) {
   return 'text-xert-pale/45';
 }
 
-export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook, fitbox = null, availability = {} }) {
+export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook, fitbox = null, availability = {}, initialDayKey = null }) {
   const [month, setMonth] = useState(() => monthOf(new Date()));
-  const [selectedDayKey, setSelectedDayKey] = useState(() => localDateKey(new Date()));
+  const [selectedDayKey, setSelectedDayKey] = useState(() => gymDateKey(new Date()) || localDateKey(new Date()));
   const detailRef = useRef(null);
+  const gridRef = useRef(null);
   const hasAutoFocused = useRef(false);
   const skipInitialScroll = useRef(true);
+  // The whole month used to sit in the tab order — up to 42 stops before the
+  // class cards and their Sign up buttons. One roving stop, arrow keys inside.
+  const moveFocusTo = useRef(null);
 
   const { byDay } = useMemo(() => groupSessionsByDay(sessions), [sessions]);
   const grid = useMemo(() => monthGrid(month.year, month.monthIndex), [month]);
   const nextDays = useMemo(() => upcomingDayKeys(byDay, { limit: 3 }), [byDay]);
 
-  // When the published timetable first loads, land on the next day with a class.
+  // When the published timetable first loads, land on the day the visitor came
+  // for if they followed a link to one class, and otherwise on the next day
+  // with a class.
   useEffect(() => {
-    if (hasAutoFocused.current || nextDays.length === 0) return;
+    if (hasAutoFocused.current) return;
+    const firstKey = initialDayKey || nextDays[0];
+    if (!firstKey) return;
     hasAutoFocused.current = true;
-    const firstKey = nextDays[0];
     const firstDay = dateFromKey(firstKey);
     if (!firstDay) return;
     setSelectedDayKey(firstKey);
     setMonth(monthOf(firstDay));
-  }, [nextDays]);
+  }, [initialDayKey, nextDays]);
+
+  // Move real focus after an arrow key so the browser follows the roving stop.
+  useEffect(() => {
+    const key = moveFocusTo.current;
+    if (!key) return;
+    moveFocusTo.current = null;
+    gridRef.current?.querySelector(`[data-day-key="${key}"]`)?.focus();
+  });
 
   useEffect(() => {
     if (skipInitialScroll.current) {
@@ -62,6 +81,16 @@ export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook,
     }
   };
 
+  const onGridKeyDown = event => {
+    const steps = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, PageUp: -28, PageDown: 28 };
+    if (!(event.key in steps)) return;
+    event.preventDefault();
+    const nextKey = shiftDayKey(selectedDayKey, steps[event.key]);
+    if (!nextKey) return;
+    moveFocusTo.current = nextKey;
+    selectDay(nextKey);
+  };
+
   const monthCount = grid.weeks.flat().reduce(
     (count, cell) => count + (cell.inMonth ? (byDay[cell.key]?.length || 0) : 0),
     0
@@ -70,6 +99,11 @@ export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook,
   const selectedSessions = byDay[selectedDayKey] || [];
   const selectedLabel = selectedDate
     ? selectedDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
+    : '';
+  // A short status line, announced on change. The whole card list used to be
+  // the live region, so every change of day re-read every class in full.
+  const selectedStatus = selectedLabel
+    ? `${selectedSessions.length === 0 ? 'No classes' : `${selectedSessions.length} ${selectedSessions.length === 1 ? 'class' : 'classes'}`} on ${selectedLabel}`
     : '';
 
   return (
@@ -113,21 +147,24 @@ export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook,
 
       {/* Month grid */}
       <div className="xert-card overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-xert-steel/10 bg-white/[0.02]">
-          {WEEKDAY_LABELS.map(label => (
-            <div key={label} className="px-1 py-2.5 text-center font-body text-[10px] uppercase tracking-[0.18em] text-xert-pale/45 sm:px-2">
-              {label}
-            </div>
-          ))}
-        </div>
-        <div role="grid" aria-label={`Class timetable for ${grid.label}`} className="p-1 sm:p-1.5">
+        {/* The weekday names are the grid's column headers, so they belong
+            inside it — outside, a screen reader reads "15, 2 classes" with no
+            weekday to attach it to. */}
+        <div role="grid" aria-label={`Class timetable for ${grid.label}`} ref={gridRef} onKeyDown={onGridKeyDown} className="p-1 sm:p-1.5">
+          <div role="row" className="-mx-1 mb-1 grid grid-cols-7 border-b border-xert-steel/10 bg-white/[0.02] sm:-mx-1.5">
+            {WEEKDAY_LABELS.map(label => (
+              <div role="columnheader" key={label} className="px-1 py-2.5 text-center font-body text-[10px] uppercase tracking-[0.18em] text-xert-pale/45 sm:px-2">
+                {label}
+              </div>
+            ))}
+          </div>
           {grid.weeks.map((week, weekIndex) => (
             <div role="row" key={week[0].key} className={`grid grid-cols-7 gap-0.5 sm:gap-1 ${weekIndex === 0 ? '' : 'mt-0.5 sm:mt-1'}`}>
               {week.map(cell => {
                 const cellSessions = byDay[cell.key] || [];
                 const isSelected = cell.key === selectedDayKey;
                 const ariaLabel = [
-                  cell.date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }),
+                  gymDayLabel(cell.date) || cell.date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }),
                   cellSessions.length ? `${cellSessions.length} ${cellSessions.length === 1 ? 'class' : 'classes'}` : 'no classes',
                 ].join(', ');
                 return (
@@ -135,6 +172,8 @@ export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook,
                     <button
                       type="button"
                       onClick={() => selectDay(cell.key)}
+                      data-day-key={cell.key}
+                      tabIndex={cell.key === selectedDayKey ? 0 : -1}
                       aria-label={ariaLabel}
                       aria-pressed={isSelected}
                       className={`flex min-h-[56px] w-full flex-col items-stretch gap-1 rounded-xl p-1 text-left transition-colors sm:min-h-[88px] sm:p-1.5
@@ -174,7 +213,8 @@ export default function PublicClassCalendar({ sessions, bookingsEnabled, onBook,
       </div>
 
       {/* Selected day details */}
-      <div ref={detailRef} className="mt-8 scroll-mt-24" aria-live="polite">
+      <p className="sr-only" role="status" aria-live="polite">{selectedStatus}</p>
+      <div ref={detailRef} className="mt-8 scroll-mt-24">
         <div className="mb-4 flex items-center gap-3">
           <div className="h-px w-6 bg-xert-steel" aria-hidden="true" />
           <h3 className="font-display text-xl text-xert-offwhite uppercase">{selectedLabel}</h3>

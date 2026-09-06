@@ -1337,13 +1337,18 @@ final class XertStore: ObservableObject {
         }
     }
 
+    /// The database's own account of what the sign-up did, so the confirmation
+    /// the member reads matches whether a place was actually held.
+    @Published private(set) var classSignupReceipt: ClassSignupReceipt?
+
     @discardableResult
     func requestClassInterest(_ request: ClassInterestRequest) async -> Bool {
         isRequestingClassInterest = true
         errorMessage = nil
+        classSignupReceipt = nil
         defer { isRequestingClassInterest = false }
         do {
-            try await api.requestClassInterest(request)
+            classSignupReceipt = try await api.requestClassInterest(request)
             XertHaptics.play(.success)
             return true
         } catch {

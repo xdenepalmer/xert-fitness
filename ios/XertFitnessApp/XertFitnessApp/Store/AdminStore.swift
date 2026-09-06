@@ -146,6 +146,10 @@ final class AdminStore: ObservableObject {
     @Published private(set) var coaches: [AdminCoach] = []
     @Published private(set) var teamDirectoryStatusMessage: String?
     @Published private(set) var classRoster: [AdminRosterMember] = []
+    // People who took a spot or left a request through the public timetable.
+    // The roster used to show credit members only, so a class the timetable had
+    // filled read as "No member bookings for this class." on the owner's phone.
+    @Published private(set) var classSignups: [AdminLegacyBookingRequest] = []
     @Published private(set) var classRosterReadiness: [UUID: AdminMemberOnboardingSummary] = [:]
     @Published private(set) var loadedRosterSessionID: UUID?
     @Published private(set) var loadedRosterAt: Date?
@@ -1300,6 +1304,7 @@ final class AdminStore: ObservableObject {
         rosterLoadGeneration &+= 1
         requestedRosterSessionID = nil
         classRoster = []
+        classSignups = []
         classRosterReadiness = [:]
         loadedRosterSessionID = nil
         loadedRosterAt = nil
@@ -2139,10 +2144,16 @@ final class AdminStore: ObservableObject {
         hasLoadedBookingRequests && !bookingRequestsUnavailable
     }
 
+    /// The class was already full when the owner pressed Confirm. Held so the
+    /// view can offer "squeeze them in" rather than showing the bare word
+    /// CLASS_FULL with no way forward.
+    @Published var overbookPrompt: AdminOverbookPrompt?
+
     func updateBookingRequest(
         session: AuthSession,
         booking: AdminBookingRequest,
-        status: String
+        status: String,
+        allowOverbook: Bool = false
     ) async -> Bool {
         guard updatingBookingRequestIDs.isEmpty else { return false }
         guard bookingRequestsAreCurrent else {
@@ -2154,7 +2165,13 @@ final class AdminStore: ObservableObject {
         do {
             bookingDecisionStatusSessionID = nil
             bookingDecisionNoticeWarning = nil
-            let warning = try await api.adminUpdateBookingRequestStatus(session: session, booking: booking, status: status)
+            overbookPrompt = nil
+            let warning = try await api.adminUpdateBookingRequestStatus(
+                session: session,
+                booking: booking,
+                status: status,
+                allowOverbook: allowOverbook
+            )
             bookingDecisionNoticeWarning = warning
             await refreshBookingOperationsAfterMutation(
                 session: session,
@@ -2163,7 +2180,12 @@ final class AdminStore: ObservableObject {
             lastUpdatedAt = Date()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            let raw = error.localizedDescription
+            if raw.contains("CLASS_FULL") || raw.contains("CLASS_WAITLISTED") {
+                overbookPrompt = AdminOverbookPrompt(booking: booking, status: status, reason: raw)
+                return false
+            }
+            errorMessage = AdminBookingDecisionMessage.friendly(raw)
             return false
         }
     }
@@ -2352,6 +2374,7 @@ final class AdminStore: ObservableObject {
             loadedRosterSessionID = nil
             loadedRosterAt = nil
             classRoster = []
+            classSignups = []
             classRosterReadiness = [:]
         }
         rosterReadinessStatusMessage = nil
@@ -2366,6 +2389,17 @@ final class AdminStore: ObservableObject {
             loadedRosterSessionID = classSessionID
             loadedRosterAt = Date()
             classRoster = roster
+            // The public sign-ups are the other half of the room. A failure
+            // here must not blank the member roster that already loaded.
+            do {
+                let signups = try await api.adminClassSignups(session: session, classSessionID: classSessionID)
+                guard rosterLoadGeneration == generation else { return false }
+                classSignups = signups
+            } catch {
+                guard rosterLoadGeneration == generation else { return false }
+                classSignups = []
+                rosterReadinessStatusMessage = "Timetable sign-ups could not be loaded. Check the Command Centre on the web before running this class."
+            }
             do {
                 let summaries = try await api.adminMemberOnboardingSummaries(
                     session: session,

@@ -121,7 +121,14 @@ export function normalizeBlackoutPeriod(form = {}) {
   };
 }
 
-export function normalizeClassSession(session = {}, { now = Date.now() } = {}) {
+/**
+ * `allowPastStart` is set by the update path. Refusing a past start time is a
+ * sane rule when a class is being created, but applying it to every edit meant
+ * the owner could not fix a coach name or a typo on a class that had already
+ * run without first un-publishing it — which hides the class from everyone who
+ * signed up. The database guard still blocks the genuinely unsafe transitions.
+ */
+export function normalizeClassSession(session = {}, { now = Date.now(), allowPastStart = false } = {}) {
   const title = String(session.title || '').trim();
   if (!title) throw new Error('A class title is required.');
   if (!CLASS_TYPES.has(session.class_type)) throw new Error('Choose a valid class type.');
@@ -137,7 +144,9 @@ export function normalizeClassSession(session = {}, { now = Date.now() } = {}) {
   const startTime = session.start_time ? normalizedTimestamp(session.start_time, 'Class start time') : null;
   const endTime = session.end_time ? normalizedTimestamp(session.end_time, 'Class end time') : null;
   if (session.status === 'published' && !startTime) throw new Error('A published class needs a start time.');
-  if (session.status === 'published' && Date.parse(startTime) <= now) throw new Error('A published class must start in the future.');
+  if (session.status === 'published' && !allowPastStart && Date.parse(startTime) <= now) {
+    throw new Error('A published class must start in the future.');
+  }
   if (endTime && !hasValidTimeRange(startTime, endTime)) throw new Error('Class end time must be after its start time.');
 
   return {
@@ -153,7 +162,10 @@ export function normalizeClassSession(session = {}, { now = Date.now() } = {}) {
     beginner_friendly: Boolean(session.beginner_friendly),
     intensity_level: session.intensity_level,
     status: session.status,
-    public_visible: session.status === 'published' && Boolean(session.public_visible),
+    // 'full' stays on the public timetable so the card can render its Full
+    // badge. Taking it out of public view instead simply deleted the class from
+    // the timetable, leaving everyone who had signed up with no trace of it.
+    public_visible: ['published', 'full'].includes(session.status) && Boolean(session.public_visible),
     booking_mode: session.booking_mode,
     notes: optionalText(session.notes),
   };

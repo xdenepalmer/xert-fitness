@@ -6,7 +6,12 @@ import SwiftUI
 enum XertCalendarMonth {
     /// Day cells for the month containing `anchor`, with leading blanks so the
     /// first of the month lands under the correct weekday.
-    static func cells(for anchor: Date, calendar: Calendar = .current) -> [Date?] {
+    /// Every date in this app means a date at the gym, which is on one clock in
+    /// Kingaroy. Defaulting to the device's calendar meant a phone that picked
+    /// up Sydney time in summer grouped and created classes an hour out.
+    static let gymCalendar: Calendar = EventItem.calendar
+
+    static func cells(for anchor: Date, calendar: Calendar = XertCalendarMonth.gymCalendar) -> [Date?] {
         guard let interval = calendar.dateInterval(of: .month, for: anchor),
               let dayCount = calendar.range(of: .day, in: .month, for: anchor)?.count else {
             return []
@@ -21,14 +26,14 @@ enum XertCalendarMonth {
     }
 
     /// Weekday initials rotated to the locale's first weekday.
-    static func weekdaySymbols(calendar: Calendar = .current) -> [String] {
+    static func weekdaySymbols(calendar: Calendar = XertCalendarMonth.gymCalendar) -> [String] {
         let symbols = calendar.veryShortStandaloneWeekdaySymbols
         let first = calendar.firstWeekday - 1
         guard symbols.count == 7, (0..<7).contains(first) else { return symbols }
         return Array(symbols[first...]) + Array(symbols[..<first])
     }
 
-    static func shifted(_ anchor: Date, by months: Int, calendar: Calendar = .current) -> Date {
+    static func shifted(_ anchor: Date, by months: Int, calendar: Calendar = XertCalendarMonth.gymCalendar) -> Date {
         calendar.date(byAdding: .month, value: months, to: anchor) ?? anchor
     }
 
@@ -48,7 +53,7 @@ struct XertMonthCalendarView: View {
     let dayCount: (Date) -> Int
     var accentColor: Color = .xertSteel
 
-    private var calendar: Calendar { .current }
+    private var calendar: Calendar { XertCalendarMonth.gymCalendar }
 
     var body: some View {
         VStack(spacing: 12) {

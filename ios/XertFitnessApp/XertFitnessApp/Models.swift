@@ -258,8 +258,19 @@ struct ClassSession: Identifiable, Codable, Hashable {
     let booking_mode: String?
     let booked_count: Int?
     let spots_left: Int?
+    // Optional and defaulted so a database still on the previous shape decodes.
+    var waiting_count: Int? = nil
 
-    var isFull: Bool { spots_left.map { $0 <= 0 } ?? false }
+    /// Closed to new bookings. A class with someone queued for it counts as
+    /// full even when places have since freed up: the queue goes first, and
+    /// book_session enforces it. The place count itself stays honest, so the
+    /// app can say "3 spots · 1 waiting" rather than pretending there are none.
+    var isFull: Bool {
+        if (waiting_count ?? 0) > 0 { return true }
+        return spots_left.map { $0 <= 0 } ?? false
+    }
+
+    var queueLength: Int { waiting_count ?? 0 }
 
     var effectiveEndTime: Date {
         if let end_time, end_time > start_time { return end_time }
@@ -1364,6 +1375,17 @@ struct PrivateSessionRequest: Encodable, Equatable {
     }
 }
 
+struct ClassSignupPayload: Encodable, Equatable {
+    let p_session_id: UUID
+    let p_full_name: String
+    let p_email: String
+    let p_phone: String
+    let p_consent: Bool
+    let p_training_level: String?
+    let p_notes: String?
+    let p_join_waitlist: Bool
+}
+
 struct ClassInterestRequest: Encodable, Equatable {
     let class_session_id: UUID
     let full_name: String
@@ -1400,11 +1422,84 @@ struct ClassInterestRequest: Encodable, Equatable {
         consent_to_contact = true
         status = "requested"
     }
+
+    /// The argument shape submit_class_signup takes.
+    var signupPayload: ClassSignupPayload {
+        ClassSignupPayload(
+            p_session_id: class_session_id,
+            p_full_name: full_name,
+            p_email: email,
+            p_phone: phone,
+            p_consent: consent_to_contact,
+            p_training_level: training_level,
+            p_notes: notes,
+            p_join_waitlist: false
+        )
+    }
 }
 
 private extension String {
     var trimmedNilIfEmpty: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+}
+
+/// What submit_class_signup returns. The class's own booking mode decides
+/// whether this held a real place or only recorded the person's details, so the
+/// confirmation the member reads has to come from the database rather than from
+/// whatever the button happened to say.
+struct ClassSignupReceipt: Decodable, Equatable {
+    var status: String = "requested"
+    var booking_mode: String = "request_to_book"
+    var took_spot: Bool = false
+    var waitlisted: Bool = false
+    var bookings_open: Bool = true
+    var spots_left: Int?
+
+    var title: String {
+        if took_spot { return "You're in" }
+        if waitlisted { return "You're on the waitlist" }
+        return bookings_open && booking_mode != "interest_only" ? "Request received" : "Interest registered"
+    }
+
+    var message: String {
+        if took_spot {
+            guard let spots_left else { return "Your spot is confirmed and we have your details." }
+            return "Your spot is confirmed and we have your details. \(spots_left) spot\(spots_left == 1 ? "" : "s") remaining."
+        }
+        if waitlisted {
+            return "This class is full. We have your details and will contact you the moment a spot frees up."
+        }
+        if !bookings_open {
+            return "Bookings are not open yet, so no spot is held. We have your details and will contact you first when they open."
+        }
+        if booking_mode == "interest_only" {
+            return "Thanks — we have your details and will be in touch about this class."
+        }
+        return "Thanks — XERT will confirm your spot shortly."
+    }
+}
+
+/// Sign-up rejections in the member's words. These used to reach the form as
+/// raw PostgREST text, so a second sign-up for the same class showed the
+/// literal string `duplicate key value violates unique constraint …`.
+enum ClassSignupMessage {
+    static func friendly(_ raw: String) -> String {
+        if raw.contains("CLASS_FULL") { return "That was the last spot — this class just filled up." }
+        if raw.contains("CLASS_WAITLISTED") { return "Members on the waitlist have first claim on this class. We will open sign-ups again if a place clears." }
+        if raw.contains("ALREADY_SIGNED_UP") || raw.contains("class_bookings_active_signup_per_email") {
+            return "That email is already signed up for this class."
+        }
+        if raw.contains("ALREADY_BOOKED_AS_MEMBER") { return "You already have a place in this class through your XERT account." }
+        if raw.contains("CLASS_STARTED") { return "This class has already started." }
+        if raw.contains("CLASS_NOT_OPEN") { return "This class is not open for sign-ups." }
+        if raw.contains("CLASS_NOT_FOUND") { return "This class is no longer on the timetable." }
+        if raw.contains("CONSENT_REQUIRED") { return "Please agree to be contacted so we can confirm your place." }
+        if raw.contains("NAME_REQUIRED") { return "Enter your full name." }
+        if raw.contains("EMAIL_REQUIRED") { return "Enter a valid email address." }
+        if raw.contains("PHONE_REQUIRED") { return "Enter a valid mobile number." }
+        if raw.contains("NOTES_TOO_LONG") { return "Please shorten your note." }
+        return raw
     }
 }

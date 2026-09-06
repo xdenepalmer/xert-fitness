@@ -16,6 +16,9 @@ test('describes the actual class action state before availability fallbacks', ()
   assert.equal(classActionLabel({ booking: { status: 'waitlisted' }, full: false }), 'Waitlisted');
   assert.equal(classActionLabel({ booking: null, full: true }), 'Join waitlist');
   assert.equal(classActionLabel({ booking: null, conflict: {}, full: false }), 'Time conflict');
+  // A clash outranks fullness: joining the waitlist for an overlapping class
+  // only defers the double-booking to the moment a credit is spent.
+  assert.equal(classActionLabel({ booking: null, conflict: {}, full: true }), 'Time conflict');
   assert.equal(classActionLabel({ booking: null, full: false, bookingMode: 'request_to_book' }), 'Request spot');
 });
 

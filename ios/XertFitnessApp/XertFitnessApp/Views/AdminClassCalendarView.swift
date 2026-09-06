@@ -40,7 +40,10 @@ struct AdminClassCalendarSections: View {
     @State private var addingTemplateID: UUID?
     private let api = XertAPI()
 
-    private var calendar: Calendar { Calendar.current }
+    // The gym's clock. Grouping and composing class times on the device's
+    // calendar meant a 6:00 am quick-add from a phone on Sydney time created a
+    // 5:00 am class — an hour before the coach and the members arrive.
+    private var calendar: Calendar { XertCalendarMonth.gymCalendar }
 
     private var sessionsByDay: [Date: [AdminClassSession]] {
         var groups: [Date: [AdminClassSession]] = [:]

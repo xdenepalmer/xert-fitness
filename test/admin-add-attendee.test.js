@@ -50,6 +50,13 @@ test('staff can book a member into a class from the Command Centre', async () =>
   assert.match(calendar, /Add an attendee/);
   assert.match(calendar, /adminSearchMembers\(term\)/);
   assert.match(calendar, /staffBookMemberIntoClass\(session\.id, member\.id\)/);
-  assert.match(calendar, /refreshRoster\(session\.id\), refreshBookings\(session\.id\)/,
+  // This used to pin `refreshRoster(session.id)` — a function that does not
+  // exist — so the test stayed green while every front-desk booking ended in
+  // "Could not add that member: refreshRoster is not defined", after the member
+  // had already been booked and their credit spent. Assert the real loader, and
+  // that nothing calls the phantom one.
+  assert.match(calendar, /await refreshBookings\(session\.id\);/,
     'the roster reflects the new booking straight away');
+  assert.doesNotMatch(calendar, /refreshRoster\(/,
+    'refreshRoster does not exist; refreshBookings loads both lists');
 });
