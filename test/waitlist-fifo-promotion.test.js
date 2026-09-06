@@ -93,7 +93,13 @@ test('admin, member web, and SwiftUI expose the FIFO workflow', () => {
   assert.match(adminData, /rpc\('admin_promote_next_waitlisted_with_notice'/);
   assert.match(adminView, /Promote next/);
   assert.match(adminView, /Waitlist position/);
-  assert.match(adminView, /status === 'waitlisted'\) return \['waitlisted', 'cancelled'\]/);
+  // Confirming from the roster is allowed and the database still enforces the
+  // order: only the head of the queue can be promoted, and anyone else gets
+  // WAITLIST_ORDER_REQUIRED translated into plain English. Leaving 'confirmed'
+  // off the list meant the single most useful waitlist action was unavailable
+  // exactly where the queue is displayed.
+  assert.match(adminView, /status === 'waitlisted'\) return \['waitlisted', 'confirmed', 'declined', 'cancelled'\]/);
+  assert.match(adminData, /WAITLIST_ORDER_REQUIRED\|WAITLIST_PRIORITY/);
   assert.match(webAccount, /waitlist_position/);
   assert.match(swiftModel, /waitlist_position: Int\?/);
   assert.match(swiftModel, /Waitlisted · #/);

@@ -571,7 +571,7 @@ export async function getClassBookings(filters = {}) {
     const from = (page - 1) * pageSize;
     let query = supabase
       .from('class_bookings')
-      .select('id, full_name, email, phone, training_level, notes, status, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .select('id, full_name, email, phone, training_level, notes, status, admin_notes, created_at, class_session_id, class_sessions(title, start_time, coach_name, location_zone, capacity, booking_mode)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
     if (filters.class_session_id) query = query.eq('class_session_id', filters.class_session_id);
@@ -582,16 +582,53 @@ export async function getClassBookings(filters = {}) {
   });
 }
 
-export async function updateBookingStatus(id, status) {
+/**
+ * Confirming a request now takes a place in the room, so the database refuses
+ * one that would oversell. `allowOverbook` is the owner deciding to squeeze
+ * someone in anyway — a real and reasonable thing at a gym, but a decision
+ * rather than an accident.
+ *
+ * Returns the audit id, or null when nothing changed, so the caller can say
+ * "already confirmed" instead of reporting a change it did not make.
+ */
+export async function updateBookingStatus(id, status, { allowOverbook = false } = {}) {
   const mutation = normalizeBookingStatusMutation(id, status);
-  const { error } = await supabase.rpc('admin_update_request', {
+  const { data, error } = await supabase.rpc('admin_update_request', {
     p_request_type: 'class_booking',
     p_request_id: mutation.id,
     p_status: mutation.status,
     p_admin_notes: null,
     p_update_admin_notes: false,
+    p_allow_overbook: allowOverbook === true,
   });
-  if (error) throw new Error(error.message);
+  if (!error) return { changed: Boolean(data), auditId: data || null };
+
+  // A database still on the previous signature does not know the flag.
+  const signatureUnknown = ['42883', 'PGRST202'].includes(error.code)
+    || /admin_update_request.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+  if (signatureUnknown) {
+    const legacy = await supabase.rpc('admin_update_request', {
+      p_request_type: 'class_booking',
+      p_request_id: mutation.id,
+      p_status: mutation.status,
+      p_admin_notes: null,
+      p_update_admin_notes: false,
+    });
+    if (legacy.error) throw new Error(bookingRequestError(legacy.error.message));
+    return { changed: Boolean(legacy.data), auditId: legacy.data || null };
+  }
+  throw new Error(bookingRequestError(error.message));
+}
+
+/** Database codes the requests queue can act on, in the owner's words. */
+export function bookingRequestError(message) {
+  const raw = String(message || '');
+  if (/CLASS_FULL/i.test(raw)) return 'CLASS_FULL: this class is already full.';
+  if (/CLASS_WAITLISTED/i.test(raw)) return 'CLASS_WAITLISTED: someone is queued for this class ahead of them.';
+  if (/REQUEST_NOT_FOUND/i.test(raw)) return 'That request no longer exists. Refresh the queue.';
+  if (/ADMIN_REQUIRED/i.test(raw)) return 'Sign in as an admin to change bookings.';
+  if (/SESSION_NOT_STARTED/i.test(raw)) return 'That class has not started yet, so it cannot be marked off.';
+  return raw;
 }
 
 // Authenticated member bookings are a separate, credit-backed workflow from
@@ -602,7 +639,7 @@ export async function getMemberBookingRequests(filters = {}) {
     const from = (page - 1) * pageSize;
     let query = supabase
       .from('session_bookings')
-      .select('id, user_id, status, created_at, credit_batch_id, class_sessions(title, start_time, coach_name, location_zone)', { count: 'exact' })
+      .select('id, user_id, status, created_at, credit_batch_id, class_session_id, class_sessions(title, start_time, coach_name, location_zone, capacity, booking_mode)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
     if (filters.status) query = query.eq('status', filters.status);
@@ -1528,6 +1565,38 @@ export async function adminSessionRoster(sessionId) {
   });
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+/**
+ * How full every current class actually is, counting both doors into the room:
+ * member credit bookings and confirmed public sign-ups. Without this the
+ * Command Centre counted class_bookings only, so a class filled by members read
+ * as empty and a class filled from the timetable read as empty to every member
+ * path — and staff had no way to see whether confirming a request would
+ * oversell. Returns an empty map on a database that has not taken the
+ * migration yet, so the calendar still renders.
+ */
+export async function adminClassCapacity() {
+  const { data, error } = await supabase.rpc('admin_class_capacity');
+  if (error) {
+    const functionUnavailable = ['42883', 'PGRST202'].includes(error.code)
+      || /admin_class_capacity.*(?:not found|schema cache|does not exist)/i.test(error.message || '');
+    if (functionUnavailable) return { byId: {}, available: false };
+    throw new Error(error.message);
+  }
+  const byId = {};
+  for (const row of data || []) {
+    if (!row?.class_session_id) continue;
+    byId[row.class_session_id] = {
+      taken: Number(row.taken) || 0,
+      waiting: Number(row.waiting) || 0,
+      pending: Number(row.pending) || 0,
+      capacity: row.capacity === null || row.capacity === undefined ? null : Number(row.capacity),
+      spotsLeft: row.spots_left === null || row.spots_left === undefined ? null : Number(row.spots_left),
+      bookingMode: row.booking_mode || 'request_to_book',
+    };
+  }
+  return { byId, available: true };
 }
 
 export async function adminWaitlistOverview(limit = 20) {

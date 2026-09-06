@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, BellRing, CalendarDays, CheckCheck, ClipboardCheck, Copy, Download, List, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, adminSearchMembers, staffBookMemberIntoClass, getBlackoutPeriods, getClassTemplates, createClassTemplate } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminClassCapacity, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, adminSearchMembers, staffBookMemberIntoClass, getBlackoutPeriods, getClassTemplates, createClassTemplate, getSoftLaunchSettings } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
 import { classSessionFromTemplate, classSessionSeedForDate, classTemplateFromSession } from '@/lib/classCalendar';
 import { BOOKING_MODE_LABELS } from '@/lib/classSignup';
+import { gymDateKey, gymDateTimeLabel, gymDayLabel, gymTimeLabel } from '@/lib/gymTime';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
-import { blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
+import { attendanceRoll, attendanceRowId, blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import ClassCalendarBoard from '@/components/admin/ClassCalendarBoard';
 import ClassBankManager from '@/components/admin/ClassBankManager';
@@ -26,9 +27,13 @@ function classEditorStatuses(session) {
 }
 
 function rosterStatusOptions(status, sessionStatus, hasWaitlist = false) {
-  if (sessionStatus !== 'published') return [status];
+  // A class marked full is still a live class: its roster is exactly the one
+  // most likely to need a cancellation or a waitlist promotion.
+  if (!['published', 'full'].includes(sessionStatus)) return [status];
   if (status === 'requested') return ['requested', 'confirmed', 'waitlisted', 'declined', 'cancelled'];
-  if (status === 'waitlisted') return ['waitlisted', 'cancelled'];
+  // Promoting the head of the queue is the whole point of a waitlist, and it
+  // was the one thing the roster would not let staff do from here.
+  if (status === 'waitlisted') return ['waitlisted', 'confirmed', 'declined', 'cancelled'];
   if (['declined', 'cancelled'].includes(status)) {
     if (hasWaitlist) return [status];
     return [status, 'requested', 'confirmed'];
@@ -110,7 +115,8 @@ function rosterExportFilename(session) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
-  const date = session.start_time?.slice(0, 10) || 'undated';
+  // slice(0, 10) on a UTC timestamp files the 6am class under the previous day.
+  const date = gymDateKey(session.start_time) || 'undated';
   return `xert-roster-${className || 'class'}-${date}.csv`;
 }
 
@@ -500,6 +506,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [boardRosterSessionId, setBoardRosterSessionId] = useState(null);
   const [boardRosterLoading, setBoardRosterLoading] = useState(false);
   const [allSignups, setAllSignups] = useState([]);
+  const [capacityById, setCapacityById] = useState({});
+  const [bookingsEnabled, setBookingsEnabled] = useState(null);
   const [waitlistOverview, setWaitlistOverview] = useState([]);
   const [waitlistOverviewAvailable, setWaitlistOverviewAvailable] = useState(true);
   const [waitlistOverviewError, setWaitlistOverviewError] = useState('');
@@ -555,23 +563,35 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
   };
 
-  // Sign-ups grouped per class for the calendar's at-a-glance counts.
+  // How full each class is, at a glance on the calendar. The database counts
+  // both doors into the room; this only falls back to counting public sign-ups
+  // alone on an installation that has not taken the capacity migration, where
+  // it is still better than nothing.
   const signupCounts = useMemo(() => {
     const byId = {};
     for (const signup of allSignups) {
       const key = signup?.class_session_id;
       if (!key) continue;
-      if (!byId[key]) byId[key] = { taken: 0, pending: 0 };
+      if (!byId[key]) byId[key] = { taken: 0, pending: 0, waiting: 0, spotsLeft: null };
       if (signup.status === 'confirmed') byId[key].taken += 1;
       else if (signup.status === 'requested') byId[key].pending += 1;
+      else if (signup.status === 'waitlisted') byId[key].waiting += 1;
+    }
+    for (const [key, row] of Object.entries(capacityById)) {
+      byId[key] = {
+        taken: row.taken,
+        pending: row.pending,
+        waiting: row.waiting,
+        spotsLeft: row.spotsLeft,
+      };
     }
     return byId;
-  }, [allSignups]);
+  }, [allSignups, capacityById]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [loadedSessions, loadedBlackouts, loadedSignups] = await Promise.all([
+      const [loadedSessions, loadedBlackouts, loadedSignups, loadedCapacity, loadedSettings] = await Promise.all([
         getClassSessions(false),
         getBlackoutPeriods().catch(error => {
           toast({ title: 'Blackout checks unavailable', description: error.message, variant: 'destructive' });
@@ -581,12 +601,21 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         // each one is without opening it. Counts are a convenience; a failure
         // must not stop the timetable loading.
         getClassBookings().catch(() => []),
+        // The database's own count of how full each class is, across member
+        // bookings and public sign-ups alike.
+        adminClassCapacity().catch(() => ({ byId: {} })),
+        // The switch that decides whether anyone can actually take a spot. It
+        // lives on another screen entirely, so a calendar full of published
+        // classes gave no hint that every one of them said "Register interest".
+        getSoftLaunchSettings().catch(() => null),
         refreshWaitlistOverview(),
         loadTemplates(),
       ]);
       setSessions(loadedSessions);
       setBlackouts(loadedBlackouts);
       setAllSignups(loadedSignups);
+      setCapacityById(loadedCapacity?.byId || {});
+      if (loadedSettings) setBookingsEnabled(loadedSettings.bookings_enabled === true);
     } catch (error) {
       toast({ title: 'Could not load class sessions', description: error.message, variant: 'destructive' });
     } finally {
@@ -726,7 +755,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       return;
     }
     const session = sessions.find(item => item.id === sessionId);
-    if (session?.status !== 'published') {
+    if (!['published', 'full'].includes(session?.status)) {
       toast({ title: 'Class is not open for booking', description: 'Publish the class before reopening a member booking.', variant: 'destructive' });
       return;
     }
@@ -750,6 +779,20 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     } finally {
       setUpdatingBookingId(null);
     }
+  };
+
+  // The roster mixes both doors into the room. A member booking moves credits
+  // and writes the member a private notice, a public sign-up does neither, so
+  // the row's own source decides which database function is called. Sending a
+  // member's booking id to the public one used to fail every time with
+  // "A request record is required".
+  const handleRosterPersonStatus = async (person, status) => {
+    if (!person?.rowId) {
+      toast({ title: 'Could not update that person', description: 'Reload the class sign-ups and try again.', variant: 'destructive' });
+      return;
+    }
+    if (person.source === 'member') return handleRosterStatus(person.rowId, status);
+    return handleBookingStatus(person.rowId, status);
   };
 
   const handlePromoteNext = async candidate => {
@@ -909,39 +952,53 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     }
   };
 
+  // The door list. It used to carry credit members only, so for an instant_book
+  // class — the live soft-launch path — it was empty and the button was greyed
+  // out, and for a mixed class the owner walked onto the floor with half the
+  // names. Times are the gym's, so the CSV reads the way the door does.
   const exportRoster = (session) => {
+    const roll = attendanceRoll(roster, bookings);
     downloadCsv(
       rosterExportFilename(session),
-      roster.map(member => ({
+      roll.map(person => ({
         class_title: session.title || 'XERT class',
-        class_starts_at: session.start_time ? new Date(session.start_time).toLocaleString('en-AU') : '',
-        name: member.full_name || '',
-        email: member.email || '',
-        phone: member.phone || '',
-        status: member.status,
-        booked_at: member.booked_at ? new Date(member.booked_at).toLocaleString('en-AU') : '',
+        class_starts_at: gymDateTimeLabel(session.start_time),
+        name: person.full_name || person.member_name || '',
+        email: person.email || '',
+        phone: person.phone || '',
+        source: person.attendance_source === 'signup' ? 'Timetable sign-up' : 'Member credit',
+        status: person.status,
+        training_level: person.training_level || '',
+        notes: person.notes || '',
+        admin_notes: person.admin_notes || '',
+        booked_at: gymDateTimeLabel(person.booked_at || person.created_at),
       })),
       [
         { key: 'class_title', label: 'Class' },
         { key: 'class_starts_at', label: 'Class starts' },
-        { key: 'name', label: 'Member' },
+        { key: 'name', label: 'Name' },
         { key: 'email', label: 'Email' },
         { key: 'phone', label: 'Mobile' },
+        { key: 'source', label: 'Booked through' },
         { key: 'status', label: 'Booking status' },
+        { key: 'training_level', label: 'Training level' },
+        { key: 'notes', label: 'Their note' },
+        { key: 'admin_notes', label: 'Staff note' },
         { key: 'booked_at', label: 'Booked at' },
       ]
     );
   };
 
   const openAttendance = (session) => {
-    setAttendanceDraft(createAttendanceDraft(roster));
+    setAttendanceDraft(createAttendanceDraft(attendanceRoll(roster, bookings)));
     setAttendanceSession(session);
   };
 
   const saveAttendance = async () => {
     if (!attendanceSession) return;
-    const summary = summarizeAttendanceDraft(roster, attendanceDraft);
-    const pendingRequests = roster.filter(member => member.status === 'requested');
+    const roll = attendanceRoll(roster, bookings);
+    const summary = summarizeAttendanceDraft(roll, attendanceDraft);
+    const pendingRequests = roll.filter(person => person.status === 'requested');
     if (pendingRequests.length > 0) {
       toast({
         title: 'Resolve booking requests first',
@@ -953,7 +1010,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     if (!summary.complete) {
       toast({
         title: 'Roll call is incomplete',
-        description: `Mark the remaining ${summary.unmarked} ${summary.unmarked === 1 ? 'member' : 'members'} as present or no show.`,
+        description: `Mark the remaining ${summary.unmarked} ${summary.unmarked === 1 ? 'person' : 'people'} as present or no show.`,
         variant: 'destructive',
       });
       return;
@@ -963,7 +1020,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       const updated = await adminRecordSessionAttendance(attendanceSession.id, summary.entries);
       toast({
         title: 'Attendance recorded',
-        description: `${updated} ${updated === 1 ? 'member' : 'members'} marked and class completed.`,
+        description: `${updated} ${updated === 1 ? 'person' : 'people'} marked and class completed.`,
       });
       setAttendanceSession(null);
       await refreshBookings(attendanceSession.id);
@@ -990,8 +1047,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const cancelledCount = view === 'calendar'
     ? sessions.filter(s => s.status === 'cancelled').length
     : cancelledInTimeFilter.length;
-  const attendanceSummary = summarizeAttendanceDraft(roster, attendanceDraft);
-  const pendingAttendanceRequests = roster.filter(member => member.status === 'requested');
+  // Everyone in the room, not just the credit members. A class filled through
+  // the public timetable had no roll call at all before this.
+  const classRoll = attendanceRoll(roster, bookings);
+  const attendanceSummary = summarizeAttendanceDraft(classRoll, attendanceDraft);
+  const pendingAttendanceRequests = classRoll.filter(person => person.status === 'requested');
 
   return (
     <div className={ADMIN_PAGE}>
@@ -1047,6 +1107,22 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
         </div>
       </div>
 
+      {bookingsEnabled === false && (
+        <div className="mb-6 flex flex-wrap items-start gap-3 border border-xert-orange/40 bg-xert-orange/[0.06] p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-xert-orange" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="font-body text-sm font-semibold text-xert-offwhite">
+              Bookings are switched off, so no class on this calendar can be booked.
+            </p>
+            <p className="mt-1 font-body text-xs leading-relaxed text-xert-concrete/65">
+              Every published class shows “Register interest” on the timetable and holds no spot, whatever
+              its booking mode says here. Turn bookings on in Settings → Platform controls when you want
+              people to be able to take a place.
+            </p>
+          </div>
+        </div>
+      )}
+
       <WaitlistDesk
         rows={waitlistOverview}
         available={waitlistOverviewAvailable}
@@ -1070,7 +1146,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           rosterLoading={boardRosterLoading}
           rosterStatuses={BOOKING_STATUSES}
           rosterUpdatingId={updatingBookingId}
-          onRosterStatusChange={handleBookingStatus}
+          onRosterStatusChange={handleRosterPersonStatus}
           onCloseRoster={() => setBoardRosterSessionId(null)}
           blackouts={blackouts}
           templates={templates}
@@ -1176,14 +1252,14 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                       )}
                       {s.start_time && new Date(s.start_time).getTime() <= now
                         && ['published', 'full', 'completed'].includes(s.status)
-                        && roster.some(member => ['confirmed', 'attended', 'no_show'].includes(member.status)) && (
+                        && [...roster, ...bookings].some(person => ['confirmed', 'attended', 'no_show'].includes(person.status)) && (
                         <button type="button" onClick={() => openAttendance(s)}
                           className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-green-600/40 font-body text-[11px] uppercase tracking-wider text-green-400 hover:bg-green-900/20 transition-colors">
                           <ClipboardCheck className="w-3.5 h-3.5" />
                           Take attendance
                         </button>
                       )}
-                      <button onClick={() => exportRoster(s)} disabled={roster.length === 0}
+                      <button onClick={() => exportRoster(s)} disabled={roster.length === 0 && bookings.length === 0}
                         className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-[11px] uppercase tracking-wider text-xert-concrete/60 hover:border-xert-steel transition-colors disabled:opacity-40">
                         <Download className="w-3.5 h-3.5" />
                         Export roster
@@ -1205,7 +1281,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                             <p className="font-body text-xs text-xert-concrete/50">{r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
                             {waitlistPosition && <p className="font-body text-[11px] text-xert-steel mt-1">Waitlist position {waitlistPosition}</p>}
                           </div>
-                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || s.status !== 'published'}
+                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || !['published', 'full'].includes(s.status)}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {rosterStatusOptions(r.status, s.status, waitlistedRoster.length > 0).map(st => <option key={st} value={st}>{st}</option>)}
                           </select>
@@ -1318,7 +1394,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                 <p className="font-body text-[10px] uppercase tracking-[0.22em] text-xert-steel">Class roll call</p>
                 <h3 id="attendance-title" className="mt-1 font-display text-2xl uppercase text-xert-offwhite">{attendanceSession.title}</h3>
                 <p className="mt-1 font-body text-xs text-xert-concrete/55">
-                  {new Date(attendanceSession.start_time).toLocaleString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                  {`${gymDayLabel(attendanceSession.start_time)}, ${gymTimeLabel(attendanceSession.start_time)}`}
                 </p>
               </div>
               <button type="button" onClick={() => setAttendanceSession(null)} disabled={isSavingAttendance}
@@ -1337,11 +1413,11 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                   {attendanceSummary.unmarked > 0 && <span><strong className="text-xert-steel">{attendanceSummary.unmarked}</strong> unmarked</span>}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setAttendanceDraft(markAllAttendance(roster))} disabled={isSavingAttendance}
+                  <button type="button" onClick={() => setAttendanceDraft(markAllAttendance(classRoll))} disabled={isSavingAttendance}
                     className="inline-flex min-h-11 items-center gap-2 border border-green-600/40 px-3 font-body text-xs text-green-400 disabled:opacity-40">
                     <CheckCheck className="h-4 w-4" /> Mark all present
                   </button>
-                  <button type="button" onClick={() => setAttendanceDraft(blankAttendanceDraft(roster))} disabled={isSavingAttendance || attendanceSummary.marked === 0}
+                  <button type="button" onClick={() => setAttendanceDraft(blankAttendanceDraft(classRoll))} disabled={isSavingAttendance || attendanceSummary.marked === 0}
                     className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs text-xert-concrete/60 disabled:opacity-40">
                     <RotateCcw className="h-4 w-4" /> Clear marks
                   </button>
@@ -1361,26 +1437,33 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                 </div>
               )}
               <div className="space-y-2">
-                {attendanceSummary.members.map(member => (
-                  <div key={member.booking_id} className="flex flex-col gap-3 border border-xert-steel/20 bg-xert-charcoal p-3 sm:flex-row sm:items-center sm:justify-between">
+                {attendanceSummary.members.map(member => {
+                  const rowId = attendanceRowId(member);
+                  const who = member.full_name || member.email || 'Member';
+                  return (
+                  <div key={rowId} className="flex flex-col gap-3 border border-xert-steel/20 bg-xert-charcoal p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="truncate font-body text-sm text-xert-offwhite">{member.full_name || member.email || 'Member'}</p>
-                      <p className="truncate font-body text-xs text-xert-concrete/45">{member.email}</p>
+                      <p className="truncate font-body text-sm text-xert-offwhite">{who}</p>
+                      <p className="truncate font-body text-xs text-xert-concrete/45">
+                        {member.email}
+                        {member.attendance_source === 'signup' ? ' · timetable sign-up' : ''}
+                      </p>
                     </div>
-                    <div className="grid grid-cols-2" role="group" aria-label={`Attendance for ${member.full_name || member.email || 'member'}`}>
-                      <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [member.booking_id]: 'attended' }))}
-                        aria-pressed={attendanceDraft[member.booking_id] === 'attended'}
-                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[member.booking_id] === 'attended' ? 'bg-green-700 text-white' : 'border border-xert-steel/30 text-xert-concrete/60'}`}>
+                    <div className="grid grid-cols-2" role="group" aria-label={`Attendance for ${who}`}>
+                      <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [rowId]: 'attended' }))}
+                        aria-pressed={attendanceDraft[rowId] === 'attended'}
+                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[rowId] === 'attended' ? 'bg-green-700 text-white' : 'border border-xert-steel/30 text-xert-concrete/60'}`}>
                         Present
                       </button>
-                      <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [member.booking_id]: 'no_show' }))}
-                        aria-pressed={attendanceDraft[member.booking_id] === 'no_show'}
-                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[member.booking_id] === 'no_show' ? 'bg-xert-orange text-xert-ink' : 'border border-l-0 border-xert-steel/30 text-xert-concrete/60'}`}>
+                      <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [rowId]: 'no_show' }))}
+                        aria-pressed={attendanceDraft[rowId] === 'no_show'}
+                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[rowId] === 'no_show' ? 'bg-xert-orange text-xert-ink' : 'border border-l-0 border-xert-steel/30 text-xert-concrete/60'}`}>
                         No show
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

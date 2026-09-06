@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  attendanceRoll,
   blankAttendanceDraft,
   createAttendanceDraft,
   markAllAttendance,
@@ -48,8 +49,14 @@ test('admin roll call sends one bounded RPC and exposes complete attendance cont
   assert.match(rpcBlock, /p_attended_ids: mutation\.attendedIds/);
   assert.match(rpcBlock, /p_no_show_ids: mutation\.noShowIds/);
   assert.match(classCalendar, /Take attendance/);
-  assert.match(classCalendar, /aria-pressed=\{attendanceDraft\[member\.booking_id\] === 'attended'\}/);
-  assert.match(classCalendar, /aria-pressed=\{attendanceDraft\[member\.booking_id\] === 'no_show'\}/);
+  // Keyed by whichever id the person carries, because the roll call now covers
+  // public timetable sign-ups (class_bookings.id) as well as credit members
+  // (session_bookings.booking_id). A class filled through the timetable used to
+  // have no Take attendance button at all.
+  assert.match(classCalendar, /aria-pressed=\{attendanceDraft\[rowId\] === 'attended'\}/);
+  assert.match(classCalendar, /aria-pressed=\{attendanceDraft\[rowId\] === 'no_show'\}/);
+  assert.match(classCalendar, /const classRoll = attendanceRoll\(roster, bookings\);/);
+  assert.match(classCalendar, /summarizeAttendanceDraft\(classRoll, attendanceDraft\)/);
   assert.match(classCalendar, /Mark all present/);
   assert.match(classCalendar, /Clear marks/);
   assert.match(classCalendar, /pendingAttendanceRequests\.length > 0/);
@@ -100,4 +107,30 @@ test('attendance progress is incomplete until every eligible booking is explicit
   });
   assert.equal(summarizeAttendanceDraft(roster, markAllAttendance(roster)).complete, true);
   assert.throws(() => markAllAttendance(roster, 'confirmed'), /attended or no show/);
+});
+
+test('the roll call covers public timetable sign-ups, not only credit members', () => {
+  // The soft launch runs on instant_book: the people in the room are
+  // class_bookings rows, keyed by id rather than booking_id.
+  const members = [{ booking_id: 'member-1', status: 'confirmed' }];
+  const signups = [
+    { id: 'signup-1', status: 'confirmed', full_name: 'Walk-up' },
+    { id: 'signup-2', status: 'attended', full_name: 'Already marked' },
+    { id: 'signup-3', status: 'cancelled', full_name: 'Gave the spot back' },
+  ];
+  const roll = attendanceRoll(members, signups);
+
+  assert.deepEqual(createAttendanceDraft(roll), {
+    'member-1': '',
+    'signup-1': '',
+    'signup-2': 'attended',
+  });
+
+  const summary = summarizeAttendanceDraft(roll, { 'member-1': 'attended', 'signup-1': 'no_show', 'signup-2': 'attended' });
+  assert.equal(summary.total, 3);
+  assert.equal(summary.complete, true);
+  assert.deepEqual(summary.entries.map(entry => entry.bookingId).sort(), ['member-1', 'signup-1', 'signup-2']);
+
+  // Without the sign-ups the class looks empty and cannot be completed.
+  assert.equal(summarizeAttendanceDraft(members, {}).total, 1);
 });

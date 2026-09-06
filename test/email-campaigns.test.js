@@ -115,7 +115,9 @@ test('roll-call and decision mistakes can be undone from the request queue', asy
   const table = await read('../src/components/admin/BookingRequestsTable.jsx');
   assert.match(table, /\(b\.status === 'attended' \|\| b\.status === 'no_show'\) && \(/);
   assert.match(table, /handleStatusUpdate\(b, 'confirmed'\)\}[\s\S]*?Undo \{b\.status === 'no_show' \? 'no show' : 'attended'\}/);
-  assert.match(table, /\(b\.status === 'declined' \|\| b\.status === 'cancelled'\) && \(/);
+  // Reopening a class that has already run always failed with a raw
+  // SESSION_IN_PAST from the database, so the button is no longer offered there.
+  assert.match(table, /\(b\.status === 'declined' \|\| b\.status === 'cancelled'\) && !classHasStarted\(b\) && \(/);
   assert.match(table, /handleStatusUpdate\(b, 'requested'\)\}[\s\S]*?Reopen/);
   assert.match(table, /b\.status === 'waitlisted' && \(/);
 });
