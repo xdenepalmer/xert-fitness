@@ -1530,6 +1530,118 @@ create trigger email_on_class_booking_change
   after insert or update of status on public.class_bookings
   for each row execute function public.email_on_class_booking_change();
 
+-- ── 16. The day desk counts the whole room ─────────────────────────────────
+-- admin_daily_operations reported confirmed places from session_bookings alone
+-- and counted only 'requested' public rows, so an instant_book class the
+-- timetable had filled read as "0 confirmed / 8 capacity" on the owner's phone
+-- — and attendance_due, which requires a confirmed count, never fired for it,
+-- so the class could not be marked off either.
+drop function if exists public.admin_daily_operations();
+create function public.admin_daily_operations()
+returns table (
+  session_id uuid,
+  title text,
+  class_type text,
+  start_time timestamptz,
+  end_time timestamptz,
+  status text,
+  capacity integer,
+  coach_name text,
+  location_zone text,
+  booking_mode text,
+  requested_count bigint,
+  confirmed_count bigint,
+  waitlist_count bigint,
+  attended_count bigint,
+  no_show_count bigint,
+  public_request_count bigint,
+  public_confirmed_count bigint,
+  public_waitlist_count bigint,
+  places_held bigint,
+  attendance_due boolean
+)
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_local_day date := (now() at time zone 'Australia/Brisbane')::date;
+  v_day_start timestamptz;
+  v_day_end timestamptz;
+begin
+  if not public.is_admin() then raise exception 'ADMIN_ONLY'; end if;
+
+  v_day_start := v_local_day::timestamp at time zone 'Australia/Brisbane';
+  v_day_end := (v_local_day + 1)::timestamp at time zone 'Australia/Brisbane';
+
+  return query
+  select
+    s.id,
+    s.title,
+    s.class_type,
+    s.start_time,
+    s.end_time,
+    s.status,
+    s.capacity,
+    s.coach_name,
+    s.location_zone,
+    s.booking_mode,
+    coalesce(member_counts.requested_count, 0),
+    coalesce(member_counts.confirmed_count, 0),
+    coalesce(member_counts.waitlist_count, 0),
+    coalesce(member_counts.attended_count, 0),
+    coalesce(member_counts.no_show_count, 0),
+    coalesce(public_counts.request_count, 0),
+    coalesce(public_counts.confirmed_count, 0),
+    coalesce(public_counts.waitlist_count, 0),
+    -- The same definition of a held place the rest of the system uses.
+    coalesce(member_counts.requested_count, 0)
+      + coalesce(member_counts.confirmed_count, 0)
+      + coalesce(public_counts.confirmed_count, 0),
+    s.start_time <= now()
+      and s.status in ('published', 'full', 'completed')
+      and (
+        coalesce(member_counts.confirmed_count, 0)
+          + coalesce(public_counts.confirmed_count, 0)
+          + coalesce(member_counts.attended_count, 0)
+          + coalesce(member_counts.no_show_count, 0)
+          + coalesce(public_counts.marked_count, 0)
+      ) > 0
+  from public.class_sessions s
+  left join lateral (
+    select
+      count(*) filter (where b.status = 'requested') as requested_count,
+      count(*) filter (where b.status = 'confirmed') as confirmed_count,
+      count(*) filter (where b.status = 'waitlisted') as waitlist_count,
+      count(*) filter (where b.status = 'attended') as attended_count,
+      count(*) filter (where b.status = 'no_show') as no_show_count
+    from public.session_bookings b
+    where b.class_session_id = s.id
+  ) member_counts on true
+  left join lateral (
+    select
+      count(*) filter (where r.status = 'requested') as request_count,
+      count(*) filter (where r.status = 'confirmed') as confirmed_count,
+      count(*) filter (where r.status = 'waitlisted') as waitlist_count,
+      count(*) filter (where r.status in ('attended', 'no_show')) as marked_count
+    from public.class_bookings r
+    where r.class_session_id = s.id
+  ) public_counts on true
+  where s.start_time >= v_day_start
+    and s.start_time < v_day_end
+    and s.status <> 'draft'
+  order by s.start_time, s.id
+  limit 50;
+end;
+$$;
+
+revoke execute on function public.admin_daily_operations() from public, anon;
+grant execute on function public.admin_daily_operations() to authenticated;
+
+comment on function public.admin_daily_operations() is
+  'One Brisbane day of class workload, counting member bookings and public timetable sign-ups alike.';
+
 insert into public.xert_schema_capabilities (capability)
 values ('booking_integrity_overhaul')
 on conflict (capability) do update set installed_at = excluded.installed_at;

@@ -623,9 +623,24 @@ struct AdminDailyOperation: Identifiable, Codable, Hashable {
     let attended_count: Int
     let no_show_count: Int
     let public_request_count: Int
+    // Defaulted so a database still on the previous shape decodes: the counts
+    // are additive, and a missing public side simply reads as zero rather than
+    // failing the whole day desk.
+    var public_confirmed_count: Int? = nil
+    var public_waitlist_count: Int? = nil
+    var places_held: Int? = nil
     let attendance_due: Bool
 
     var activeCount: Int { requested_count + confirmed_count }
+
+    /// The whole room: member bookings that hold a credit plus confirmed public
+    /// timetable sign-ups. The desk used to show only the member side, so a
+    /// class the timetable had filled read as "0 confirmed".
+    var placesHeld: Int {
+        places_held ?? (requested_count + confirmed_count + (public_confirmed_count ?? 0))
+    }
+    var confirmedInRoom: Int { confirmed_count + (public_confirmed_count ?? 0) }
+    var waitingInRoom: Int { waitlist_count + (public_waitlist_count ?? 0) }
 }
 
 struct AdminClassRosterReport {
@@ -2599,9 +2614,13 @@ struct AdminBookingRequest: Identifiable, Hashable {
     }
     var allowedNextStatuses: [String] {
         switch status {
-        case "requested": return ["confirmed", "waitlisted", "declined"]
-        case "waitlisted": return ["cancelled"]
+        case "requested": return ["confirmed", "waitlisted", "declined", "cancelled"]
+        // Promoting the head of the queue is the point of a waitlist; the
+        // database still enforces the order.
+        case "waitlisted": return ["confirmed", "declined", "cancelled"]
         case "confirmed": return ["attended", "no_show", "cancelled"]
+        case "attended", "no_show": return ["confirmed"]
+        case "declined", "cancelled": return ["requested"]
         default: return []
         }
     }
@@ -4285,4 +4304,59 @@ struct AdminFitboxLookupResponse: Codable, Hashable {
     let user: AdminFitboxUserSnapshot?
     let next_session: AdminFitboxNextSession?
     let linked: Int?
+}
+
+/// A confirmation the database refused because the class is already full.
+/// Overbooking a class by one is an ordinary gym decision, so it stays
+/// available — it just has to be asked for rather than happening by accident.
+struct AdminOverbookPrompt: Identifiable, Equatable {
+    let booking: AdminBookingRequest
+    let status: String
+    let reason: String
+
+    var id: String { "\(booking.id)-\(status)" }
+
+    var message: String {
+        "\(booking.fullName) would be an extra place in \(booking.session?.title ?? "this class"), which is already at capacity. Everyone already booked keeps their place."
+    }
+}
+
+/// Database codes the owner should never see raw.
+enum AdminBookingDecisionMessage {
+    static func friendly(_ raw: String) -> String {
+        if raw.contains("CLASS_FULL") { return "That class is already full." }
+        if raw.contains("CLASS_WAITLISTED") { return "Someone is queued for that class ahead of them." }
+        if raw.contains("SESSION_NOT_STARTED") { return "That class has not started yet, so it cannot be marked off." }
+        if raw.contains("WAITLIST_ORDER_REQUIRED") || raw.contains("WAITLIST_PRIORITY") {
+            return "Promote the next person on the waitlist before reopening another booking."
+        }
+        if raw.contains("NO_CREDITS") { return "That member has no session credits left." }
+        if raw.contains("ALREADY_BOOKED") { return "They already have a place in that class." }
+        if raw.contains("SESSION_IN_PAST") { return "That class has already run." }
+        if raw.contains("ADMIN_REQUIRED") || raw.contains("ADMIN_ONLY") { return "Sign in as an admin to change bookings." }
+        return raw
+    }
+}
+
+/// What each booking mode actually does, in the same words the web uses. The
+/// picker showed bare enum names, so an owner could flip a class to instant
+/// book without learning that anonymous visitors would then take real,
+/// capacity-limited places with nothing but contact details.
+func bookingModeExplanation(_ mode: String) -> String {
+    switch mode {
+    case "interest_only":
+        return "Collects names only. Nobody takes a place, and there is nothing to confirm."
+    case "instant_book":
+        return "The first people to sign up take real places, up to the capacity above, using only their contact details."
+    default:
+        return "People ask for a place and you confirm or decline each one. Nothing is held until you do."
+    }
+}
+
+/// A safe fallback for a link the OS refuses to build (a malformed phone
+/// number, an email with a stray character). Force-unwrapping a URL literal
+/// inline reads as harmless right up until the day a contact record contains
+/// something unexpected and the owner's phone crashes on the class roster.
+enum XertLinks {
+    static let site = URL(string: "https://xertfitness.com.au") ?? URL(fileURLWithPath: "/")
 }

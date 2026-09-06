@@ -627,7 +627,10 @@ struct BookingView: View {
     // MARK: Session cards
 
     private func sessionCard(for session: ClassSession, booking: BookingItem?) -> some View {
-        let timeConflict = session.isFull ? nil : BookingItem.timeConflict(for: session, in: store.bookings)
+        // Computed even for a full class: joining its waitlist would still land
+        // the member in two classes at once, and join_session_waitlist has no
+        // overlap check of its own. The web made the same call.
+        let timeConflict = BookingItem.timeConflict(for: session, in: store.bookings)
         return VStack(alignment: .leading, spacing: 12) {
             sessionHeader(session)
             sessionMetadata(session)
@@ -901,6 +904,10 @@ struct BookingView: View {
                 Label("Register interest", systemImage: "person.2")
             }
             .buttonStyle(.xertGhost)
+        } else if timeConflict != nil {
+            Label("Time conflict", systemImage: "exclamationmark.circle")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.red)
         } else if session.isFull {
             Button {
                 if store.isSignedIn {
@@ -927,10 +934,6 @@ struct BookingView: View {
             .accessibilityValue(
                 isWorking ? "In progress" : (hasBookingMutation ? "Another booking update is in progress" : "")
             )
-        } else if timeConflict != nil {
-            Label("Time conflict", systemImage: "exclamationmark.circle")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.red)
         } else {
             Button {
                 if store.isSignedIn {
@@ -1060,7 +1063,10 @@ struct BookingView: View {
     }
 
     private func classes(on day: Date) -> [ClassSession] {
-        store.sessions.filter { Calendar.current.isDate($0.start_time, inSameDayAs: day) }
+        // The same calendar ClassSessionDiscovery filters with, so the dots on
+        // the grid and the list they filter cannot disagree about which day a
+        // class belongs to.
+        store.sessions.filter { XertCalendarMonth.gymCalendar.isDate($0.start_time, inSameDayAs: day) }
     }
 
     private func classSectionTitle(count: Int) -> String {
@@ -1421,13 +1427,18 @@ private struct ClassInterestRequestView: View {
     }
 
     private var confirmationView: some View {
-        VStack(spacing: 16) {
+        // The database decides whether a place was actually held, so the
+        // confirmation says what happened rather than what the button said.
+        // On an instant_book class this is the difference between "we will be
+        // in touch" and "your spot is confirmed".
+        let receipt = store.classSignupReceipt
+        return VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.xertSteel)
-            Text("Interest Registered")
+            Text(receipt?.title ?? "Interest Registered")
                 .xertDisplay(30)
-            Text("The XERT team will contact you about \(session.title).")
+            Text(receipt?.message ?? "The XERT team will contact you about \(session.title).")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color.xertPale)
             Button("Done") { dismiss() }

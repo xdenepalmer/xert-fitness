@@ -1506,7 +1506,8 @@ final class XertAPI {
     func adminUpdateBookingRequestStatus(
         session auth: AuthSession,
         booking: AdminBookingRequest,
-        status: String
+        status: String,
+        allowOverbook: Bool = false
     ) async throws -> String? {
         guard booking.allowedNextStatuses.contains(status) else {
             throw APIError(message: "This booking cannot move from \(booking.status) to \(status). Refresh and review it.")
@@ -1523,7 +1524,8 @@ final class XertAPI {
                     p_request_id: booking.recordID,
                     p_status: status,
                     p_admin_notes: nil,
-                    p_update_admin_notes: false
+                    p_update_admin_notes: false,
+                    p_allow_overbook: allowOverbook
                 ),
                 auth: auth
             )
@@ -2904,17 +2906,27 @@ final class XertAPI {
         try await perform(request)
     }
 
-    func requestClassInterest(_ requestBody: ClassInterestRequest) async throws {
+    /// Goes through submit_class_signup, the same entry point the website uses.
+    /// Writing straight at class_bookings skipped every check the RPC makes —
+    /// the class's own booking mode, its capacity, whether it has already
+    /// started — and surfaced PostgREST's raw unique-constraint text to the
+    /// member when they signed up twice. anon no longer holds an insert policy
+    /// on that table at all, so this is now the only way in.
+    func requestClassInterest(_ requestBody: ClassInterestRequest) async throws -> ClassSignupReceipt {
         var request = try request(
             baseURL: AppConfig.supabaseURL,
-            path: "/rest/v1/class_bookings"
+            path: "/rest/v1/rpc/submit_class_signup"
         )
         request.httpMethod = "POST"
         request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
-        request.httpBody = try JSONEncoder().encode(requestBody)
-        try await perform(request)
+        request.httpBody = try JSONEncoder().encode(requestBody.signupPayload)
+        do {
+            let data = try await responseData(for: request)
+            return (try? JSONDecoder().decode(ClassSignupReceipt.self, from: data)) ?? ClassSignupReceipt()
+        } catch {
+            throw APIError(message: ClassSignupMessage.friendly(error.localizedDescription))
+        }
     }
 
     func deleteAccount(session auth: AuthSession) async throws {
@@ -3603,6 +3615,10 @@ private struct AdminRequestUpdate: Encodable {
     let p_status: String?
     let p_admin_notes: String?
     let p_update_admin_notes: Bool
+    // Confirming a request now takes a place in the room, so the database
+    // refuses one that would oversell. This is the owner deciding to squeeze
+    // someone in anyway.
+    var p_allow_overbook: Bool = false
 }
 private struct AdminAnnouncementPayload: Encodable {
     let title: String

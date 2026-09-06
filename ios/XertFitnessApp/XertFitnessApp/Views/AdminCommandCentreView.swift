@@ -2773,9 +2773,12 @@ struct AdminCommandCentreView: View {
 
     private func classCapacitySummary(_ item: AdminDailyOperation) -> String {
         let capacity = item.capacity.map { "\($0) capacity" } ?? "capacity missing"
-        return "\(item.confirmed_count) confirmed / \(capacity) · "
+        // Counts both doors into the room. A class filled through the public
+        // timetable used to read "0 confirmed / 8 capacity" here while eight
+        // people were on their way in.
+        return "\(item.confirmedInRoom) confirmed / \(capacity) · "
             + "\(item.requested_count + item.public_request_count) requested · "
-            + "\(item.waitlist_count) waiting"
+            + "\(item.waitingInRoom) waiting"
     }
 
     private func classAssignmentSummary(_ item: AdminDailyOperation) -> String {
@@ -5967,6 +5970,25 @@ private struct AdminClassRosterView: View {
 
     private var rosterIsCurrent: Bool { admin.loadedRosterSessionID == operation.id }
     private var roster: [AdminRosterMember] { rosterIsCurrent ? admin.classRoster : [] }
+    /// People who signed up through the public timetable. A class filled that
+    /// way used to read as empty here — no names, no phone numbers, nobody to
+    /// mark off — while eight people stood on the floor.
+    private var signups: [AdminLegacyBookingRequest] { rosterIsCurrent ? admin.classSignups : [] }
+    private var confirmedSignups: [AdminLegacyBookingRequest] { signups.filter { $0.status == "confirmed" } }
+    private var pendingSignups: [AdminLegacyBookingRequest] { signups.filter { $0.status == "requested" } }
+    private var waitlistedSignups: [AdminLegacyBookingRequest] { signups.filter { $0.status == "waitlisted" } }
+    /// The same definition the database uses: an active member booking or a
+    /// confirmed public sign-up.
+    private var placesHeld: Int {
+        roster.filter { ["requested", "confirmed"].contains($0.status) }.count + confirmedSignups.count
+    }
+    private var placesHeldLine: String {
+        guard let capacity = operation.capacity, capacity > 0 else {
+            return "\(placesHeld) in the class"
+        }
+        let left = max(capacity - placesHeld, 0)
+        return "\(placesHeld) / \(capacity) in the class · \(left) left"
+    }
     private var eligible: [AdminRosterMember] { roster.filter(\.attendanceEligible) }
     private var unresolvedRequests: [AdminRosterMember] {
         roster.filter { $0.status == "requested" }
@@ -6025,8 +6047,17 @@ private struct AdminClassRosterView: View {
                 Text(operation.start_time.formatted(date: .abbreviated, time: .shortened)).font(.headline)
                 Text([operation.coach_name, operation.location_zone].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(Color.xertPale.opacity(0.6))
-                Text("\(operation.confirmed_count) confirmed · \(operation.requested_count) requested · \(operation.waitlist_count) waiting")
+                // public_request_count was the one place in this file that
+                // left the timetable requests out, so the Today card said "3
+                // requested" and this header said "2".
+                Text("\(operation.confirmedInRoom) confirmed · \(operation.requested_count + operation.public_request_count) requested · \(operation.waitingInRoom) waiting")
                     .font(.caption).foregroundStyle(Color.xertSteel)
+                if placesHeld > 0 || (operation.capacity ?? 0) > 0 {
+                    Text(placesHeldLine)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(placesHeld >= (operation.capacity ?? Int.max) ? Color.orange : Color.xertSteel)
+                        .accessibilityIdentifier("owner.roster.placesHeld")
+                }
                 if rosterIsCurrent, let loadedAt = admin.loadedRosterAt {
                     Label(
                         "Roster verified \(loadedAt.formatted(date: .omitted, time: .shortened))",
@@ -6291,12 +6322,74 @@ private struct AdminClassRosterView: View {
         }
     }
 
+    /// Sign-ups from the public timetable, grouped by what their place is.
+    /// Contact details sit next to each name because for these people that is
+    /// all XERT has — they have no account to look up.
+    @ViewBuilder
+    private var publicSignupsSection: some View {
+        Section("Timetable sign-ups") {
+            if !rosterIsCurrent {
+                Text("Loading sign-ups…")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.6))
+            } else if signups.isEmpty {
+                Text("Nobody has signed up through the timetable for this class.")
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.6))
+            } else {
+                signupGroup("In the class", confirmedSignups)
+                signupGroup("Awaiting your decision", pendingSignups)
+                signupGroup("Waitlist", waitlistedSignups)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func signupGroup(_ title: String, _ people: [AdminLegacyBookingRequest]) -> some View {
+        if !people.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("\(title.uppercased()) (\(people.count))")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.xertPale.opacity(0.5))
+                ForEach(people, id: \.id.value) { person in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(person.full_name ?? person.email ?? "Timetable sign-up")
+                            .font(.subheadline.weight(.semibold))
+                        if let email = person.email, !email.isEmpty {
+                            Link(email, destination: URL(string: "mailto:\(email)") ?? XertLinks.site)
+                                .font(.caption)
+                                .foregroundStyle(Color.xertSteel)
+                        }
+                        if let phone = person.phone, !phone.isEmpty {
+                            // Hoisted out of the interpolation: a closure inside
+                            // a string literal is a parser trap here.
+                            let dialable = phone.filter { !$0.isWhitespace }
+                            Link(phone, destination: URL(string: "tel:\(dialable)") ?? XertLinks.site)
+                                .font(.caption)
+                                .foregroundStyle(Color.xertSteel)
+                        }
+                        if let note = person.admin_notes, !note.isEmpty {
+                            Text(note)
+                                .font(.caption2)
+                                .foregroundStyle(Color.xertPale.opacity(0.5))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            .padding(.vertical, 4)
+            .listRowBackground(Color.xertInk)
+        }
+    }
+
     var body: some View {
         List {
             rosterSummarySection
             rollCallSection
             trainingReadinessSection
             memberRosterSection
+            publicSignupsSection
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if operation.start_time <= Date() {
@@ -7658,10 +7751,16 @@ struct AdminClassEditor: View {
                     ForEach(AdminClassDraft.intensities, id: \.self) { Text($0).tag($0) }
                 }
                 Picker("Booking mode", selection: $draft.bookingMode) {
-                    Text("Interest only").tag("interest_only")
-                    Text("Request to book").tag("request_to_book")
-                    Text("Instant book").tag("instant_book")
+                    Text("Register interest only").tag("interest_only")
+                    Text("Request to book (staff confirm)").tag("request_to_book")
+                    Text("Sign-ups accepted (takes a spot)").tag("instant_book")
                 }
+                // The one setting on this screen that changes who ends up in
+                // the room without anyone approving it.
+                Text(bookingModeExplanation(draft.bookingMode))
+                    .font(.caption)
+                    .foregroundStyle(Color.xertPale.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
                 Toggle("Beginner friendly", isOn: $draft.beginnerFriendly)
                 Toggle("Visible on public timetable", isOn: $draft.publicVisible)
                     .disabled(draft.status != "published")
@@ -9996,6 +10095,41 @@ private struct AdminBookingRequestDetailView: View {
             Button("Keep editing", role: .cancel) {}
         } message: {
             Text("The unsaved staff notes for \(booking.fullName) will be lost.")
+        }
+        // The database refuses a confirmation that would oversell. Squeezing
+        // someone in is still the owner's call to make — from the phone as well
+        // as the desk — it just has to be asked for.
+        .confirmationDialog(
+            "This class is already full",
+            isPresented: Binding(
+                get: { admin.overbookPrompt != nil },
+                set: { if !$0 { admin.overbookPrompt = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let prompt = admin.overbookPrompt {
+                Button("Squeeze them in") {
+                    admin.overbookPrompt = nil
+                    Task {
+                        if await admin.updateBookingRequest(
+                            session: session,
+                            booking: prompt.booking,
+                            status: prompt.status,
+                            allowOverbook: true
+                        ) {
+                            hasCommitted = true
+                            clearRecoveryDraft()
+                            XertHaptics.play(.success)
+                            dismiss()
+                        } else {
+                            XertHaptics.play(.error)
+                        }
+                    }
+                }
+            }
+            Button("Leave them out", role: .cancel) { admin.overbookPrompt = nil }
+        } message: {
+            Text(admin.overbookPrompt?.message ?? "")
         }
     }
 
