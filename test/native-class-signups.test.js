@@ -147,3 +147,36 @@ test('the queue goes first, and neither client shows a bare database code', asyn
   // And the count stays honest rather than being rewritten to zero.
   assert.match(page, /\$\{s\.waiting_count\} waiting/);
 });
+
+test('the sign-up payload lives on the type that has the fields it reads', async () => {
+  // This landed in PrivateSessionRequest first, because both structs end their
+  // init with the same two lines and a text anchor matched the wrong one. There
+  // is no Swift toolchain in the dev environment, so nothing caught it until
+  // CI — three compile errors later. Pin the shape structurally.
+  const models = await read('../ios/XertFitnessApp/XertFitnessApp/Models.swift');
+
+  const structBody = name => {
+    const start = models.indexOf(`struct ${name}`);
+    assert.ok(start > -1, `${name} exists`);
+    let depth = 0;
+    for (let i = models.indexOf('{', start); i < models.length; i += 1) {
+      if (models[i] === '{') depth += 1;
+      else if (models[i] === '}') {
+        depth -= 1;
+        if (depth === 0) return models.slice(start, i + 1);
+      }
+    }
+    throw new Error(`${name} is unbalanced`);
+  };
+
+  const request = structBody('ClassInterestRequest');
+  assert.match(request, /var signupPayload: ClassSignupPayload/);
+  // The fields it reads have to be on that same struct.
+  for (const field of ['class_session_id', 'full_name', 'email', 'phone', 'training_level', 'notes', 'consent_to_contact']) {
+    assert.match(request, new RegExp(`let ${field}\\b`), `${field} is declared on ClassInterestRequest`);
+  }
+  // And nowhere else.
+  assert.doesNotMatch(structBody('PrivateSessionRequest'), /signupPayload/);
+  assert.match(models, /struct ClassSignupPayload: Encodable, Equatable \{/);
+  assert.match(models, /struct ClassSignupReceipt: Decodable, Equatable \{/);
+});

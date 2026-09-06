@@ -1373,20 +1373,6 @@ struct PrivateSessionRequest: Encodable, Equatable {
         consent_to_contact = true
         status = "requested"
     }
-
-    /// The argument shape submit_class_signup takes.
-    var signupPayload: ClassSignupPayload {
-        ClassSignupPayload(
-            p_session_id: class_session_id,
-            p_full_name: full_name,
-            p_email: email,
-            p_phone: phone,
-            p_consent: consent_to_contact,
-            p_training_level: training_level,
-            p_notes: notes,
-            p_join_waitlist: false
-        )
-    }
 }
 
 struct ClassSignupPayload: Encodable, Equatable {
@@ -1435,6 +1421,20 @@ struct ClassInterestRequest: Encodable, Equatable {
         self.notes = notes.trimmedNilIfEmpty
         consent_to_contact = true
         status = "requested"
+    }
+
+    /// The argument shape submit_class_signup takes.
+    var signupPayload: ClassSignupPayload {
+        ClassSignupPayload(
+            p_session_id: class_session_id,
+            p_full_name: full_name,
+            p_email: email,
+            p_phone: phone,
+            p_consent: consent_to_contact,
+            p_training_level: training_level,
+            p_notes: notes,
+            p_join_waitlist: false
+        )
     }
 }
 
