@@ -144,6 +144,13 @@ const BOOKING_ERRORS = {
   SESSION_INTEREST_ONLY: 'This class is collecting interest only. Please register your interest instead.',
   SESSION_HAS_CAPACITY: 'A place is available now. Book the class instead of joining its waitlist.',
   WAITLIST_PRIORITY: 'Members already on the waitlist have first claim on this place. Join the queue instead.',
+  // book_session refuses a place while anyone is queued for it, so the queue is
+  // never jumped. Without this the member saw the bare code.
+  SESSION_WAITLIST_FIRST: 'Someone is already waiting for a place in this class, so they go first. Join the waitlist to be next in line.',
+  // The owner's site-wide booking switch is off. It is enforced by a trigger,
+  // so this can arrive even when the page was loaded while bookings were open.
+  BOOKINGS_PAUSED: 'Bookings are not open yet. Register your interest and we will let you know first.',
+  BOOKING_ACCOUNT_MISMATCH: 'That booking belongs to another account. Sign in again and try once more.',
   NO_CREDITS: 'You have no available class credits. Purchase a pack to book.',
   BOOKING_NOT_FOUND: 'That booking could not be found. Refresh your account and try again.',
   NOT_CANCELLABLE: 'That booking can no longer be cancelled.'

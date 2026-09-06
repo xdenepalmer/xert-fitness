@@ -493,7 +493,14 @@ export default function Booking() {
                     </div>
                     <div className="space-y-2">
                       {list.map(s => {
-                        const full = s.spots_left !== null && s.spots_left <= 0;
+                        // A class with someone queued for it is closed to new
+                        // bookings even when places have since freed up: the
+                        // queue goes first, and book_session enforces it. The
+                        // count itself stays honest, so "3 spots left" beside
+                        // "Join waitlist" is the truth rather than a
+                        // contradiction.
+                        const queued = Number(s.waiting_count) > 0;
+                        const full = queued || (s.spots_left !== null && s.spots_left <= 0);
                         const existingBooking = memberBookingsBySession.get(s.id);
                         const isInterestOnly = s.booking_mode === 'interest_only';
                         const isRequest = s.booking_mode === 'request_to_book';
@@ -532,7 +539,9 @@ export default function Booking() {
                             </div>
                             {s.spots_left !== null && (
                               <span className={`xert-chip shrink-0 ${full ? 'opacity-70' : ''}`}>
-                                {full ? 'Full' : `${s.spots_left} spot${s.spots_left === 1 ? '' : 's'} left`}
+                                {queued && s.spots_left > 0
+                                  ? `${s.waiting_count} waiting`
+                                  : full ? 'Full' : `${s.spots_left} spot${s.spots_left === 1 ? '' : 's'} left`}
                               </span>
                             )}
                             {isInterestOnly ? (

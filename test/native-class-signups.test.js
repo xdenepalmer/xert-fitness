@@ -116,3 +116,28 @@ test('the booking mode picker says what each mode does to the room', async () =>
   assert.match(models, /func bookingModeExplanation\(_ mode: String\) -> String/);
   assert.match(models, /take real places, up to the capacity above/);
 });
+
+test('the queue goes first, and neither client shows a bare database code', async () => {
+  const [bookingData, page, policy, models, migration] = await Promise.all([
+    read('../src/lib/bookingData.js'),
+    read('../src/pages/Booking.jsx'),
+    read('../ios/XertFitnessApp/XertFitnessApp/BookingCancellationPolicy.swift'),
+    read('../ios/XertFitnessApp/XertFitnessApp/Models.swift'),
+    read('../supabase/migrations/20260906010000_booking_integrity_overhaul.sql'),
+  ]);
+
+  // book_session now refuses a place while anyone is queued for it.
+  assert.match(migration, /raise exception 'SESSION_WAITLIST_FIRST'/);
+  // Both clients translate it rather than showing the raw code.
+  assert.match(bookingData, /SESSION_WAITLIST_FIRST: 'Someone is already waiting/);
+  assert.match(policy, /"SESSION_WAITLIST_FIRST", "Someone is already waiting/);
+  // The site-wide pause is enforced by a trigger, so it can arrive at any time.
+  assert.match(bookingData, /BOOKINGS_PAUSED: 'Bookings are not open yet/);
+
+  // Better than a good error: don't offer the button the database will refuse.
+  assert.match(page, /const queued = Number\(s\.waiting_count\) > 0;/);
+  assert.match(page, /const full = queued \|\| \(s\.spots_left !== null && s\.spots_left <= 0\);/);
+  assert.match(models, /if \(waiting_count \?\? 0\) > 0 \{ return true \}/);
+  // And the count stays honest rather than being rewritten to zero.
+  assert.match(page, /\$\{s\.waiting_count\} waiting/);
+});

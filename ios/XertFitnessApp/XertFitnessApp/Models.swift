@@ -258,8 +258,19 @@ struct ClassSession: Identifiable, Codable, Hashable {
     let booking_mode: String?
     let booked_count: Int?
     let spots_left: Int?
+    // Optional and defaulted so a database still on the previous shape decodes.
+    var waiting_count: Int? = nil
 
-    var isFull: Bool { spots_left.map { $0 <= 0 } ?? false }
+    /// Closed to new bookings. A class with someone queued for it counts as
+    /// full even when places have since freed up: the queue goes first, and
+    /// book_session enforces it. The place count itself stays honest, so the
+    /// app can say "3 spots · 1 waiting" rather than pretending there are none.
+    var isFull: Bool {
+        if (waiting_count ?? 0) > 0 { return true }
+        return spots_left.map { $0 <= 0 } ?? false
+    }
+
+    var queueLength: Int { waiting_count ?? 0 }
 
     var effectiveEndTime: Date {
         if let end_time, end_time > start_time { return end_time }
