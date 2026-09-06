@@ -41,10 +41,18 @@ function readable(value) {
   return String(value || '').replace(/_/g, ' ');
 }
 
-function when(value, options = { dateStyle: 'medium', timeStyle: 'short' }) {
+/**
+ * A plain default widens 'medium' to string, which Intl will not accept, so the
+ * two styles are named and annotated rather than passed as an object literal.
+ *
+ * @param {string|null|undefined} value
+ * @param {'full'|'long'|'medium'|'short'} [dateStyle]
+ * @param {'full'|'long'|'medium'|'short'} [timeStyle]
+ */
+function when(value, dateStyle = 'medium', timeStyle = 'short') {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-AU', options);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-AU', { dateStyle, timeStyle });
 }
 
 function money(cents) {
@@ -56,7 +64,7 @@ function fullName(row) {
   return [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || `FitBox user ${row.fitbox_user_id}`;
 }
 
-function StatusChip({ value, tone }) {
+function StatusChip({ value, tone = '' }) {
   const tones = {
     good: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200',
     warn: 'border-amber-300/35 bg-amber-300/10 text-amber-200',
@@ -106,7 +114,10 @@ function useMirror(loader, deps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   useEffect(() => { void reload(); }, [reload]);
-  return [state, reload];
+  // Returned as a named pair rather than a two-element array: an array of two
+  // unlike things is a single union type to the checker, so every state.rows
+  // and every reload() below was an error.
+  return { state, reload };
 }
 
 function MirrorNotice({ installed }) {
@@ -261,7 +272,7 @@ function LookupCard({ onFound }) {
 function MembersTab({ links }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
-  const [state, reload] = useMirror(() => listFitboxUsers({ search, status }), [search, status]);
+  const { state, reload } = useMirror(() => listFitboxUsers({ search, status }), [search, status]);
   const linkedIds = useMemo(() => new Set((links || []).map(link => link.fitbox_user_id)), [links]);
   return (
     <div className="space-y-4">
@@ -304,7 +315,7 @@ function MembersTab({ links }) {
 
 function MembershipsTab() {
   const [status, setStatus] = useState('all');
-  const [state, reload] = useMirror(() => listFitboxSubscriptions({ status }), [status]);
+  const { state, reload } = useMirror(() => listFitboxSubscriptions({ status }), [status]);
   return (
     <div className="space-y-4">
       <MirrorNotice installed={state.installed} />
@@ -338,7 +349,7 @@ function MembershipsTab() {
 
 function BookingsTab() {
   const [range, setRange] = useState('upcoming');
-  const [state, reload] = useMirror(() => listFitboxAttendance({ range }), [range]);
+  const { state, reload } = useMirror(() => listFitboxAttendance({ range }), [range]);
   return (
     <div className="space-y-4">
       <MirrorNotice installed={state.installed} />

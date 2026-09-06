@@ -86,3 +86,15 @@ test('the Command Centre counts both doors everywhere the owner looks', async ()
   assert.match(calendar, /const placesTaken = capacityById\[s\.id\]\?\.taken \?\? activeRosterCount;/);
   assert.match(calendar, /const hasOpenPlace = s\.capacity == null \|\| placesTaken < s\.capacity;/);
 });
+
+test('a full class’s waitlist can actually be promoted from', async () => {
+  const sql = await repair();
+  // admin_waitlist_overview lists classes marked 'full' — the ones most likely
+  // to have a queue — while the promotion path accepted only 'published', so
+  // every press of Promote next on them answered SESSION_NOT_BOOKABLE.
+  assert.match(sql, /if v_session_status not in \('published', 'full'\) then raise exception 'SESSION_NOT_BOOKABLE'/);
+  // The rest of that function is untouched: credits, FIFO order, the notice.
+  assert.match(sql, /WAITLIST_ORDER_REQUIRED/);
+  assert.match(sql, /update public\.credit_batches set remaining = remaining - 1 where id = v_new_batch;/);
+  assert.match(sql, /update public\.credit_batches set remaining = remaining \+ 1 where id = v_batch;/);
+});

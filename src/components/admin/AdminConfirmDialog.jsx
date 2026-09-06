@@ -16,7 +16,7 @@ export default function AdminConfirmDialog({
   onOpenChange,
   title,
   description,
-  warning,
+  warning = '',
   cancelLabel = 'Keep unchanged',
   confirmLabel = 'Confirm',
   onConfirm,

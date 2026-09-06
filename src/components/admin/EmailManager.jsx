@@ -18,7 +18,7 @@ function StatusChip({ value }) {
   return <span className={`inline-flex rounded-full border px-2.5 py-1 font-body text-[10px] uppercase tracking-[0.14em] ${tone}`}>{value || 'unknown'}</span>;
 }
 
-function Toggle({ checked, onChange, label, description, disabled }) {
+function Toggle({ checked, onChange, label, description = '', disabled = false }) {
   return (
     <label className="flex items-start justify-between gap-4 py-3">
       <span>
