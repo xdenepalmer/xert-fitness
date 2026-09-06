@@ -1,5 +1,6 @@
 import React from 'react';
 import { classSignupState } from '@/lib/classSignup';
+import { gymShortDateLabel, gymTimeLabel } from '@/lib/gymTime';
 
 export const CLASS_COLORS = {
   'XERT Foundation': 'border-green-600/40 text-green-400',
@@ -24,8 +25,7 @@ const actionClasses = 'flex min-h-[52px] w-full items-center justify-center px-5
 export default function ClassSessionCard({ session, bookingsEnabled, onBook, fitbox = null, availability = null }) {
   const dotClass = CLASS_DOT_COLORS[session.class_type] || 'bg-xert-steel';
   const signup = classSignupState({ session, availability, bookingsEnabled, fitbox });
-  const isFull = signup.kind === 'full';
-  const start = session.start_time ? new Date(session.start_time) : null;
+  const isFull = signup.kind === 'waitlist';
 
   return (
     <div className={`xert-card p-4 sm:p-5 ${isFull ? 'opacity-70' : ''}`}>
@@ -34,11 +34,11 @@ export default function ClassSessionCard({ session, bookingsEnabled, onBook, fit
         <div className="shrink-0 min-w-[4.25rem] border-r border-xert-steel/15 pr-3 sm:pr-4">
           <p className="font-body text-[10px] uppercase tracking-[0.16em] text-xert-pale/45">Time</p>
           <p className="font-display text-2xl leading-none text-xert-offwhite tabular-nums mt-1">
-            {start ? start.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : 'TBC'}
+            {gymTimeLabel(session.start_time) || 'TBC'}
           </p>
           <p className="font-body text-[10px] uppercase tracking-[0.16em] text-xert-pale/45 mt-3">Date</p>
           <p className="font-display text-sm text-xert-pale/85 tabular-nums mt-0.5">
-            {start ? start.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : 'TBC'}
+            {gymShortDateLabel(session.start_time) || 'TBC'}
           </p>
         </div>
 
@@ -72,13 +72,17 @@ export default function ClassSessionCard({ session, bookingsEnabled, onBook, fit
           <p className="font-display text-base text-xert-offwhite tabular-nums">{session.duration_minutes || '—'}min</p>
         </div>
         <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+          {/* A live "spots left" counter under copy saying no spot is held read
+              as a bookable class, so people concluded their registration had
+              secured one of the eight. Only a class that actually hands out
+              places counts them down. */}
           <p className="font-body text-[10px] text-xert-pale/45 uppercase tracking-wider">
-            {signup.spotsLeft === null ? 'Capacity' : 'Spots left'}
+            {signup.takesSpot ? 'Spots left' : 'Capacity'}
           </p>
           <p className="font-display text-base text-xert-offwhite tabular-nums">
-            {signup.spotsLeft === null
-              ? (session.capacity || '—')
-              : `${signup.spotsLeft}${session.capacity ? ` / ${session.capacity}` : ''}`}
+            {signup.takesSpot && signup.spotsLeft !== null
+              ? `${signup.spotsLeft}${session.capacity ? ` / ${session.capacity}` : ''}`
+              : (session.capacity || '—')}
           </p>
         </div>
         {session.intensity_level && (
@@ -108,14 +112,14 @@ export default function ClassSessionCard({ session, bookingsEnabled, onBook, fit
           </button>
         )}
 
-        {(signup.kind === 'request' || signup.kind === 'interest') && (
+        {(signup.kind === 'request' || signup.kind === 'interest' || signup.kind === 'waitlist') && (
           <button onClick={() => onBook(session)}
             className={`${signup.kind === 'request' ? 'xert-btn-primary' : 'xert-btn-ghost'} ${actionClasses}`}>
             {signup.label}
           </button>
         )}
 
-        {(signup.kind === 'full' || signup.kind === 'past' || signup.kind === 'provider-unavailable') && (
+        {(signup.kind === 'past' || signup.kind === 'provider-unavailable') && (
           <button type="button" disabled aria-disabled="true"
             className={`${actionClasses} rounded-[0.875rem] border border-xert-steel/15 bg-white/[0.03] text-xert-pale/40 cursor-not-allowed`}>
             {signup.label}

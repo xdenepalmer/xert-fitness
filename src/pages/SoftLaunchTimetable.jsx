@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, List } from 'lucide-react';
 import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
@@ -6,13 +7,13 @@ import Countdown from '@/components/public/Countdown';
 import { DEFAULT_TARGET_LAUNCH_DATE, fitboxHandoff } from '@/lib/launchSettings';
 import BookingRequestForm from '@/components/public/BookingRequestForm';
 import PTRequestForm from '@/components/public/PTRequestForm';
-import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import ClassSessionCard from '@/components/public/ClassSessionCard';
 import PublicClassCalendar from '@/components/public/PublicClassCalendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getClassSessions, getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import { getPublicClassAvailability } from '@/lib/submitForms';
 import { classSignupState, signupOutcomeMessage } from '@/lib/classSignup';
+import { gymDateKey } from '@/lib/gymTime';
 
 const VIEW_OPTIONS = [
   { key: 'calendar', label: 'Calendar', icon: CalendarDays },
@@ -32,7 +33,9 @@ export default function SoftLaunchTimetable() {
   const [availability, setAvailability] = useState({});
   const [ptSuccess, setPTSuccess] = useState(false);
   const [view, setView] = useState('calendar');
+  const [searchParams, setSearchParams] = useSearchParams();
   const fitbox = fitboxHandoff(settings);
+  const deepLinkedId = searchParams.get('session') || '';
 
   useEffect(() => {
     Promise.all([
@@ -51,9 +54,39 @@ export default function SoftLaunchTimetable() {
 
   // Re-read remaining places after a sign-up so other visitors on this page
   // see the spot disappear without a reload.
-  const refreshAvailability = () => {
+  const refreshAvailability = useCallback(() => {
     getPublicClassAvailability().then(setAvailability).catch(() => {});
-  };
+  }, []);
+
+  // Counts stop being true the moment the page is left open, and a visitor who
+  // starts a sign-up against a stale number is already doomed. Refresh when the
+  // tab comes back into view.
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') refreshAvailability(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [refreshAvailability]);
+
+  // /booking sends people here for a named class, and /timetable links are
+  // shared for one class at a time. Land on that class's day with its sign-up
+  // open, instead of at the top of whichever day happens to be next.
+  const deepLinkedSession = useMemo(
+    () => (deepLinkedId ? sessions.find(item => String(item.id) === deepLinkedId) || null : null),
+    [deepLinkedId, sessions],
+  );
+  useEffect(() => {
+    if (!deepLinkedSession) return;
+    setSelectedSession(deepLinkedSession);
+    setSearchParams(current => {
+      const next = new URLSearchParams(current);
+      next.delete('session');
+      return next;
+    }, { replace: true });
+  }, [deepLinkedSession, setSearchParams]);
 
   const selectedSignup = classSignupState({
     session: selectedSession || {},
@@ -149,6 +182,7 @@ export default function SoftLaunchTimetable() {
                 onBook={setSelectedSession}
                 fitbox={fitbox}
                 availability={availability}
+                initialDayKey={deepLinkedSession ? gymDateKey(deepLinkedSession.start_time) : null}
               />
             ) : (
               <div className="space-y-3">
@@ -207,10 +241,12 @@ export default function SoftLaunchTimetable() {
               submitLabel={selectedSignup.label}
               busyLabel={selectedSignup.takesSpot ? 'Taking your spot...' : 'Submitting...'}
               takesSpot={selectedSignup.takesSpot}
+              joinWaitlist={selectedSignup.joinWaitlist}
               consentLabel={selectedSignup.takesSpot
                 ? 'I consent to XERT contacting me about this class.'
                 : 'I consent to XERT contacting me about this booking request.'}
               onSuccess={result => { setBookingSuccess(result || {}); setSelectedSession(null); refreshAvailability(); }}
+              onRejected={refreshAvailability}
               onCancel={() => setSelectedSession(null)}
             />
           )}
@@ -229,6 +265,16 @@ export default function SoftLaunchTimetable() {
           <DialogDescription className="font-body text-sm text-xert-pale/65 mb-6">
             {successCopy.body}
           </DialogDescription>
+          {successCopy.cancelToken && (
+            <p className="mb-6 font-body text-xs text-xert-pale/55">
+              Can&rsquo;t make it?{' '}
+              <a href={`/timetable/release?token=${encodeURIComponent(successCopy.cancelToken)}`}
+                className="text-xert-steel underline underline-offset-2 hover:text-xert-offwhite">
+                Release your spot
+              </a>{' '}
+              so someone else can take it. The same link is in your confirmation email.
+            </p>
+          )}
           <button onClick={() => setBookingSuccess(null)}
             className="xert-btn-primary mx-auto inline-flex min-h-[52px] w-full items-center justify-center px-6 font-display text-sm uppercase tracking-wide">
             Done
@@ -237,7 +283,6 @@ export default function SoftLaunchTimetable() {
       </Dialog>
 
       <PublicFooter />
-      <StickyMobileCTA />
     </div>
   );
 }

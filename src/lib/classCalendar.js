@@ -293,6 +293,17 @@ export function upcomingDayKeys(byDay, { now = new Date(), limit = 3 } = {}) {
     .slice(0, limit);
 }
 
+/**
+ * Moves a day key by whole days, staying on civil dates. Used by the calendar
+ * grid's arrow-key navigation, so the whole month is one tab stop rather than
+ * forty-two.
+ */
+export function shiftDayKey(dateKey, days) {
+  const day = dateFromKey(dateKey);
+  if (!day || !Number.isInteger(days)) return null;
+  return localDateKey(new Date(day.getFullYear(), day.getMonth(), day.getDate() + days));
+}
+
 export function isPastDayKey(dateKey, now = new Date()) {
   const day = dateFromKey(dateKey);
   if (!day) return false;

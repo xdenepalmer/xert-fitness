@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { submitClassSignup } from '@/lib/submitForms';
 import FormCheckbox from '@/components/public/FormCheckbox';
 import { friendlySignupError } from '@/lib/classSignup';
+import { gymDateTimeLabel } from '@/lib/gymTime';
 
 const chipClasses = 'min-h-11 px-3 py-2 text-sm font-body rounded-full border transition-colors';
 const chipActive = 'border-xert-steel bg-xert-steel text-xert-navy';
@@ -32,12 +33,15 @@ export default function BookingRequestForm({
   busyLabel = 'Requesting...',
   consentLabel = 'I consent to XERT contacting me about this booking request.',
   takesSpot = false,
+  joinWaitlist = false,
+  onRejected,
 }) {
   const [form, setForm] = useState({
     full_name: '', email: '', phone: '', training_level: '',
     notes: '', consent_to_contact: false, company_website: '',
     class_session_id: session?.id || '',
   });
+  const [rejected, setRejected] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -52,10 +56,16 @@ export default function BookingRequestForm({
     setLoading(true);
     setError('');
     try {
-      const result = await submitClassSignup(form);
+      const result = await submitClassSignup({ ...form, join_waitlist: joinWaitlist });
       onSuccess?.(result);
     } catch (submitError) {
       setError(friendlySignupError(submitError));
+      // The class filled while this form was open. Tell the page so the counts
+      // behind the modal stop advertising a spot that is gone, and stop
+      // offering a submit that will fail the same way again.
+      const gone = /CLASS_FULL|CLASS_WAITLISTED|CLASS_STARTED|CLASS_NOT_OPEN/i.test(submitError?.message || '');
+      if (gone) setRejected(true);
+      onRejected?.(submitError);
     } finally {
       setLoading(false);
     }
@@ -73,7 +83,7 @@ export default function BookingRequestForm({
         <div className="xert-card-flat p-4 mb-6">
           <p className="font-display text-base text-xert-offwhite uppercase">{session.title}</p>
           <p className="font-body text-xs text-xert-pale/65 mt-1">
-            {session.start_time ? new Date(session.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+            {gymDateTimeLabel(session.start_time)}
             {session.coach_name ? ` · ${session.coach_name}` : ''}
           </p>
         </div>
@@ -109,6 +119,11 @@ export default function BookingRequestForm({
           Your spot is held as soon as you submit these details.
         </p>
       )}
+      {joinWaitlist && (
+        <p className="font-body text-xs text-xert-pale/70">
+          This class is full, so no spot is held. We will contact you the moment one frees up.
+        </p>
+      )}
 
       <FormCheckbox name="consent_to_contact" checked={form.consent_to_contact} onChange={checked => set('consent_to_contact', checked)} required>
         {consentLabel}
@@ -127,7 +142,8 @@ export default function BookingRequestForm({
             Cancel
           </button>
         )}
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || rejected}
+          title={rejected ? 'This class can no longer take this submission' : undefined}
           className="xert-btn-primary flex-1 inline-flex min-h-[52px] items-center justify-center font-display text-sm uppercase tracking-wide disabled:opacity-50">
           {loading ? busyLabel : submitLabel}
         </button>
