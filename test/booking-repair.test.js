@@ -98,3 +98,59 @@ test('a full class’s waitlist can actually be promoted from', async () => {
   assert.match(sql, /update public\.credit_batches set remaining = remaining - 1 where id = v_new_batch;/);
   assert.match(sql, /update public\.credit_batches set remaining = remaining \+ 1 where id = v_batch;/);
 });
+
+test('the day desk stops flagging a class once its roll call is done', async () => {
+  const sql = await read('../supabase/migrations/20260906030000_booking_repair_followups.sql');
+  // The overhaul added attended/no_show to the sum attendance_due tests, so the
+  // moment a roll call converted every confirmed row the count stayed above
+  // zero and the class read "Roll call due" forever.
+  assert.match(sql, /and s\.status in \('published', 'full'\)\s*\n\s*and \(\s*\n\s*coalesce\(member_counts\.confirmed_count, 0\)\s*\n\s*\+ coalesce\(public_counts\.confirmed_count, 0\)\s*\n\s*\) > 0/);
+  assert.doesNotMatch(sql, /attendance_due[\s\S]{0,400}attended_count, 0\) \+ coalesce\(member_counts\.no_show_count/);
+});
+
+test('a subject line reaches the owner as text, never as markup', async () => {
+  const sql = await read('../supabase/migrations/20260906030000_booking_repair_followups.sql');
+  // email_layout splices its title into <title> and <h1>, and every owner alert
+  // about a public sign-up uses the visitor's own typed name as that title.
+  const layout = sql.slice(sql.indexOf('create or replace function public.email_layout'));
+  assert.equal((layout.match(/public\.email_escape\(p_title\)/g) || []).length, 2);
+  assert.match(layout, /public\.email_escape\(p_cta_label\)/);
+  // The href stays raw on purpose — every URL is ours, and escaping would
+  // mangle a query string.
+  assert.match(layout, /href="' \|\| p_cta_url \|\| '"/);
+});
+
+test('an apostrophe survives the trip into the plain-text email', async () => {
+  const sql = await read('../supabase/migrations/20260906030000_booking_repair_followups.sql');
+  // queue_email builds text/plain by stripping tags with no entity decoding, so
+  // escaping the apostrophe put "Hi O&#39;Brien," in every plain-text body.
+  const escaper = sql.slice(sql.indexOf('create or replace function public.email_escape'));
+  assert.doesNotMatch(escaper.slice(0, 400), /&#39;/);
+  for (const pair of [`'&', '&amp;'`, `'<', '&lt;'`, `'>', '&gt;'`, `'"', '&quot;'`]) {
+    assert.ok(escaper.includes(pair), `still escapes ${pair}`);
+  }
+});
+
+test('a class marked full is visible to the public again', async () => {
+  const sql = await read('../supabase/migrations/20260906030000_booking_repair_followups.sql');
+  // Every read path was taught that 'full' is a live class, but the row-level
+  // policy still said 'published' only — so the new timetable's whole waitlist
+  // path for full classes would have shipped dead.
+  assert.match(sql, /using \(public_visible = true and status in \('published', 'full'\)\)/);
+  // And the rows the deployed editor already hid have to be put back, or they
+  // stay hidden after the policy opens.
+  assert.match(sql, /update public\.class_sessions\s*\n\s*set public_visible = true[\s\S]{0,120}where status = 'full'\s*\n\s*and public_visible = false;/);
+});
+
+test('the roll call blocks on member requests only, agreeing with the database', async () => {
+  const admin = await read('../src/components/admin/ClassCalendarAdmin.jsx');
+  const repairSql = await repair();
+  // A member request holds a credit this roll call settles, so it blocks. A
+  // public enquiry holds nothing and sits at 'requested' by design — blocking
+  // on those is the freeze the database was repaired to remove, and the new
+  // frontend was about to re-impose it in the browser.
+  assert.match(repairSql, /perform 1 from public\.session_bookings\s*\n\s*where class_session_id = p_session_id and status = 'requested'/);
+  assert.doesNotMatch(repairSql, /perform 1 from public\.class_bookings\s*\n\s*where class_session_id = p_session_id and status = 'requested'/);
+  const gates = admin.match(/status === 'requested' && person\.attendance_source === 'member'/g) || [];
+  assert.equal(gates.length, 2, 'both the save guard and the render guard are member-only');
+});

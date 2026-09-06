@@ -1002,7 +1002,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     if (!attendanceSession) return;
     const roll = attendanceRoll(roster, bookings);
     const summary = summarizeAttendanceDraft(roll, attendanceDraft);
-    const pendingRequests = roll.filter(person => person.status === 'requested');
+    // Member requests only. Each one is holding a credit this roll call would
+    // settle, so it genuinely blocks. A public enquiry holds nothing and can sit
+    // at 'requested' for weeks by design — blocking on those would freeze a
+    // class's attendance permanently, which is the exact trap the database was
+    // repaired to remove. The two must agree.
+    const pendingRequests = roll.filter(person => person.status === 'requested' && person.attendance_source === 'member');
     if (pendingRequests.length > 0) {
       toast({
         title: 'Resolve booking requests first',
@@ -1055,7 +1060,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   // the public timetable had no roll call at all before this.
   const classRoll = attendanceRoll(roster, bookings);
   const attendanceSummary = summarizeAttendanceDraft(classRoll, attendanceDraft);
-  const pendingAttendanceRequests = classRoll.filter(person => person.status === 'requested');
+  const pendingAttendanceRequests = classRoll.filter(person => person.status === 'requested' && person.attendance_source === 'member');
 
   return (
     <div className={ADMIN_PAGE}>
