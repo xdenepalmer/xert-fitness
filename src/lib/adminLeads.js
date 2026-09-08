@@ -30,7 +30,7 @@ export function selectedLeadIds(current, id, checked) {
 }
 
 export const LEAD_STATUSES = {
-  member_interest: ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'],
+  member_interest: ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'casual', 'not_suitable', 'archived'],
   trainer_interest: ['new', 'reviewing', 'contacted', 'interview', 'shortlisted', 'not_suitable', 'hired', 'archived'],
   partner_interest: ['new', 'reviewing', 'contacted', 'meeting', 'approved', 'not_suitable', 'archived'],
 };

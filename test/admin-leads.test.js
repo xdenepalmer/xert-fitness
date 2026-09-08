@@ -83,3 +83,29 @@ test('turns atomic lead workflow failures into actionable admin messages', () =>
   assert.match(leadMutationError({ message: 'LEAD_NOT_FOUND' }).message, /no longer exists/);
   assert.match(leadMutationError({ message: 'ADMIN_REQUIRED' }).message, /session has expired/);
 });
+
+test('a member lead can end up training casually, and every surface offers it', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const read = path => readFile(new URL(path, import.meta.url), 'utf8');
+
+  // The pipeline accepts it, and the other two pipelines are left alone.
+  assert.deepEqual(validateLeadMutation('member_interest', 'casual', ['lead-a']), {
+    table: 'member_interest', status: 'casual', ids: ['lead-a'],
+  });
+  assert.throws(() => validateLeadMutation('trainer_interest', 'casual', ['lead-a']), /status/i);
+  assert.throws(() => validateLeadMutation('partner_interest', 'casual', ['lead-a']), /status/i);
+
+  // Casual sits with joined as an outcome, not among the dead ends.
+  const [web, native, sql] = await Promise.all([
+    read('../src/components/admin/LeadTable.jsx'),
+    read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
+    read('../supabase/migrations/20260908050000_member_lead_casual_status.sql'),
+  ]);
+  assert.match(web, /'joined', 'casual', 'not_suitable'/);
+  assert.match(web, /^ {2}casual: /m, 'the badge has its own colour');
+  assert.match(native, /"joined", "casual", "not_suitable"/);
+  assert.match(sql, /'booked_trial', 'joined', 'casual', 'not_suitable', 'archived'/);
+  // The server is the gate, so the trainer and partner lists must not gain it.
+  const trainerLine = sql.slice(sql.indexOf("when 'trainer_interest'"), sql.indexOf("when 'partner_interest'"));
+  assert.doesNotMatch(trainerLine, /casual/);
+});

@@ -1803,7 +1803,7 @@ enum AdminLeadPipeline: String, CaseIterable, Identifiable, Codable, Hashable {
     var statuses: [String] {
         switch self {
         case .members:
-            return ["new", "contacted", "warm", "hot", "foundation_offer_sent", "booked_trial", "joined", "not_suitable", "archived"]
+            return ["new", "contacted", "warm", "hot", "foundation_offer_sent", "booked_trial", "joined", "casual", "not_suitable", "archived"]
         case .trainers:
             return ["new", "reviewing", "contacted", "interview", "shortlisted", "not_suitable", "hired", "archived"]
         case .partners:

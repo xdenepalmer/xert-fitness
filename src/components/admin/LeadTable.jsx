@@ -8,7 +8,7 @@ import AdminLoadError from '@/components/admin/AdminLoadError';
 import FitboxLeadHandoff from '@/components/admin/FitboxLeadHandoff';
 import { ADMIN_BUTTON, ADMIN_PAGE } from '@/components/admin/ui';
 
-const MEMBER_STATUSES = ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'not_suitable', 'archived'];
+const MEMBER_STATUSES = ['new', 'contacted', 'warm', 'hot', 'foundation_offer_sent', 'booked_trial', 'joined', 'casual', 'not_suitable', 'archived'];
 const TRAINER_STATUSES = ['new', 'reviewing', 'contacted', 'interview', 'shortlisted', 'not_suitable', 'hired', 'archived'];
 const PARTNER_STATUSES = ['new', 'reviewing', 'contacted', 'meeting', 'approved', 'not_suitable', 'archived'];
 const PAGE_SIZE = 50;
@@ -21,6 +21,8 @@ const STATUS_COLORS = {
   foundation_offer_sent: 'bg-purple-900/30 text-purple-400',
   booked_trial: 'bg-green-900/30 text-green-400',
   joined: 'bg-green-700/30 text-green-300',
+  // Training casually rather than joining is still a win, just a different one.
+  casual: 'bg-teal-900/30 text-teal-300',
   reviewing: 'bg-blue-900/30 text-blue-400',
   interview: 'bg-purple-900/30 text-purple-400',
   shortlisted: 'bg-yellow-900/30 text-yellow-400',

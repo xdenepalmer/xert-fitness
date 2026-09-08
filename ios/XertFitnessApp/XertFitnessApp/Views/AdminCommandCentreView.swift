@@ -11464,6 +11464,8 @@ private struct AdminLeadsView: View {
         switch value {
         case "new", "hot": return .orange
         case "joined", "hired", "approved", "booked_trial": return .green
+        // Training casually rather than joining is still a win, just a different one.
+        case "casual": return .teal
         case "not_suitable", "archived": return Color.xertPale.opacity(0.45)
         default: return Color.xertSteel
         }
