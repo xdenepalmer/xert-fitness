@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 import { installDesignFixtures } from '../test/fixtures/design-data.mjs';
+import { checkPublicNavigation } from '../test/browser/public-navigation.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -25,6 +26,17 @@ const server = await createServer({
 });
 let browser;
 const results = [];
+async function checkAnnouncement(page) {
+  const banner = page.locator('[data-public-announcement]');
+  if (!await banner.count()) return;
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const bar = await page.locator('[data-public-nav]').boundingBox();
+  const notice = await banner.boundingBox();
+  const logo = await page.locator('#main').getByRole('img', { name: 'XERT Fitness', exact: true }).boundingBox();
+  assert.ok(notice.y >= bar.y + bar.height - 1, 'Announcement clears navigation');
+  assert.ok(logo.y >= notice.y + notice.height - 1, 'Hero content clears the entire multiline announcement');
+}
 try {
   await server.listen();
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
@@ -34,8 +46,9 @@ try {
   for (const [width, height] of sizes) {
     for (const signedIn of [false, true]) {
       const requests = [];
-      const context = await browser.newContext({ viewport: { width, height }, reducedMotion, serviceWorkers: 'block' });
-      await installDesignFixtures(context, { origin, signedIn, requests });
+      const failures = {};
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion, hasTouch: true, serviceWorkers: 'block' });
+      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement') });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -45,6 +58,7 @@ try {
         try {
           await page.goto(origin + path, { waitUntil: 'networkidle' });
           await page.locator('main').first().waitFor();
+          if (path === '/') await checkAnnouncement(page);
           if (path === '/' && signedIn && width === 390) {
             const qr = await page.evaluate(async () => {
               const { renderBrandedFormQR, qrCanvasBlob } = await import('/src/lib/brandedFormQR.js');
@@ -84,9 +98,21 @@ try {
             }
           }
           await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          if (path === '/') await checkAnnouncement(page);
           const zoomMenu = page.locator('button[aria-controls="mobile-navigation"]');
           if (path === '/' && await zoomMenu.isVisible()) await zoomMenu.click();
           await page.screenshot({ path: resolve(output, `${prefix}-text-200.png`) });
+          if (path === '/') {
+            const clipped = await page.evaluate(() => {
+              const nav = document.querySelector('[data-public-nav]');
+              if (!nav) return [];
+              return [...nav.querySelectorAll('a,button')].filter(el => !el.closest('#mobile-navigation') && el.checkVisibility({ visibilityProperty: true }))
+                .filter(el => { const box = el.getBoundingClientRect(); return box.left < -1 || box.right > innerWidth + 1 || box.bottom > nav.getBoundingClientRect().bottom + 1; })
+                .map(el => el.textContent.trim() || el.getAttribute('aria-label'));
+            });
+            assert.deepEqual(clipped, [], 'Public navigation controls are not clipped at 200% text');
+          }
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, '200% text does not overflow horizontally');
           if (path === '/' && await zoomMenu.isVisible()) await page.keyboard.press('Escape');
           await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
@@ -94,7 +120,32 @@ try {
           results.push({ prefix, passed: true });
         } catch (error) {
           await page.screenshot({ path: resolve(output, `${prefix}-failure.png`) });
-          results.push({ prefix, passed: false, error: error.message, browserErrors: errors });
+          const overflow = await page.evaluate(() => [...document.querySelectorAll('body *')]
+            .filter(el => {
+              const box = el.getBoundingClientRect();
+              if (!el.checkVisibility({ visibilityProperty: true }) || box.right <= innerWidth + 1) return false;
+              for (let ancestor = el.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+                if (getComputedStyle(ancestor).overflowX !== 'visible' && ancestor.getBoundingClientRect().right <= innerWidth + 1) return false;
+              }
+              return true;
+            })
+            .sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)
+            .slice(0, 15).map(el => ({ tag: el.tagName, class: el.getAttribute('class'), text: el.textContent?.slice(0, 100), width: el.getBoundingClientRect().width, right: el.getBoundingClientRect().right })));
+          results.push({ prefix, passed: false, error: error.message, browserErrors: errors, overflow });
+        }
+        if (path === '/' && process.argv.includes('--navigation')) {
+          try {
+            await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+            await page.goto(origin, { waitUntil: 'networkidle' });
+            await checkPublicNavigation(page, { origin, signedIn, failures });
+            assert.deepEqual(errors, [], 'No browser runtime errors during navigation interactions');
+            results.push({ prefix: `${prefix}-interactions`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-interaction-failure.png`) });
+            results.push({ prefix: `${prefix}-interactions`, passed: false, error: error.message, browserErrors: errors });
+          } finally {
+            await page.setViewportSize({ width, height });
+          }
         }
       }
       await writeFile(resolve(output, `${width}-${signedIn ? 'signed-in' : 'signed-out'}-requests.json`), JSON.stringify(requests, null, 2));

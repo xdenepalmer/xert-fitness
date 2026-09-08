@@ -32,6 +32,7 @@ to use an installed Chrome binary instead of Playwright's bundled Chromium.
 
 ```sh
 node scripts/verify-design.mjs --tag=after-nav
+node scripts/verify-design.mjs --tag=nav --routes=/ --navigation --announcement
 node scripts/verify-design.mjs --tag=motion --motion=default --quick
 node scripts/verify-design.mjs --tag=panels --routes=/admin,/admin/calendar,/admin/forms
 ```
@@ -40,6 +41,13 @@ The full matrix uses 390×844, 768×1024, 1440×900 and 1920×1080. It captures 
 scrolled, signed-in/signed-out menu and 200% text states, checks horizontal overflow,
 keyboard containment and Escape focus restoration, records runtime errors, and
 exports a real 1024px branded QR PNG. `--quick` uses the phone and desktop sizes.
+`--navigation` additionally verifies the collapse heights, active underline,
+next-class and account content, failed availability/retry, breakpoint cleanup,
+and real touch gestures (finger tracking, dismissal and non-dismissal while the
+content is scrolled). `--announcement` uses a long fictional announcement to
+check that the full banner clears the header and hero at both text sizes.
+Interaction results are reported separately so an unrelated page overflow does
+not hide the navigation test outcomes.
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine

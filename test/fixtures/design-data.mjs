@@ -32,6 +32,9 @@ export function designData() {
       prices_coming_soon: true, countdown_enabled: false, class_credits_enabled: false,
       soft_launch_mode: true, default_booking_mode: 'request_to_book' }],
     sessions: [session],
+    class_sessions: [{ ...session, public_visible: true }],
+    public_class_availability: [{ class_session_id: session.id, capacity: 8, taken: 6, waiting: 0,
+      pending: 2, spots_left: 2, bookings_open: true, can_take_spot: true, booking_mode: 'request_to_book' }],
     sessions_with_availability: [session],
     admin_daily_operations: [session],
     my_bookings: [{ id: '33333333-3333-4333-8333-333333333333', session_id: session.id,
@@ -44,13 +47,18 @@ export function designData() {
 const readRPCs = new Set([
   'sessions_with_availability', 'my_bookings', 'my_member_announcements', 'admin_daily_operations',
   'admin_waitlist_overview', 'admin_search_members', 'admin_members_overview',
+  'public_class_availability',
 ]);
 
 // Network-level isolation: keep real auth/router/components, intercept only I/O.
 // External data destinations are fulfilled here or aborted. Only unauthenticated
 // Google Fonts reads pass through so typography matches the real product.
-export async function installDesignFixtures(context, { origin, signedIn = false, requests = [] }) {
+export async function installDesignFixtures(context, { origin, signedIn = false, requests = [], failures = {}, announcement = false }) {
   const data = designData();
+  if (announcement) Object.assign(data.admin_settings[0], {
+    announcement_banner_enabled: true,
+    announcement_banner_text: 'Welcome to XERT. Our coached training sessions are open for booking. Please arrive ten minutes early so your coach can help you get ready.',
+  });
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -67,6 +75,10 @@ export async function installDesignFixtures(context, { origin, signedIn = false,
       if (url.pathname === '/auth/v1/user') return respond(fixtureUser);
       const rpc = url.pathname.startsWith('/rest/v1/rpc/');
       const name = url.pathname.split('/').at(-1);
+      if (failures[name] > 0) {
+        failures[name] -= 1;
+        return respond({ message: 'Fixture class service temporarily unavailable.' }, 503);
+      }
       if (rpc && !readRPCs.has(name)) return respond({ message: 'Mutation or unconfigured RPC blocked by local design fixture.' }, 501);
       if (!rpc && !['GET', 'HEAD', 'OPTIONS'].includes(method)) return respond({ message: 'Writes blocked by local design fixture.' }, 403);
       const rows = data[name] ?? [];
