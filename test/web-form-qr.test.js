@@ -38,7 +38,10 @@ test('form manager creates a local high-correction branded QR with mobile downlo
   assert.match(helper, /url\.origin !== window\.location\.origin/);
   assert.match(helper, /const padSize = Math\.round\(actualSize \* 0\.22\)/);
   assert.match(helper, /const logoSize = Math\.round\(actualSize \* 0\.18\)/);
-  assert.match(helper, /context\.fillStyle = '#ffffff'/);
+  assert.match(helper, /const light = resolveSemanticColor\('qr.background'\)/);
+  assert.match(helper, /const dark = resolveSemanticColor\('qr.foreground'\)/);
+  assert.match(helper, /color: \{ dark, light \}/);
+  assert.match(helper, /context\.fillStyle = light/);
   assert.match(helper, /context\.drawImage\(logo/);
   assert.match(manifest, /"qrcode": "1\.5\.4"/);
   assert.match(packageLock, /node_modules\/qrcode/);

@@ -1,3 +1,5 @@
+import { resolveSemanticColor } from './designTokens.js';
+
 export const FORM_QR_SIZE = 1024;
 export const FORM_QR_LOGO_PATH = '/assets/xert-logo-icon.png';
 
@@ -40,11 +42,13 @@ export async function renderBrandedFormQR(canvas, publicURL, size = FORM_QR_SIZE
   // The encoder is only needed after an owner opens a particular form, so
   // keep it out of the Forms workspace's first-load bundle.
   const { default: QRCode } = await import('qrcode');
+  const dark = resolveSemanticColor('qr.foreground');
+  const light = resolveSemanticColor('qr.background');
   await QRCode.toCanvas(canvas, resolvedURL.href, {
     width: size,
     margin: 4,
     errorCorrectionLevel: 'H',
-    color: { dark: '#101820', light: '#ffffff' },
+    color: { dark, light },
   });
 
   const logo = await loadSameOriginImage(FORM_QR_LOGO_PATH);
@@ -57,7 +61,7 @@ export async function renderBrandedFormQR(canvas, publicURL, size = FORM_QR_SIZE
   const logoOffset = Math.round((actualSize - logoSize) / 2);
 
   context.save();
-  context.fillStyle = '#ffffff';
+  context.fillStyle = light;
   roundRect(context, padOffset, padOffset, padSize, padSize, Math.round(actualSize * 0.018));
   context.fill();
   context.drawImage(logo, logoOffset, logoOffset, logoSize, logoSize);

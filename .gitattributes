@@ -1,0 +1,4 @@
+# Deterministic generated artifacts must retain byte equality on Windows and CI.
+/src/styles/tokens.css text eol=lf
+/tailwind.config.tokens.cjs text eol=lf
+/ios/XertFitnessApp/XertFitnessApp/Generated/XertTokens.swift text eol=lf

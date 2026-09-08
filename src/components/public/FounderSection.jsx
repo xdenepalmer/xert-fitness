@@ -31,11 +31,11 @@ export default function FounderSection() {
           </div>
 
           <div>
-            <div className="relative mb-6 aspect-video overflow-hidden rounded-2xl border border-xert-steel/15 shadow-[0_30px_70px_-30px_rgba(0,0,0,0.8)]">
+            <div className="relative mb-6 aspect-video overflow-hidden rounded-2xl border border-xert-steel/15 shadow-[0_30px_70px_-30px_var(--surface-scrim-80)]">
               <FadeImage src={PHOTO} alt="Training at XERT" className="w-full h-full object-cover"
                 style={{ filter: 'saturate(0.6) brightness(0.7)' }} />
               <div className="absolute inset-0"
-                style={{ background: 'linear-gradient(180deg, transparent 55%, rgba(16,24,32,0.55) 100%)' }} />
+                style={{ background: 'linear-gradient(180deg, transparent 55%, var(--surface-base-55) 100%)' }} />
             </div>
 
             <p className="max-w-[44ch] font-body text-base leading-relaxed text-xert-pale">

@@ -33,7 +33,7 @@ export default function Contact() {
             {galleryPhotos.map((photo, index) => (
               <figure key={`${photo}-${index}`} className={`relative overflow-hidden rounded-2xl ${index === 0 ? 'col-span-2 md:col-span-1' : ''}`} style={{ aspectRatio: index === 0 ? '4 / 3' : '3 / 4' }}>
                 <img src={photo} alt={index === 0 ? 'XERT functional fitness coaching' : 'Training at XERT Fitness'} loading="lazy" className="w-full h-full object-cover" style={{ filter: 'saturate(0.72) brightness(0.78)' }} />
-                <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(180deg, transparent 55%, rgba(16,24,32,0.55))' }} />
+                <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(180deg, transparent 55%, var(--surface-base-55))' }} />
               </figure>
             ))}
           </div>
@@ -43,7 +43,7 @@ export default function Contact() {
           <div className="space-y-3">
           {/* Email */}
           <a href={`mailto:${content.email}`} className={`${rowClasses} group`}>
-            <span className="xert-icon-tile" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+            <span className="xert-icon-tile" style={{ backgroundColor: 'var(--accent-default)', color: 'var(--surface-base)' }}>
               <Mail className="w-5 h-5" />
             </span>
             <div className="min-w-0 flex-1">

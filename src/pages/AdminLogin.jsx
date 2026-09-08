@@ -26,19 +26,19 @@ export default function AdminLogin() {
     <div className="min-h-screen flex items-center justify-center px-6 bg-xert-black">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 mb-4" style={{ backgroundColor: '#7BA7BC' }}>
-            <Lock className="w-5 h-5" style={{ color: '#101820' }} />
+          <div className="inline-flex items-center justify-center w-12 h-12 mb-4" style={{ backgroundColor: 'var(--accent-default)' }}>
+            <Lock className="w-5 h-5" style={{ color: 'var(--surface-base)' }} />
           </div>
           <div className="flex items-baseline justify-center gap-2">
             <span className="font-display text-2xl text-xert-offwhite uppercase">XERT</span>
-            <span className="font-display text-xs uppercase tracking-widest" style={{ color: 'rgba(123,167,188,0.5)' }}>Command</span>
+            <span className="font-display text-xs uppercase tracking-widest" style={{ color: 'var(--accent-default-50)' }}>Command</span>
           </div>
-          <p className="font-body text-xs mt-2 uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.35)' }}>Admin sign in</p>
+          <p className="font-body text-xs mt-2 uppercase tracking-wider" style={{ color: 'var(--text-secondary-35)' }}>Admin sign in</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(209,221,230,0.5)' }}>Email</label>
+            <label className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary-50)' }}>Email</label>
             <input
               type="email"
               required
@@ -46,14 +46,14 @@ export default function AdminLogin() {
               onChange={e => setEmail(e.target.value)}
               autoComplete="email"
               className="w-full px-4 py-3 font-body text-sm text-xert-offwhite outline-none transition-colors"
-              style={{ backgroundColor: 'rgba(50,72,90,0.2)', border: '1px solid rgba(123,167,188,0.2)' }}
-              onFocus={e => e.currentTarget.style.borderColor = '#7BA7BC'}
-              onBlur={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'}
+              style={{ backgroundColor: 'var(--surface-secondary-20)', border: '1px solid var(--accent-default-20)' }}
+              onFocus={e => e.currentTarget.style.borderColor = 'var(--accent-default)'}
+              onBlur={e => e.currentTarget.style.borderColor = 'var(--accent-default-20)'}
             />
           </div>
 
           <div>
-            <label className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(209,221,230,0.5)' }}>Password</label>
+            <label className="block font-body text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary-50)' }}>Password</label>
             <input
               type="password"
               required
@@ -61,16 +61,16 @@ export default function AdminLogin() {
               onChange={e => setPassword(e.target.value)}
               autoComplete="current-password"
               className="w-full px-4 py-3 font-body text-sm text-xert-offwhite outline-none transition-colors"
-              style={{ backgroundColor: 'rgba(50,72,90,0.2)', border: '1px solid rgba(123,167,188,0.2)' }}
-              onFocus={e => e.currentTarget.style.borderColor = '#7BA7BC'}
-              onBlur={e => e.currentTarget.style.borderColor = 'rgba(123,167,188,0.2)'}
+              style={{ backgroundColor: 'var(--surface-secondary-20)', border: '1px solid var(--accent-default-20)' }}
+              onFocus={e => e.currentTarget.style.borderColor = 'var(--accent-default)'}
+              onBlur={e => e.currentTarget.style.borderColor = 'var(--accent-default-20)'}
             />
           </div>
 
           {(error || !serviceReady) && (
-            <div className="flex items-start gap-2 p-3" style={{ backgroundColor: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)' }}>
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#f87171' }} />
-              <p className="font-body text-xs" style={{ color: '#fca5a5' }}>
+            <div className="flex items-start gap-2 p-3" style={{ backgroundColor: 'var(--state-danger-strong-12)', border: '1px solid var(--state-danger-strong-30)' }}>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--state-danger-bright)' }} />
+              <p className="font-body text-xs" style={{ color: 'var(--state-danger-pale)' }}>
                 {serviceReady ? error : 'XERT services are temporarily unavailable.'}
               </p>
             </div>
@@ -80,13 +80,13 @@ export default function AdminLogin() {
             type="submit"
             disabled={submitting || !serviceReady}
             className="w-full py-3.5 font-display text-base uppercase tracking-wide transition-all active:scale-[0.98] disabled:opacity-50"
-            style={{ backgroundColor: '#7BA7BC', color: '#101820' }}
+            style={{ backgroundColor: 'var(--accent-default)', color: 'var(--surface-base)' }}
           >
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 
-        <p className="text-center font-body text-xs mt-6" style={{ color: 'rgba(209,221,230,0.25)' }}>
+        <p className="text-center font-body text-xs mt-6" style={{ color: 'var(--text-secondary-25)' }}>
           Admin access only. Accounts are managed in Supabase.
         </p>
       </div>

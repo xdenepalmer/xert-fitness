@@ -99,14 +99,14 @@ export default function WorkoutDisplay() {
   return (
     <div
       className="fixed inset-0 flex flex-col overflow-hidden"
-      style={{ backgroundColor: '#101820' }}
+      style={{ backgroundColor: 'var(--surface-base)' }}
     >
       <div
         aria-hidden="true"
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(123,167,188,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(123,167,188,0.05) 1px, transparent 1px)',
+            'linear-gradient(var(--accent-default-5) 1px, transparent 1px), linear-gradient(90deg, var(--accent-default-5) 1px, transparent 1px)',
           backgroundSize: '64px 64px',
         }}
       />
@@ -114,7 +114,7 @@ export default function WorkoutDisplay() {
       {/* Header: brand, day, and the wall clock */}
       <header
         className="relative flex items-center justify-between gap-6 px-[3vw] pt-[2.5vh] pb-[1.5vh]"
-        style={{ borderBottom: '1px solid rgba(123,167,188,0.22)' }}
+        style={{ borderBottom: '1px solid var(--accent-default-22)' }}
       >
         <div className="flex items-center gap-[2vw] min-w-0">
           <img
@@ -126,7 +126,7 @@ export default function WorkoutDisplay() {
           <p
             className="font-body uppercase truncate"
             style={{
-              color: 'rgba(209,221,230,0.65)',
+              color: 'var(--text-secondary-65)',
               letterSpacing: '0.18em',
               fontSize: 'clamp(0.7rem, 1.5vw, 1.75rem)',
             }}
@@ -142,13 +142,13 @@ export default function WorkoutDisplay() {
               style={{
                 width: 'clamp(0.5rem, 0.9vw, 1rem)',
                 height: 'clamp(0.5rem, 0.9vw, 1rem)',
-                backgroundColor: '#E4B363',
+                backgroundColor: 'var(--chart-warning)',
               }}
             />
           )}
           <p
             className="font-display uppercase tabular-nums"
-            style={{ color: '#7BA7BC', fontSize: 'clamp(1.75rem, 4.4vw, 5.5rem)', lineHeight: 1 }}
+            style={{ color: 'var(--accent-default)', fontSize: 'clamp(1.75rem, 4.4vw, 5.5rem)', lineHeight: 1 }}
           >
             {brisbaneClock(now)}
           </p>
@@ -161,7 +161,7 @@ export default function WorkoutDisplay() {
             <h1
               className="font-display uppercase shrink-0"
               style={{
-                color: '#F1F3F4',
+                color: 'var(--text-primary)',
                 fontSize: 'clamp(2.25rem, 6.4vw, 8rem)',
                 lineHeight: 0.95,
                 letterSpacing: '0.01em',
@@ -179,7 +179,7 @@ export default function WorkoutDisplay() {
                   key={index}
                   className="font-body"
                   style={{
-                    color: line ? 'rgba(241,243,244,0.94)' : 'transparent',
+                    color: line ? 'var(--text-primary-94)' : 'transparent',
                     fontSize: 'clamp(1.15rem, 3.1vw, 3.75rem)',
                     lineHeight: 1.45,
                     minHeight: line ? undefined : 'clamp(0.6rem, 1.6vw, 1.9rem)',
@@ -195,7 +195,7 @@ export default function WorkoutDisplay() {
             <p
               className="font-display uppercase"
               style={{
-                color: 'rgba(123,167,188,0.85)',
+                color: 'var(--accent-default-85)',
                 fontSize: 'clamp(1.75rem, 5vw, 6rem)',
                 lineHeight: 1,
               }}
@@ -205,7 +205,7 @@ export default function WorkoutDisplay() {
             <p
               className="font-body mt-[2vh]"
               style={{
-                color: 'rgba(209,221,230,0.55)',
+                color: 'var(--text-secondary-55)',
                 fontSize: 'clamp(0.9rem, 1.9vw, 2.25rem)',
               }}
             >

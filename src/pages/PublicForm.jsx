@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { resolveSemanticColor } from '@/lib/designTokens';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, ExternalLink, FileUp, LoaderCircle, Star } from 'lucide-react';
 import { answerIsPresent, loadPublicForm, submitPublicForm } from '@/lib/xertForms';
@@ -10,7 +11,7 @@ import {
 import { answerValidationMessage, firstInvalidAnswer } from '@/lib/formAnswerValidation';
 
 const inputClass = 'xert-input';
-const errorStyle = { color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' };
+const errorStyle = { color: 'var(--state-danger-text)', borderColor: 'var(--state-danger-text-35)', backgroundColor: 'var(--state-danger-text-8)' };
 const optionIdle = 'border-xert-steel/20 bg-white/[0.03] text-xert-pale hover:border-xert-steel/50';
 const optionChecked = 'border-xert-steel bg-xert-steel/15 text-white';
 
@@ -137,7 +138,7 @@ function SignatureInput({ value, onChange }) {
   const move = event => {
     if (!drawing.current) return;
     const ctx = canvasRef.current.getContext('2d'); const p = point(event);
-    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; ctx.lineTo(p.x, p.y); ctx.stroke();
+    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = resolveSemanticColor('signature.ink'); ctx.lineTo(p.x, p.y); ctx.stroke();
   };
   const end = () => {
     if (!drawing.current) return;

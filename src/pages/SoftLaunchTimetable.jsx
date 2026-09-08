@@ -135,7 +135,7 @@ export default function SoftLaunchTimetable() {
               <h2 className="font-display text-3xl text-xert-offwhite uppercase">What&rsquo;s On</h2>
               <div className="flex flex-wrap items-center gap-3">
                 {fitbox.blocked ? (
-                  <span role="status" className="xert-chip" style={{ color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.4)' }}>
+                  <span role="status" className="xert-chip" style={{ color: 'var(--state-danger-text)', borderColor: 'var(--state-danger-text-40)' }}>
                     FitBox booking link needs attention
                   </span>
                 ) : fitbox.active ? (

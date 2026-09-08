@@ -11,7 +11,7 @@ export default function AuthLayout({ icon: Icon, eyebrow = "Member access", titl
       <div aria-hidden="true" className="xert-glow-top absolute inset-0 pointer-events-none" />
       <div className="relative w-full max-w-md">
         <div className="text-center mb-10 xert-enter xert-enter-up">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-xert-steel mb-5 shadow-[0_12px_30px_-12px_rgba(123,167,188,0.7)]">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-xert-steel mb-5 shadow-[0_12px_30px_-12px_var(--accent-default-70)]">
             <Icon className="w-7 h-7 text-xert-navy" aria-hidden="true" />
           </div>
           <div className="flex items-center justify-center gap-3 mb-3">

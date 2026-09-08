@@ -34,7 +34,7 @@ export default function Home() {
 
       {settings.announcement_banner_enabled && settings.announcement_banner_text && (
         <div className="fixed top-14 left-0 right-0 z-30 py-2 px-4 text-center"
-          style={{ backgroundColor: '#32485A' }}>
+          style={{ backgroundColor: 'var(--surface-secondary)' }}>
           <p className="font-body text-sm text-xert-offwhite">{settings.announcement_banner_text}</p>
         </div>
       )}

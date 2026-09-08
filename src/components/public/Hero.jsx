@@ -95,11 +95,11 @@ export default function Hero() {
       <div ref={overlayRef} className="absolute inset-0" style={{ opacity: 1 }}>
         <div
           className="absolute inset-0 lg:hidden"
-          style={{ background: 'linear-gradient(180deg, rgba(16,24,32,0.5) 0%, rgba(16,24,32,0.6) 28%, rgba(16,24,32,0.9) 58%, rgba(16,24,32,0.99) 100%)' }}
+          style={{ background: 'linear-gradient(180deg, var(--surface-base-50) 0%, var(--surface-base-60) 28%, var(--surface-base-90) 58%, var(--surface-base-99) 100%)' }}
         />
         <div
           className="absolute inset-0 hidden lg:block"
-          style={{ background: 'linear-gradient(160deg, rgba(16,24,32,0.92) 0%, rgba(50,72,90,0.6) 50%, rgba(16,24,32,0.97) 100%)' }}
+          style={{ background: 'linear-gradient(160deg, var(--surface-base-92) 0%, var(--surface-secondary-60) 50%, var(--surface-base-97) 100%)' }}
         />
       </div>
 
@@ -109,7 +109,7 @@ export default function Hero() {
       {/* Top fine animated line */}
       <div
         className="xert-hero-line absolute top-0 left-0 right-0 h-0.5 origin-left"
-        style={{ background: 'linear-gradient(90deg, transparent, #7BA7BC, transparent)' }}
+        style={{ background: 'linear-gradient(90deg, transparent, var(--accent-default), transparent)' }}
       />
 
       {/* Nav spacer */}
@@ -138,7 +138,7 @@ export default function Hero() {
             <h1 className="mb-4 overflow-hidden font-display text-[clamp(3rem,10vw,7rem)] uppercase leading-[0.9] tracking-tight text-xert-offwhite sm:mb-6">
               {headlineWords.map((line, i) => (
                 <span key={`${line}-${i}`} className="block overflow-hidden">
-                  <span className="xert-headline-enter block" style={{ color: i === headlineWords.length - 1 ? '#7BA7BC' : undefined, animationDelay: `${200 + i * 120}ms` }}>
+                  <span className="xert-headline-enter block" style={{ color: i === headlineWords.length - 1 ? 'var(--accent-default)' : undefined, animationDelay: `${200 + i * 120}ms` }}>
                     {line}
                   </span>
                 </span>
@@ -177,7 +177,7 @@ export default function Hero() {
           {/* Right — feature photo (desktop only; not rendered on mobile so it never downloads there) */}
           {isDesktop && (
             <div className="xert-feature-enter hidden lg:block relative" style={{ animationDelay: '300ms' }}>
-              <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-xert-steel/20 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.8)]">
+              <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-xert-steel/20 shadow-[0_30px_80px_-30px_var(--surface-scrim-80)]">
                 <img
                   src={photos[idx]}
                   alt="XERT Training"
@@ -186,7 +186,7 @@ export default function Hero() {
                   style={{ filter: 'saturate(0.7) brightness(0.75)' }}
                 />
                 <div className="absolute inset-0"
-                  style={{ background: 'linear-gradient(180deg, rgba(16,24,32,0.3) 0%, transparent 40%, rgba(16,24,32,0.7) 100%)' }}
+                  style={{ background: 'linear-gradient(180deg, var(--surface-base-30) 0%, transparent 40%, var(--surface-base-70) 100%)' }}
                 />
                 <div className="absolute bottom-5 left-5 right-16">
                   <div className="flex items-center gap-2">
@@ -198,12 +198,12 @@ export default function Hero() {
                 <div className="absolute top-5 right-5 flex flex-col gap-1.5">
                   {photos.map((_, i) => (
                     <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-500"
-                      style={{ backgroundColor: i === idx ? '#7BA7BC' : 'rgba(123,167,188,0.25)' }} />
+                      style={{ backgroundColor: i === idx ? 'var(--accent-default)' : 'var(--accent-default-25)' }} />
                   ))}
                 </div>
               </div>
               <div className="absolute -right-4 top-1/2 -translate-y-1/2 font-display text-[5rem] leading-none uppercase -rotate-90 origin-right"
-                style={{ color: 'rgba(123,167,188,0.06)', whiteSpace: 'nowrap' }}>
+                style={{ color: 'var(--accent-default-6)', whiteSpace: 'nowrap' }}>
                 Beat Your Best
               </div>
             </div>
@@ -213,7 +213,7 @@ export default function Hero() {
 
       {/* Values marquee + stats: one rounded glass strip */}
       <div className="relative z-10 px-4 pb-4 sm:px-6 sm:pb-6">
-        <div className="xert-glass mx-auto max-w-6xl overflow-hidden rounded-2xl shadow-[0_24px_60px_-30px_rgba(0,0,0,0.85)]">
+        <div className="xert-glass mx-auto max-w-6xl overflow-hidden rounded-2xl shadow-[0_24px_60px_-30px_var(--surface-scrim-85)]">
           <div
             className="overflow-hidden py-3"
             style={{
@@ -228,7 +228,7 @@ export default function Hero() {
                       the -50% loop is only seamless when half-width >= container. */}
                   {[...VALUES, ...VALUES].map((v, i) => (
                     <React.Fragment key={`${v}-${i}`}>
-                      <span className="font-display text-sm uppercase tracking-[0.15em] py-1" style={{ color: i % 2 === 0 ? '#D1DDE6' : '#7BA7BC' }}>{v}</span>
+                      <span className="font-display text-sm uppercase tracking-[0.15em] py-1" style={{ color: i % 2 === 0 ? 'var(--text-secondary)' : 'var(--accent-default)' }}>{v}</span>
                       <span className="mx-4 text-xert-steel/25">·</span>
                     </React.Fragment>
                   ))}
@@ -240,7 +240,7 @@ export default function Hero() {
           <div aria-hidden="true" className="xert-divider" />
 
           {/* Stats */}
-          <div className="grid grid-cols-3 divide-x divide-[rgba(123,167,188,0.16)] px-4 py-4 sm:px-6 sm:py-5">
+          <div className="grid grid-cols-3 divide-x divide-[var(--accent-default-16)] px-4 py-4 sm:px-6 sm:py-5">
             {STATS.map((stat, i) => (
               <div key={i} className={`px-3 sm:px-6 ${i === 0 ? 'pl-0 sm:pl-0' : ''} ${i === 2 ? 'pr-0 sm:pr-0' : ''}`}>
                 <p className="mb-1 font-body text-[10px] uppercase tracking-wider text-xert-steel sm:text-xs">{stat.label}</p>
@@ -256,7 +256,7 @@ export default function Hero() {
         <span className="font-body text-[10px] uppercase tracking-[0.3em] text-xert-steel/60">Scroll</span>
         <div
           className="xert-scroll-pulse w-px h-8 origin-top"
-          style={{ background: 'linear-gradient(180deg, #7BA7BC, transparent)' }}
+          style={{ background: 'linear-gradient(180deg, var(--accent-default), transparent)' }}
         />
       </div>
     </section>

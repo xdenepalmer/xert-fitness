@@ -1,3 +1,5 @@
+@import './styles/tokens.css';
+
 /* Fonts load from index.html (<link rel="preconnect"> + stylesheet) instead of a
    CSS @import, which created a render-blocking 3-hop chain before the hero could
    paint. Keep the family list in index.html in sync with tailwind.config.js. */
@@ -78,85 +80,6 @@
   }
 }
 
-@layer base {
-  :root {
-    --background: 220 33% 8%;
-    --foreground: 210 10% 96%;
-    --card: 213 29% 14%;
-    --card-foreground: 210 10% 96%;
-    --popover: 213 29% 14%;
-    --popover-foreground: 210 10% 96%;
-    --primary: 203 24% 61%;
-    --primary-foreground: 220 33% 8%;
-    --secondary: 213 29% 14%;
-    --secondary-foreground: 210 10% 96%;
-    --muted: 213 25% 18%;
-    --muted-foreground: 210 15% 55%;
-    --accent: 203 24% 61%;
-    --accent-foreground: 220 33% 8%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 213 25% 22%;
-    --input: 213 25% 18%;
-    --ring: 203 24% 61%;
-    --radius: 0.875rem;
-
-    /* XERT brand tokens — from official brandboard */
-    --xert-black: #000000;
-    --xert-navy: #101820;
-    --xert-deep: #32485A;
-    --xert-steel: #7BA7BC;
-    --xert-pale: #D1DDE6;
-    --xert-offwhite: #F1F3F4;
-    --xert-white: #FFFFFF;
-    --xert-radius-card: 1rem;
-    --xert-radius-control: 0.875rem;
-
-    --font-display: 'Bebas Neue', 'Arial Black', system-ui, sans-serif;
-    --font-heading: 'Bebas Neue', 'Arial Black', system-ui, sans-serif;
-    --font-body: 'DM Sans', system-ui, sans-serif;
-    --font-mono: ui-monospace, 'Courier New', monospace;
-
-    --sidebar-background: 220 33% 6%;
-    --sidebar-foreground: 210 15% 75%;
-    --sidebar-primary: 203 24% 61%;
-    --sidebar-primary-foreground: 220 33% 8%;
-    --sidebar-accent: 213 29% 14%;
-    --sidebar-accent-foreground: 210 15% 75%;
-    --sidebar-border: 213 25% 18%;
-    --sidebar-ring: 203 24% 61%;
-  }
-
-  .dark {
-    --background: 220 33% 8%;
-    --foreground: 210 10% 96%;
-    --card: 213 29% 14%;
-    --card-foreground: 210 10% 96%;
-    --popover: 213 29% 14%;
-    --popover-foreground: 210 10% 96%;
-    --primary: 203 24% 61%;
-    --primary-foreground: 220 33% 8%;
-    --secondary: 213 29% 14%;
-    --secondary-foreground: 210 10% 96%;
-    --muted: 213 25% 18%;
-    --muted-foreground: 210 15% 55%;
-    --accent: 203 24% 61%;
-    --accent-foreground: 220 33% 8%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 213 25% 22%;
-    --input: 213 25% 18%;
-    --ring: 203 24% 61%;
-    --sidebar-background: 220 33% 6%;
-    --sidebar-foreground: 210 15% 75%;
-    --sidebar-primary: 203 24% 61%;
-    --sidebar-primary-foreground: 220 33% 8%;
-    --sidebar-accent: 213 29% 14%;
-    --sidebar-accent-foreground: 210 15% 75%;
-    --sidebar-border: 213 25% 18%;
-    --sidebar-ring: 203 24% 61%;
-  }
-}
 
 @layer base {
   * {
@@ -216,7 +139,7 @@
   .text-xert-orange { color: var(--xert-pale); }
   .text-concrete { color: var(--xert-pale); }
   .text-offwhite { color: var(--xert-offwhite); }
-  .bg-xert-ink { background-color: #0d1720; }
+  .bg-xert-ink { background-color: var(--surface-ink); }
   .bg-xert-charcoal { background-color: var(--xert-deep); }
   .border-xert-red { border-color: var(--xert-steel); }
   .border-xert-orange { border-color: var(--xert-pale); }
@@ -231,19 +154,19 @@
     background-color: var(--xert-steel);
     color: var(--xert-navy);
     border-radius: var(--xert-radius-control);
-    box-shadow: 0 10px 30px -12px rgba(123, 167, 188, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    box-shadow: 0 10px 30px -12px rgb(var(--accent-default-rgb) / 0.55), inset 0 1px 0 rgb(var(--surface-paper-rgb) / 0.28);
     transition: background-color 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease, box-shadow 200ms ease;
   }
   .xert-btn-primary:hover { background-color: var(--xert-pale); }
-  .xert-btn-primary:active { transform: scale(0.98); box-shadow: 0 4px 14px -8px rgba(123, 167, 188, 0.5); }
+  .xert-btn-primary:active { transform: scale(0.98); box-shadow: 0 4px 14px -8px rgb(var(--accent-default-rgb) / 0.5); }
   .xert-btn-ghost {
-    border: 1px solid rgba(123, 167, 188, 0.55);
+    border: 1px solid rgb(var(--accent-default-rgb) / 0.55);
     color: var(--xert-steel);
-    background-color: rgba(123, 167, 188, 0.04);
+    background-color: rgb(var(--accent-default-rgb) / 0.04);
     border-radius: var(--xert-radius-control);
     transition: border-color 200ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms cubic-bezier(0.22, 1, 0.36, 1), background-color 200ms ease, transform 120ms ease;
   }
-  .xert-btn-ghost:hover { border-color: var(--xert-steel); color: var(--xert-pale); background-color: rgba(123, 167, 188, 0.1); }
+  .xert-btn-ghost:hover { border-color: var(--xert-steel); color: var(--xert-pale); background-color: rgb(var(--accent-default-rgb) / 0.1); }
   .xert-btn-ghost:active { transform: scale(0.98); }
 
   /* ── Surface system ─────────────────────────────────────────────────────
@@ -252,30 +175,30 @@
      radii replace the old 2px "blueprint" corners. */
   .xert-card {
     border-radius: var(--xert-radius-card);
-    border: 1px solid rgba(123, 167, 188, 0.16);
+    border: 1px solid rgb(var(--accent-default-rgb) / 0.16);
     background:
-      linear-gradient(160deg, rgba(50, 72, 90, 0.30) 0%, rgba(25, 36, 46, 0.96) 55%, rgba(13, 23, 32, 0.98) 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 1px 2px rgba(0, 0, 0, 0.28);
+      linear-gradient(160deg, rgb(var(--surface-secondary-rgb) / 0.3) 0%, rgb(var(--surface-raised-rgb) / 0.96) 55%, rgb(var(--surface-ink-rgb) / 0.98) 100%);
+    box-shadow: inset 0 1px 0 rgb(var(--surface-paper-rgb) / 0.045), 0 1px 2px rgb(var(--surface-scrim-rgb) / 0.28);
   }
   .xert-card-flat {
     border-radius: var(--xert-radius-card);
-    border: 1px solid rgba(123, 167, 188, 0.14);
-    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgb(var(--accent-default-rgb) / 0.14);
+    background-color: rgb(var(--surface-paper-rgb) / 0.03);
   }
   .xert-card-accent {
     border-radius: var(--xert-radius-card);
-    border: 1px solid rgba(123, 167, 188, 0.34);
+    border: 1px solid rgb(var(--accent-default-rgb) / 0.34);
     background:
-      linear-gradient(160deg, rgba(123, 167, 188, 0.16) 0%, rgba(50, 72, 90, 0.34) 45%, rgba(16, 24, 32, 0.96) 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -24px rgba(123, 167, 188, 0.45);
+      linear-gradient(160deg, rgb(var(--accent-default-rgb) / 0.16) 0%, rgb(var(--surface-secondary-rgb) / 0.34) 45%, rgb(var(--surface-base-rgb) / 0.96) 100%);
+    box-shadow: inset 0 1px 0 rgb(var(--surface-paper-rgb) / 0.08), 0 18px 40px -24px rgb(var(--accent-default-rgb) / 0.45);
   }
   .xert-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
     border-radius: 999px;
-    border: 1px solid rgba(123, 167, 188, 0.3);
-    background-color: rgba(123, 167, 188, 0.08);
+    border: 1px solid rgb(var(--accent-default-rgb) / 0.3);
+    background-color: rgb(var(--accent-default-rgb) / 0.08);
     color: var(--xert-steel);
     padding: 0.35rem 0.8rem;
     font-family: var(--font-body);
@@ -296,7 +219,7 @@
     width: 2.75rem;
     height: 2.75rem;
     border-radius: 0.875rem;
-    background-color: rgba(123, 167, 188, 0.14);
+    background-color: rgb(var(--accent-default-rgb) / 0.14);
     color: var(--xert-steel);
     flex-shrink: 0;
   }
@@ -304,8 +227,8 @@
     width: 100%;
     min-height: 3rem;
     border-radius: var(--xert-radius-control);
-    border: 1px solid rgba(123, 167, 188, 0.24);
-    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgb(var(--accent-default-rgb) / 0.24);
+    background-color: rgb(var(--surface-paper-rgb) / 0.04);
     color: var(--xert-offwhite);
     padding: 0.75rem 1rem;
     font-family: var(--font-body);
@@ -313,14 +236,14 @@
     line-height: 1.4;
     transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
   }
-  .xert-input::placeholder { color: rgba(209, 221, 230, 0.4); }
+  .xert-input::placeholder { color: rgb(var(--text-secondary-rgb) / 0.4); }
   .xert-input:focus {
     outline: none;
     border-color: var(--xert-steel);
-    background-color: rgba(255, 255, 255, 0.055);
-    box-shadow: 0 0 0 3px rgba(123, 167, 188, 0.2);
+    background-color: rgb(var(--surface-paper-rgb) / 0.055);
+    box-shadow: 0 0 0 3px rgb(var(--accent-default-rgb) / 0.2);
   }
-  .xert-input[aria-invalid="true"] { border-color: rgba(240, 161, 161, 0.7); }
+  .xert-input[aria-invalid="true"] { border-color: rgb(var(--state-danger-text-rgb) / 0.7); }
   select.xert-input { color-scheme: dark; }
   .xert-label {
     display: block;
@@ -329,31 +252,31 @@
     font-size: 0.7rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: rgba(209, 221, 230, 0.6);
+    color: rgb(var(--text-secondary-rgb) / 0.6);
   }
   /* Atmosphere: soft steel glows instead of the old hard blueprint grid. */
   .xert-glow-top {
     background-image:
-      radial-gradient(60% 45% at 50% 0%, rgba(123, 167, 188, 0.16), transparent 70%),
-      radial-gradient(40% 30% at 85% 20%, rgba(50, 72, 90, 0.35), transparent 70%);
+      radial-gradient(60% 45% at 50% 0%, rgb(var(--accent-default-rgb) / 0.16), transparent 70%),
+      radial-gradient(40% 30% at 85% 20%, rgb(var(--surface-secondary-rgb) / 0.35), transparent 70%);
   }
   .xert-glow-center {
-    background-image: radial-gradient(55% 45% at 50% 50%, rgba(123, 167, 188, 0.12), transparent 72%);
+    background-image: radial-gradient(55% 45% at 50% 50%, rgb(var(--accent-default-rgb) / 0.12), transparent 72%);
   }
   .xert-grid-faint {
     background-image:
-      linear-gradient(rgba(123, 167, 188, 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(123, 167, 188, 0.035) 1px, transparent 1px);
+      linear-gradient(rgb(var(--accent-default-rgb) / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--accent-default-rgb) / 0.035) 1px, transparent 1px);
     background-size: 96px 96px;
     mask-image: linear-gradient(180deg, transparent, black 25%, black 75%, transparent);
     -webkit-mask-image: linear-gradient(180deg, transparent, black 25%, black 75%, transparent);
   }
-  .xert-divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(123, 167, 188, 0.28), transparent); }
+  .xert-divider { height: 1px; background: linear-gradient(90deg, transparent, rgb(var(--accent-default-rgb) / 0.28), transparent); }
   .xert-glass {
-    background-color: rgba(16, 24, 32, 0.72);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(123, 167, 188, 0.18);
+    background-color: rgb(var(--surface-base-rgb) / 0.72);
+    backdrop-filter: blur(var(--dock-blur));
+    -webkit-backdrop-filter: blur(var(--dock-blur));
+    border: 1px solid rgb(var(--accent-default-rgb) / 0.18);
   }
 }
 
@@ -362,18 +285,11 @@ a:focus-visible,
 button:focus-visible,
 [role="button"]:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--xert-steel);
-  outline-offset: 2px;
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* Global reduced-motion durations are generated in styles/tokens.css. */
 
 /* Horizontal scroll utility */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
@@ -417,11 +333,11 @@ summary:focus-visible {
   html:has(body.xert-response-detail-open),
   body.xert-response-detail-open,
   body.xert-response-detail-open #root {
-    background: #fff !important;
+    background: var(--surface-paper) !important;
   }
 
   body.xert-response-detail-open {
-    background: #fff !important;
+    background: var(--surface-paper) !important;
     height: auto !important;
     overflow: visible !important;
   }

@@ -33,7 +33,7 @@ export default function PublicFooter() {
     <footer
       data-public-footer
       className="bg-xert-ink px-6 pt-12 sm:pt-16"
-      style={{ borderTop: '1px solid rgba(123,167,188,0.1)', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }}
+      style={{ borderTop: '1px solid var(--accent-default-10)', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }}
     >
       <div className="max-w-5xl mx-auto">
         <div className="mb-10 grid grid-cols-1 gap-9 md:grid-cols-[1.1fr_1.2fr_1fr] md:gap-8">

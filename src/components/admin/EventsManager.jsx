@@ -139,7 +139,7 @@ function EventEditor({ event, onSave, onCancel, onDirtyChange }) {
               <input id="event-sort-order" type="number" min="0" step="1" value={form.sort_order ?? 0} onChange={e => set('sort_order', +e.target.value)} className={inputCls} />
             </div>
             <label className="flex items-center gap-2 cursor-pointer pb-2">
-              <input type="checkbox" checked={Boolean(form.published)} onChange={event => set('published', event.target.checked)} className="w-5 h-5 accent-[#7BA7BC]" />
+              <input type="checkbox" checked={Boolean(form.published)} onChange={event => set('published', event.target.checked)} className="w-5 h-5 accent-accent-default" />
               <span className="font-body text-sm text-xert-concrete/80">Published (visible on site)</span>
             </label>
           </div>

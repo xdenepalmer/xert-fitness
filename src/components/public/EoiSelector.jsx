@@ -49,7 +49,7 @@ export default function EoiSelector() {
                 </div>
                 <p className="font-body text-xs text-xert-steel/70">{tab.desc}</p>
                 <span aria-hidden="true" className="mt-3 block h-0.5 w-8 rounded-full transition-all"
-                  style={{ backgroundColor: isActive ? '#7BA7BC' : 'transparent' }} />
+                  style={{ backgroundColor: isActive ? 'var(--accent-default)' : 'transparent' }} />
               </button>
             );
           })}

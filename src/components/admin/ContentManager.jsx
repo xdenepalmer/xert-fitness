@@ -230,7 +230,7 @@ function ImageListEditor({ value, onChange, folder }) {
               <div className="aspect-[3/4] overflow-hidden bg-xert-charcoal">
                 <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
               </div>
-              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity bg-[#0b1218]/85"
+              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity bg-surface-sidebar/85"
 >
                 <button type="button" aria-label={`Move photo ${i + 1} left`} disabled={i === 0} onClick={() => move(i, -1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30 text-xert-steel" >&#8592;</button>
                 <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="min-w-11 min-h-11 text-xs text-red-300" >&#10005;</button>

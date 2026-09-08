@@ -24,10 +24,10 @@ function fmtDate(iso) {
 }
 
 const BOOKING_BADGE = {
-  confirmed: { color: '#7BA7BC', label: 'Confirmed' },
-  attended: { color: '#7ec98f', label: 'Attended' },
-  no_show: { color: '#e0b36a', label: 'No show' },
-  cancelled: { color: 'rgba(209,221,230,0.4)', label: 'Cancelled' },
+  confirmed: { color: 'var(--accent-default)', label: 'Confirmed' },
+  attended: { color: 'var(--state-success)', label: 'Attended' },
+  no_show: { color: 'var(--state-warning)', label: 'No show' },
+  cancelled: { color: 'var(--text-secondary-40)', label: 'Cancelled' },
 };
 const PAGE_SIZE = 50;
 const emptyNoticeDraft = () => ({ title: '', body: '', tone: 'info', action: 'none', expiryDays: '30' });
@@ -158,10 +158,10 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/70" onClick={requestClose} />
       <div role="dialog" aria-modal="true" aria-labelledby="member-detail-title" tabIndex={-1}
-        className="relative h-[100dvh] max-h-[100dvh] w-full max-w-lg overflow-y-auto overscroll-contain animate-slide-up sm:animate-none bg-[#0e161e] border-l border-xert-steel/20"
+        className="relative h-[100dvh] max-h-[100dvh] w-full max-w-lg overflow-y-auto overscroll-contain animate-slide-up sm:animate-none bg-surface-canvas border-l border-xert-steel/20"
 >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))] bg-[#0e161e] border-b border-xert-steel/15"
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))] bg-surface-canvas border-b border-xert-steel/15"
 >
           <div className="min-w-0">
             <h3 id="member-detail-title" className="font-display text-2xl uppercase leading-none text-xert-offwhite">{member.full_name || '(no name)'}</h3>
@@ -195,12 +195,12 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
         ) : (
           <div className="space-y-7 px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             {detailError && (
-              <div className="border border-[#e0b36a]/35 bg-[#e0b36a]/10 p-3">
-                <p role="status" className="font-body text-xs text-[#e0b36a]">
+              <div className="border border-state-warning/35 bg-state-warning/10 p-3">
+                <p role="status" className="font-body text-xs text-state-warning">
                   Showing the last loaded record. Refresh before making changes.
                 </p>
                 <button type="button" onClick={() => loadDetail({ preserve: true })} disabled={detailLoading}
-                  className="mt-2 inline-flex min-h-11 items-center gap-2 border border-[#e0b36a]/40 px-3 font-body text-xs text-[#e0b36a] disabled:opacity-40">
+                  className="mt-2 inline-flex min-h-11 items-center gap-2 border border-state-warning/40 px-3 font-body text-xs text-state-warning disabled:opacity-40">
                   <RefreshCw className={`h-4 w-4 ${detailLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
                   Retry member record
                 </button>
@@ -591,7 +591,7 @@ function ActivationCockpit({
           {[1, 2, 3, 4, 5, 6].map(item => <div key={item} className="h-24 animate-pulse bg-xert-charcoal" />)}
         </div>
       ) : !overviewAvailable ? (
-        <p className="mt-4 border border-[#e0b36a]/35 bg-[#e0b36a]/10 p-3 font-body text-xs text-[#e0b36a]" role="status">
+        <p className="mt-4 border border-state-warning/35 bg-state-warning/10 p-3 font-body text-xs text-state-warning" role="status">
           Activation reporting is paused until the member activation upgrade is applied.
         </p>
       ) : !overview ? (
@@ -601,8 +601,8 @@ function ActivationCockpit({
       ) : (
         <>
           {hasSnapshotWarning && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-[#e0b36a]/35 bg-[#e0b36a]/10 p-3">
-              <p role="status" className="font-body text-xs leading-relaxed text-[#e0b36a]">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-state-warning/35 bg-state-warning/10 p-3">
+              <p role="status" className="font-body text-xs leading-relaxed text-state-warning">
                 {overviewError
                   ? 'Showing the last successful activation snapshot. Refresh before making outreach decisions.'
                   : presentation.inconsistent
@@ -661,7 +661,7 @@ function ActivationCockpit({
         {queueLoading && actionRows.length === 0 ? (
           <div className="mt-3 h-14 animate-pulse bg-xert-charcoal" aria-label="Loading activation actions" />
         ) : !queueAvailable ? (
-          <p className="mt-3 font-body text-xs text-[#e0b36a]" role="status">Activation actions are paused until the member activation upgrade is applied.</p>
+          <p className="mt-3 font-body text-xs text-state-warning" role="status">Activation actions are paused until the member activation upgrade is applied.</p>
         ) : queueError && actionRows.length === 0 ? (
           <div className="mt-3"><AdminLoadError message={queueError} onRetry={onRetry} /></div>
         ) : actionRows.length === 0 ? (
@@ -669,7 +669,7 @@ function ActivationCockpit({
         ) : (
           <>
             {queueError && (
-              <p className="mt-3 font-body text-xs text-[#e0b36a]" role="status">Showing the last successful action queue. Refresh before contacting members.</p>
+              <p className="mt-3 font-body text-xs text-state-warning" role="status">Showing the last successful action queue. Refresh before contacting members.</p>
             )}
             <div className="mt-3 divide-y divide-xert-steel/10 border-t border-xert-steel/10">
               {actionRows.map(member => {

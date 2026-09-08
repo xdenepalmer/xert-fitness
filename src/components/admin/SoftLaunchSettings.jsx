@@ -158,12 +158,12 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   // visible here instead of only being discovered by members on the website.
   const countdownState = (() => {
     if (!settings.countdown_enabled) {
-      return { label: 'Countdown is switched off — nothing shows on the public site.', tone: 'rgba(209,221,230,0.45)' };
+      return { label: 'Countdown is switched off — nothing shows on the public site.', tone: 'var(--text-secondary-45)' };
     }
     if (countdownVisibility(settings.target_launch_date, true) === 'counting') {
-      return { label: 'Live: the public site is counting down to this date.', tone: '#7ec98f' };
+      return { label: 'Live: the public site is counting down to this date.', tone: 'var(--state-success)' };
     }
-    return { label: 'This date has passed — the countdown is hidden on the public site. Set a future date to show it again.', tone: '#e0b36a' };
+    return { label: 'This date has passed — the countdown is hidden on the public site. Set a future date to show it again.', tone: 'var(--state-warning)' };
   })();
 
   const Toggle = ({ label, desc, field, disabled = false }) => (

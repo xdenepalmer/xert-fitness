@@ -12,8 +12,8 @@ export default function Skeleton({ className = '', style = {} }) {
       aria-hidden="true"
       className={`animate-pulse ${radius} ${className}`}
       style={{
-        backgroundColor: 'rgba(123,167,188,0.08)',
-        border: '1px solid rgba(123,167,188,0.12)',
+        backgroundColor: 'var(--accent-default-8)',
+        border: '1px solid var(--accent-default-12)',
         ...style,
       }}
     />

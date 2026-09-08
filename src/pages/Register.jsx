@@ -22,7 +22,7 @@ const fieldClasses =
 const fieldStyle = { paddingLeft: "2.75rem" };
 const labelClasses = "xert-label";
 const errorClasses = "mb-4 rounded-xl border p-3 font-body text-sm";
-const errorStyle = { color: "#f0a1a1", borderColor: "rgba(240,161,161,0.35)", backgroundColor: "rgba(240,161,161,0.08)" };
+const errorStyle = { color: "var(--state-danger-text)", borderColor: "var(--state-danger-text-35)", backgroundColor: "var(--state-danger-text-8)" };
 
 export default function Register() {
   const { session } = useSupabaseAuth();

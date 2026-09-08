@@ -33,11 +33,11 @@ export default function TrainingStyle() {
               XERT is not a commercial gym. Every session is coached, programmed and built around helping members improve, whether the goal is general fitness, event preparation, strength or long-term health.
             </p>
           </div>
-          <div className="relative aspect-video overflow-hidden rounded-2xl border border-xert-steel/15 shadow-[0_30px_70px_-30px_rgba(0,0,0,0.8)] lg:aspect-square">
+          <div className="relative aspect-video overflow-hidden rounded-2xl border border-xert-steel/15 shadow-[0_30px_70px_-30px_var(--surface-scrim-80)] lg:aspect-square">
             <FadeImage src={PHOTO} alt="Training at XERT" className="w-full h-full object-cover"
               style={{ filter: 'saturate(0.65) brightness(0.7)' }} />
             <div className="absolute inset-0"
-              style={{ background: 'linear-gradient(135deg, rgba(16,24,32,0.5) 0%, transparent 60%)' }} />
+              style={{ background: 'linear-gradient(135deg, var(--surface-base-50) 0%, transparent 60%)' }} />
             {/* Beat your best overlay */}
             <div className="absolute bottom-4 left-5">
               <p className="font-display text-2xl uppercase text-xert-pale/60">Beat Your Best</p>

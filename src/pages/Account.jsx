@@ -58,8 +58,8 @@ function privateSessionStatus(status) {
 const ghostButtonClasses = 'xert-btn-ghost inline-flex min-h-11 items-center justify-center gap-1.5 px-4 font-body text-xs uppercase tracking-wider';
 const primaryButtonClasses = 'xert-btn-primary inline-flex min-h-[52px] items-center justify-center px-5 font-display text-base uppercase tracking-wide';
 const inlineLinkClasses = 'inline-flex min-h-11 items-center font-body text-xs uppercase tracking-wider text-xert-steel hover:text-xert-pale transition-colors';
-const warningBoxClasses = 'rounded-2xl border border-[#e0b36a]/40 bg-[#e0b36a]/10';
-const warningButtonClasses = 'inline-flex min-h-11 items-center justify-center rounded-[0.875rem] border border-[#e0b36a]/60 px-4 font-display text-sm uppercase tracking-wide text-xert-offwhite transition-colors hover:bg-[#e0b36a]/10';
+const warningBoxClasses = 'rounded-2xl border border-state-warning/40 bg-state-warning/10';
+const warningButtonClasses = 'inline-flex min-h-11 items-center justify-center rounded-[0.875rem] border border-state-warning/60 px-4 font-display text-sm uppercase tracking-wide text-xert-offwhite transition-colors hover:bg-state-warning/10';
 const fieldLabelClasses = 'xert-label';
 const fieldInputClasses = 'xert-input mt-2 block normal-case tracking-normal';
 
@@ -637,7 +637,7 @@ export default function Account() {
   const bookingsUnavailable = Boolean(accountSourceErrors.bookings);
   const ordersUnavailable = Boolean(accountSourceErrors.orders);
   const unavailableMessage = (
-    <p className="font-body text-sm" role="status" style={{ color: '#e0b36a' }}>
+    <p className="font-body text-sm" role="status" style={{ color: 'var(--state-warning)' }}>
       Account data unavailable. Retry above to check again.
     </p>
   );
@@ -665,7 +665,7 @@ export default function Account() {
             className={`${warningBoxClasses} mb-8 flex flex-col gap-3 p-4 sm:p-5 sm:flex-row sm:items-center`}
             role="alert"
           >
-            <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
+            <AlertTriangle className="h-5 w-5 shrink-0 text-state-warning" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="font-body text-sm font-semibold text-xert-offwhite">Could not refresh your account</p>
               <p className="mt-1 break-words font-body text-xs text-xert-pale/70">{loadError}</p>
@@ -689,18 +689,18 @@ export default function Account() {
             role="status"
             aria-live="polite"
             style={{
-              borderColor: purchaseStatus === 'failed' || purchaseStatus === 'refunded' ? '#e0b36a' : '#7BA7BC',
+              borderColor: purchaseStatus === 'failed' || purchaseStatus === 'refunded' ? 'var(--state-warning)' : 'var(--accent-default)',
               backgroundColor: purchaseStatus === 'failed' || purchaseStatus === 'refunded'
-                ? 'rgba(224,179,106,0.1)'
-                : 'rgba(123,167,188,0.12)'
+                ? 'var(--state-warning-10)'
+                : 'var(--accent-default-12)'
             }}
           >
             {purchaseStatus === 'confirming'
-              ? <Loader2 className="w-5 h-5 shrink-0 animate-spin" style={{ color: '#7BA7BC' }} />
+              ? <Loader2 className="w-5 h-5 shrink-0 animate-spin" style={{ color: 'var(--accent-default)' }} />
               : purchaseStatus === 'confirmed'
-                ? <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#7BA7BC' }} />
-                : <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: '#e0b36a' }} />}
-            <p className="font-body text-sm flex-1 min-w-[14rem]" style={{ color: '#D1DDE6' }}>
+                ? <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: 'var(--accent-default)' }} />
+                : <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: 'var(--state-warning)' }} />}
+            <p className="font-body text-sm flex-1 min-w-[14rem]" style={{ color: 'var(--text-secondary)' }}>
               {purchaseStatus === 'confirming' && 'Payment received — confirming your session pack now.'}
               {purchaseStatus === 'confirmed' && 'Payment confirmed — your session pack is ready.'}
               {purchaseStatus === 'refunded' && 'This payment was refunded. No purchased credits remain on the order.'}
@@ -746,10 +746,10 @@ export default function Account() {
               {announcements.map(notice => {
                 const action = announcementAction(notice);
                 const tone = notice.tone === 'urgent'
-                  ? { border: 'rgba(201,78,68,0.55)', label: 'Urgent', color: '#f0a1a1' }
+                  ? { border: 'var(--state-danger-55)', label: 'Urgent', color: 'var(--state-danger-text)' }
                   : notice.tone === 'action'
-                    ? { border: 'rgba(224,179,106,0.5)', label: 'Action requested', color: '#e0b36a' }
-                    : { border: 'rgba(123,167,188,0.4)', label: 'Update', color: '#7BA7BC' };
+                    ? { border: 'var(--state-warning-50)', label: 'Action requested', color: 'var(--state-warning)' }
+                    : { border: 'var(--accent-default-40)', label: 'Update', color: 'var(--accent-default)' };
                 return (
                   <article key={notice.id} className="xert-card p-5" style={{ borderColor: tone.border }}>
                     <div className="flex items-start justify-between gap-4">
@@ -789,7 +789,7 @@ export default function Account() {
                 </div>
               </div>
               {memberReadiness && (
-                <span className="xert-chip shrink-0" style={readinessDirty || !memberReadiness.is_complete ? { color: '#e0b36a', borderColor: 'rgba(224,179,106,0.5)' } : { color: '#86efac', borderColor: 'rgba(34,197,94,0.4)' }}>
+                <span className="xert-chip shrink-0" style={readinessDirty || !memberReadiness.is_complete ? { color: 'var(--state-warning)', borderColor: 'var(--state-warning-50)' } : { color: 'var(--state-success-bright)', borderColor: 'var(--state-success-strong-40)' }}>
                   {readinessDirty ? 'Unsaved changes' : memberReadiness.is_complete ? 'On file' : 'Action available'}
                 </span>
               )}
@@ -894,7 +894,7 @@ export default function Account() {
                             <h3 className="font-display text-base uppercase text-xert-offwhite">{document.title}</h3>
                             <p className="mt-1 font-body text-[10px] uppercase tracking-wider text-xert-pale/40">Version {document.version}</p>
                           </div>
-                          {previouslyAccepted && <span className="xert-chip" style={{ color: '#86efac', borderColor: 'rgba(34,197,94,0.4)' }}>Previously accepted</span>}
+                          {previouslyAccepted && <span className="xert-chip" style={{ color: 'var(--state-success-bright)', borderColor: 'var(--state-success-strong-40)' }}>Previously accepted</span>}
                         </div>
                         <p className="mt-3 whitespace-pre-wrap font-body text-sm leading-relaxed text-xert-pale/70">{document.body}</p>
                         {sourceURL && (
@@ -924,7 +924,7 @@ export default function Account() {
                 </div>
                   </>
                 )}
-                {readinessError && <p className="font-body text-sm text-[#e0b36a]" role="alert">{readinessError}</p>}
+                {readinessError && <p className="font-body text-sm text-state-warning" role="alert">{readinessError}</p>}
                 {readinessSavedMessage && <p className="flex items-center gap-2 font-body text-sm text-green-300" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden="true" />{readinessSavedMessage}</p>}
               </form>
             )}
@@ -999,18 +999,18 @@ export default function Account() {
           ) : (
             <div className="xert-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <p className="font-body text-[11px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }}>
+                <p className="font-body text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-secondary-40)' }}>
                   Email
                 </p>
-                <p className="font-body text-sm mt-1" style={{ color: '#D1DDE6' }}>
+                <p className="font-body text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
                   {user?.email}
                 </p>
               </div>
               <div>
-                <p className="font-body text-[11px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.4)' }}>
+                <p className="font-body text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-secondary-40)' }}>
                   Mobile
                 </p>
-                <p className="font-body text-sm mt-1" style={{ color: '#D1DDE6' }}>
+                <p className="font-body text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
                   {profileForm.phone || 'Not provided'}
                 </p>
               </div>
@@ -1031,30 +1031,30 @@ export default function Account() {
           )}
           {accountReady && expiringCredits && (
             <div role="status" className={`${warningBoxClasses} mb-3 flex flex-wrap items-center gap-3 p-4`}>
-              <AlertTriangle className="h-5 w-5 shrink-0 text-[#e0b36a]" aria-hidden="true" />
+              <AlertTriangle className="h-5 w-5 shrink-0 text-state-warning" aria-hidden="true" />
               <p className="min-w-0 flex-1 font-body text-sm text-xert-pale">
                 {expiringCredits.credits} class credit{expiringCredits.credits === 1 ? '' : 's'} expire{expiringCredits.credits === 1 ? 's' : ''} in {expiringCredits.daysRemaining} day{expiringCredits.daysRemaining === 1 ? '' : 's'}, on {formatDate(expiringCredits.expiresAt)}.
               </p>
-              <Link to="/booking" className="inline-flex min-h-11 items-center rounded-[0.875rem] bg-[#e0b36a] px-4 font-display text-sm uppercase tracking-wide text-xert-navy">
+              <Link to="/booking" className="inline-flex min-h-11 items-center rounded-[0.875rem] bg-state-warning px-4 font-display text-sm uppercase tracking-wide text-xert-navy">
                 Book A Class
               </Link>
             </div>
           )}
           <div className="xert-card-accent p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="flex items-center gap-4">
-              <div className="xert-icon-tile" style={{ backgroundColor: '#7BA7BC', color: '#101820' }}>
+              <div className="xert-icon-tile" style={{ backgroundColor: 'var(--accent-default)', color: 'var(--surface-base)' }}>
                 <Ticket className="w-6 h-6" />
               </div>
               <div>
                 <p className="font-display text-4xl uppercase leading-none text-xert-offwhite">{initialAccountLoad || firstLoadFailed || (creditsUnavailable && !credits) ? '—' : (credits?.total ?? 0)}</p>
-                <p className="font-body text-xs uppercase tracking-wider mt-1" style={{ color: 'rgba(209,221,230,0.5)' }}>
+                <p className="font-body text-xs uppercase tracking-wider mt-1" style={{ color: 'var(--text-secondary-50)' }}>
                   Class credits available
                 </p>
               </div>
             </div>
             <div className="sm:ml-auto flex flex-wrap items-center gap-3">
               {accountReady && !loading && credits?.batches?.some(batch => batch.expires_at) && (
-                <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.45)' }}>
+                <p className="font-body text-xs" style={{ color: 'var(--text-secondary-45)' }}>
                   Next expiry: {formatDate(credits.batches.find(batch => batch.expires_at)?.expires_at)}
                 </p>
               )}
@@ -1073,7 +1073,7 @@ export default function Account() {
               <h2 className="font-display text-2xl uppercase text-xert-pale/85">
                 Training Momentum
               </h2>
-              <p className="mt-1 font-body text-xs" style={{ color: 'rgba(209,221,230,0.48)' }}>
+              <p className="mt-1 font-body text-xs" style={{ color: 'var(--text-secondary-48)' }}>
                 Based only on attendance recorded by XERT.
               </p>
             </div>
@@ -1084,17 +1084,17 @@ export default function Account() {
 
           {initialAccountLoad ? (
             <div className="xert-card flex min-h-28 items-center gap-3 p-6" role="status">
-              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#7BA7BC' }} aria-hidden="true" />
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.6)' }}>Loading your progress…</p>
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--accent-default)' }} aria-hidden="true" />
+              <p className="font-body text-sm" style={{ color: 'var(--text-secondary-60)' }}>Loading your progress…</p>
             </div>
           ) : firstLoadFailed || bookingsUnavailable ? (
             <div className="xert-card p-6">{unavailableMessage}</div>
           ) : trainingProgress.totalAttended === 0 ? (
             <div className="xert-card flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
-              <CheckCircle2 className="h-8 w-8 shrink-0" style={{ color: '#7BA7BC' }} aria-hidden="true" />
+              <CheckCircle2 className="h-8 w-8 shrink-0" style={{ color: 'var(--accent-default)' }} aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="font-display text-xl uppercase text-xert-offwhite">Your progress starts here</p>
-                <p className="mt-1 font-body text-sm leading-relaxed" style={{ color: 'rgba(209,221,230,0.58)' }}>
+                <p className="mt-1 font-body text-sm leading-relaxed" style={{ color: 'var(--text-secondary-58)' }}>
                   Completed classes appear after Byron or the XERT team records attendance. Confirmed, cancelled and missed classes never inflate your totals.
                 </p>
               </div>
@@ -1109,11 +1109,11 @@ export default function Account() {
                 ].map(([value, label]) => (
                   <div key={label} className="rounded-xl bg-white/[0.03] p-4">
                     <p className="font-display text-3xl uppercase leading-none text-xert-offwhite">{value}</p>
-                    <p className="mt-2 font-body text-[10px] uppercase tracking-wider" style={{ color: 'rgba(209,221,230,0.52)' }}>{label}</p>
+                    <p className="mt-2 font-body text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-secondary-52)' }}>{label}</p>
                   </div>
                 ))}
               </div>
-              <p className="mt-4 font-body text-xs" style={{ color: 'rgba(209,221,230,0.48)' }}>
+              <p className="mt-4 font-body text-xs" style={{ color: 'var(--text-secondary-48)' }}>
                 Last completed class: {formatDateTime(trainingProgress.lastAttendedAt)}
               </p>
             </div>
@@ -1131,7 +1131,7 @@ export default function Account() {
             </Link>
           </div>
           {initialAccountLoad ? (
-            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
+            <p className="font-body text-sm" style={{ color: 'var(--text-secondary-50)' }}>
               Loading goals…
             </p>
           ) : firstLoadFailed || accountSourceErrors.eventGoals ? (
@@ -1157,7 +1157,7 @@ export default function Account() {
                     </div>
                     <div className="flex-1 min-w-[12rem]">
                       <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{event?.name || 'XERT event'}</p>
-                      <p className="font-body text-sm mt-1" style={{ color: 'rgba(209,221,230,0.58)' }}>
+                      <p className="font-body text-sm mt-1" style={{ color: 'var(--text-secondary-58)' }}>
                         {[formatDate(event?.event_date), event?.location].filter(Boolean).join(' · ')}
                       </p>
                     </div>
@@ -1182,7 +1182,7 @@ export default function Account() {
             </Link>
           </div>
           {initialAccountLoad ? (
-            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>Loading PT requests…</p>
+            <p className="font-body text-sm" style={{ color: 'var(--text-secondary-50)' }}>Loading PT requests…</p>
           ) : firstLoadFailed || accountSourceErrors.privateSessions ? (
             unavailableMessage
           ) : privateSessionRequests.length === 0 ? (
@@ -1204,10 +1204,10 @@ export default function Account() {
                   </div>
                   <div className="flex-1 min-w-[12rem]">
                     <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{request.requested_session_type}</p>
-                    <p className="font-body text-sm mt-1" style={{ color: 'rgba(209,221,230,0.58)' }}>
+                    <p className="font-body text-sm mt-1" style={{ color: 'var(--text-secondary-58)' }}>
                       {[formatDate(request.created_at), request.preferred_day, request.preferred_time].filter(Boolean).join(' · ')}
                     </p>
-                    {request.training_goal && <p className="font-body text-xs mt-1" style={{ color: 'rgba(209,221,230,0.45)' }}>Goal: {request.training_goal}</p>}
+                    {request.training_goal && <p className="font-body text-xs mt-1" style={{ color: 'var(--text-secondary-45)' }}>Goal: {request.training_goal}</p>}
                   </div>
                   <span className="xert-chip">
                     {privateSessionStatus(request.status)}
@@ -1232,11 +1232,11 @@ export default function Account() {
                   </div>
                   <div className="flex-1 min-w-[12rem]">
                     <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{b.title || b.class_type || 'XERT Class'}</p>
-                    <p className="font-body text-sm mt-0.5" style={{ color: 'rgba(209,221,230,0.6)' }}>
+                    <p className="font-body text-sm mt-0.5" style={{ color: 'var(--text-secondary-60)' }}>
                       {formatDateTime(b.start_time)}
                       {b.coach_name ? ` · Coach ${b.coach_name}` : ''}
                     </p>
-                    <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.75)' }}>
+                    <p className="font-body text-xs mt-1" style={{ color: 'var(--accent-default-75)' }}>
                       {b.status === 'waitlisted'
                         ? `You are ${b.waitlist_position ? `#${b.waitlist_position} ` : ''}on the waitlist. XERT will let you know as soon as a place opens up.`
                         : 'Your place is held while XERT confirms this request.'}
@@ -1271,16 +1271,16 @@ export default function Account() {
             Upcoming Classes
           </h2>
           {initialAccountLoad ? (
-            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
+            <p className="font-body text-sm" style={{ color: 'var(--text-secondary-50)' }}>
               Loading…
             </p>
           ) : firstLoadFailed || bookingsUnavailable ? (
             unavailableMessage
           ) : upcoming.length === 0 ? (
             <div className="xert-card p-6">
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
+              <p className="font-body text-sm" style={{ color: 'var(--text-secondary-55)' }}>
                 No upcoming classes booked.{' '}
-                <Link to="/booking" style={{ color: '#7BA7BC' }}>
+                <Link to="/booking" style={{ color: 'var(--accent-default)' }}>
                   Browse the timetable
                 </Link>{' '}
                 to book your next session.
@@ -1295,7 +1295,7 @@ export default function Account() {
                   </div>
                   <div className="flex-1 min-w-[12rem]">
                     <p className="font-display text-xl uppercase leading-tight text-xert-offwhite">{b.title || b.class_type || 'XERT Class'}</p>
-                    <p className="font-body text-sm mt-0.5" style={{ color: 'rgba(209,221,230,0.6)' }}>
+                    <p className="font-body text-sm mt-0.5" style={{ color: 'var(--text-secondary-60)' }}>
                       {formatDateTime(b.start_time)}
                       {b.coach_name ? ` · Coach ${b.coach_name}` : ''}
                     </p>
@@ -1319,7 +1319,7 @@ export default function Account() {
                   )}
                 </div>
               ))}
-              <p className="font-body text-xs flex items-center gap-1.5" style={{ color: 'rgba(209,221,230,0.4)' }}>
+              <p className="font-body text-xs flex items-center gap-1.5" style={{ color: 'var(--text-secondary-40)' }}>
                 <Clock className="w-3.5 h-3.5" />
                 Please cancel more than 12 hours before class so someone else can take the place.
               </p>
@@ -1333,14 +1333,14 @@ export default function Account() {
             Purchases
           </h2>
           {initialAccountLoad ? (
-            <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.5)' }}>
+            <p className="font-body text-sm" style={{ color: 'var(--text-secondary-50)' }}>
               Loading…
             </p>
           ) : firstLoadFailed || ordersUnavailable ? (
             unavailableMessage
           ) : orders.length === 0 ? (
             <div className="xert-card p-6">
-              <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.55)' }}>
+              <p className="font-body text-sm" style={{ color: 'var(--text-secondary-55)' }}>
                 No purchases yet.
               </p>
             </div>
@@ -1349,13 +1349,13 @@ export default function Account() {
               {orders.map(o => (
                 <div key={o.id} className="xert-card p-4 flex flex-wrap items-center gap-x-4 gap-y-2">
                   <Receipt className="w-4 h-4 shrink-0 text-xert-steel" />
-                  <p className="font-body text-sm flex-1 min-w-[8rem]" style={{ color: 'rgba(209,221,230,0.7)' }}>
+                  <p className="font-body text-sm flex-1 min-w-[8rem]" style={{ color: 'var(--text-secondary-70)' }}>
                     {o.products?.name || 'Session pack'}
                   </p>
-                  <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.45)' }}>
+                  <p className="font-body text-xs" style={{ color: 'var(--text-secondary-45)' }}>
                     {formatDate(o.paid_at || o.created_at)}
                   </p>
-                  <p className="font-display text-lg uppercase" style={{ color: '#7BA7BC' }}>
+                  <p className="font-display text-lg uppercase" style={{ color: 'var(--accent-default)' }}>
                     ${((o.amount_cents || 0) / 100).toFixed(2)}
                   </p>
                 </div>
@@ -1373,10 +1373,10 @@ export default function Account() {
             <div className="space-y-2">
               {past.slice(0, 10).map(b => (
                 <div key={b.booking_id} className="xert-card p-4 flex flex-wrap items-center gap-x-4 gap-y-2 opacity-70">
-                  <p className="font-body text-sm flex-1 min-w-[10rem]" style={{ color: 'rgba(209,221,230,0.6)' }}>
+                  <p className="font-body text-sm flex-1 min-w-[10rem]" style={{ color: 'var(--text-secondary-60)' }}>
                     {b.title || b.class_type || 'XERT Class'}
                   </p>
-                  <p className="font-body text-xs" style={{ color: 'rgba(209,221,230,0.4)' }}>
+                  <p className="font-body text-xs" style={{ color: 'var(--text-secondary-40)' }}>
                     {formatDateTime(b.start_time)}
                   </p>
                   <span className="xert-chip opacity-80">
@@ -1388,12 +1388,12 @@ export default function Account() {
           </section>
         )}
 
-        <section className="mt-12 pt-8 border-t border-[#c94e44]/25">
+        <section className="mt-12 pt-8 border-t border-state-danger/25">
           <h2 className="font-display text-xl uppercase text-xert-offwhite">Account Control</h2>
-          <p className="font-body text-sm mt-2 max-w-xl" style={{ color: 'rgba(209,221,230,0.55)' }}>
+          <p className="font-body text-sm mt-2 max-w-xl" style={{ color: 'var(--text-secondary-55)' }}>
             Permanently remove your profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals. Purchase records are anonymized.
           </p>
-          <button type="button" onClick={() => setShowDeleteAccount(true)} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[0.875rem] border px-4 font-body text-xs uppercase tracking-wider transition-colors hover:bg-[#c94e44]/10" style={{ borderColor: 'rgba(201,78,68,0.55)', color: '#f0a1a1' }}>
+          <button type="button" onClick={() => setShowDeleteAccount(true)} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[0.875rem] border px-4 font-body text-xs uppercase tracking-wider transition-colors hover:bg-state-danger/10" style={{ borderColor: 'var(--state-danger-55)', color: 'var(--state-danger-text)' }}>
             Delete account
           </button>
         </section>
@@ -1415,7 +1415,7 @@ export default function Account() {
             <h2 id="cancel-booking-title" className="font-display text-2xl uppercase text-xert-offwhite">
               Cancel booking?
             </h2>
-            <p id="cancel-booking-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'rgba(209,221,230,0.68)' }}>
+            <p id="cancel-booking-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'var(--text-secondary-68)' }}>
               {cancellationMessage(cancellationTarget)}
             </p>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
@@ -1427,7 +1427,7 @@ export default function Account() {
               >
                 Keep booking
               </button>
-              <button type="button" onClick={confirmCancellation} className="inline-flex min-h-11 items-center justify-center rounded-[0.875rem] px-4 font-body text-xs uppercase tracking-wider transition-colors" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
+              <button type="button" onClick={confirmCancellation} className="inline-flex min-h-11 items-center justify-center rounded-[0.875rem] px-4 font-body text-xs uppercase tracking-wider transition-colors" style={{ backgroundColor: 'var(--state-danger)', color: 'var(--text-on-color)' }}>
                 Cancel booking
               </button>
             </div>
@@ -1436,14 +1436,14 @@ export default function Account() {
       )}
       {showDeleteAccount && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title" aria-describedby="delete-account-description">
-          <div className="xert-card w-full max-w-md p-6" style={{ borderColor: 'rgba(201,78,68,0.45)' }}>
+          <div className="xert-card w-full max-w-md p-6" style={{ borderColor: 'var(--state-danger-45)' }}>
             <h2 id="delete-account-title" className="font-display text-2xl uppercase text-xert-offwhite">Delete account permanently?</h2>
-            <p id="delete-account-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'rgba(209,221,230,0.68)' }}>
+            <p id="delete-account-description" className="font-body text-sm leading-relaxed mt-3" style={{ color: 'var(--text-secondary-68)' }}>
               Your profile, emergency contact, readiness acknowledgements, credits, bookings, PT requests and training goals will be removed. Purchase records are anonymized. This cannot be undone.
             </p>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
               <button type="button" autoFocus disabled={deletingAccount} onClick={() => setShowDeleteAccount(false)} className={`${ghostButtonClasses} disabled:opacity-50`}>Keep account</button>
-              <button type="button" disabled={deletingAccount} onClick={() => void handleDeleteAccount()} className="inline-flex min-h-11 items-center justify-center rounded-[0.875rem] px-4 font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ backgroundColor: '#c94e44', color: '#fff' }}>
+              <button type="button" disabled={deletingAccount} onClick={() => void handleDeleteAccount()} className="inline-flex min-h-11 items-center justify-center rounded-[0.875rem] px-4 font-body text-xs uppercase tracking-wider disabled:opacity-50" style={{ backgroundColor: 'var(--state-danger)', color: 'var(--text-on-color)' }}>
                 {deletingAccount ? 'Deleting...' : 'Delete account'}
               </button>
             </div>

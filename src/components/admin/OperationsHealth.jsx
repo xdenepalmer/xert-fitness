@@ -21,23 +21,23 @@ const STATUS_STYLE = {
   ok: {
     label: 'Ready',
     icon: CheckCircle2,
-    color: '#7ec98f',
-    bg: 'rgba(126,201,143,0.1)',
-    border: 'rgba(126,201,143,0.28)',
+    color: 'var(--state-success)',
+    bg: 'var(--state-success-10)',
+    border: 'var(--state-success-28)',
   },
   attention: {
     label: 'Needs attention',
     icon: AlertTriangle,
-    color: '#e0b36a',
-    bg: 'rgba(224,179,106,0.1)',
-    border: 'rgba(224,179,106,0.28)',
+    color: 'var(--state-warning)',
+    bg: 'var(--state-warning-10)',
+    border: 'var(--state-warning-28)',
   },
   error: {
     label: 'Error',
     icon: CircleAlert,
-    color: '#f87171',
-    bg: 'rgba(248,113,113,0.1)',
-    border: 'rgba(248,113,113,0.28)',
+    color: 'var(--state-danger-bright)',
+    bg: 'var(--state-danger-bright-10)',
+    border: 'var(--state-danger-bright-28)',
   },
 };
 
@@ -252,9 +252,9 @@ export default function OperationsHealth({ onNavigate }) {
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Ready', value: summary.ok, color: '#7ec98f' },
-          { label: 'Attention', value: summary.attention, color: '#e0b36a' },
-          { label: 'Errors', value: summary.errors, color: '#f87171' },
+          { label: 'Ready', value: summary.ok, color: 'var(--state-success)' },
+          { label: 'Attention', value: summary.attention, color: 'var(--state-warning)' },
+          { label: 'Errors', value: summary.errors, color: 'var(--state-danger-bright)' },
         ].map(item => (
           <div key={item.label} className="p-4 bg-xert-navy/60 border border-xert-steel/15" >
             <p className="font-display text-3xl tabular-nums leading-none" style={{ color: item.color }}>

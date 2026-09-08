@@ -7,7 +7,7 @@ import { gymDateTimeLabel } from '@/lib/gymTime';
 const chipClasses = 'min-h-11 px-3 py-2 text-sm font-body rounded-full border transition-colors';
 const chipActive = 'border-xert-steel bg-xert-steel text-xert-navy';
 const chipIdle = 'border-xert-steel/30 bg-white/[0.03] text-xert-pale/75 hover:border-xert-steel';
-const errorStyle = { color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' };
+const errorStyle = { color: 'var(--state-danger-text)', borderColor: 'var(--state-danger-text-35)', backgroundColor: 'var(--state-danger-text-8)' };
 
 function FieldLabel({ children, required = false, htmlFor = undefined }) {
   const Component = htmlFor ? 'label' : 'span';

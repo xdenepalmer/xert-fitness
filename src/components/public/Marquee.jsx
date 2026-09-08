@@ -16,7 +16,7 @@ export default function Marquee() {
           <span key={i} className="flex items-center shrink-0">
             <span
               className="font-display text-2xl sm:text-3xl uppercase tracking-tight mx-6"
-              style={{ color: i % 2 === 0 ? '#D1DDE6' : 'rgba(123,167,188,0.45)' }}
+              style={{ color: i % 2 === 0 ? 'var(--text-secondary)' : 'var(--accent-default-45)' }}
             >
               {w}
             </span>
@@ -25,8 +25,8 @@ export default function Marquee() {
         ))}
       </div>
       {/* Edge fades */}
-      <div className="absolute inset-y-0 left-0 w-24" style={{ background: 'linear-gradient(90deg, #0d1720, transparent)' }} />
-      <div className="absolute inset-y-0 right-0 w-24" style={{ background: 'linear-gradient(270deg, #0d1720, transparent)' }} />
+      <div className="absolute inset-y-0 left-0 w-24" style={{ background: 'linear-gradient(90deg, var(--surface-ink), transparent)' }} />
+      <div className="absolute inset-y-0 right-0 w-24" style={{ background: 'linear-gradient(270deg, var(--surface-ink), transparent)' }} />
     </div>
   );
 }

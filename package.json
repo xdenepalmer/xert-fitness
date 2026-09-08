@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "tokens:build": "node scripts/build-tokens.mjs",
+    "tokens:check": "node scripts/build-tokens.mjs --check",
+    "prebuild": "npm run tokens:check",
     "dev": "vite",
     "test": "node scripts/run-tests.mjs",
     "check:stripe": "node scripts/run-with-local-env.mjs scripts/check-stripe-readiness.mjs",

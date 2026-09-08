@@ -21,7 +21,7 @@ const chipTime = value => gymTimeLabel(value) || '';
 const monthNavClasses = 'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-xert-steel/25 bg-white/[0.03] text-xert-pale/70 hover:border-xert-steel hover:text-xert-offwhite transition-colors';
 
 function dayNumberClasses({ isSelected, isToday, hasSessions }) {
-  if (isSelected && isToday) return 'bg-xert-steel text-xert-navy ring-2 ring-xert-steel/35 ring-offset-2 ring-offset-[#14202b]';
+  if (isSelected && isToday) return 'bg-xert-steel text-xert-navy ring-2 ring-xert-steel/35 ring-offset-2 ring-offset-surface-panel';
   if (isSelected) return 'bg-xert-steel text-xert-navy';
   if (isToday) return 'ring-1 ring-xert-steel text-xert-offwhite';
   if (hasSessions) return 'text-xert-offwhite';

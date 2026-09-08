@@ -162,7 +162,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     .split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('');
 
   return (
-    <div className="flex h-[100dvh] min-h-0 overflow-hidden overscroll-none bg-[#0b1218]">
+    <div className="flex h-[100dvh] min-h-0 overflow-hidden overscroll-none bg-surface-sidebar">
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
         ref={sidebarRef}
@@ -171,7 +171,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
         aria-hidden={!desktopNavigation && !sidebarOpen ? 'true' : undefined}
         role={!desktopNavigation ? 'dialog' : undefined}
         aria-modal={!desktopNavigation && sidebarOpen ? 'true' : undefined}
-        className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[min(88dvh,48rem)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl shadow-2xl transform transition-transform duration-200 lg:static lg:h-full lg:max-h-none lg:w-72 lg:translate-y-0 lg:rounded-none lg:shadow-none bg-gradient-to-b from-xert-navy to-[#0b1218] border-r border-xert-steel/15 ${sidebarOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[min(88dvh,48rem)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl shadow-2xl transform transition-transform duration-200 lg:static lg:h-full lg:max-h-none lg:w-72 lg:translate-y-0 lg:rounded-none lg:shadow-none bg-gradient-to-b from-xert-navy to-surface-sidebar border-r border-xert-steel/15 ${sidebarOpen ? 'translate-y-0' : 'translate-y-full'}`}
       >
         <div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-xert-steel/30 lg:hidden" />
         {/* Brand */}
@@ -273,7 +273,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       {/* ── Main ────────────────────────────────────────────────────────── */}
       <div ref={workspaceRef} data-admin-workspace className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="relative z-30 shrink-0 border-b border-white/[0.06] bg-[#0b1218]/90 backdrop-blur">
+        <header className="relative z-30 shrink-0 border-b border-white/[0.06] bg-surface-sidebar/90 backdrop-blur">
           <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-8 sm:pt-4">
             <div className="flex min-w-0 items-center gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-xert-steel/15 text-xert-steel lg:hidden">
@@ -336,7 +336,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
 
         {/* Thumb-reachable owner jobs. The full catalogue remains in More. */}
         <nav aria-label="Owner shortcuts" data-admin-mobile-dock
-          className="relative z-30 shrink-0 border-t border-white/[0.06] bg-[#0b1218]/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur lg:hidden">
+          className="relative z-30 shrink-0 border-t border-white/[0.06] bg-surface-sidebar/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur lg:hidden">
           <div className="grid grid-cols-6">
             {ADMIN_MOBILE_WORKSPACES.map(item => {
               const active = currentHub.key === item.hub;

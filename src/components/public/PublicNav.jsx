@@ -97,8 +97,8 @@ export default function PublicNav() {
     <nav ref={navRef}
       className={`fixed top-0 left-0 right-0 ${menuOpen ? 'z-50' : 'z-40'} border-b transition-[background-color,border-color] duration-300`}
       style={{
-        backgroundColor: solid ? 'rgba(16,24,32,0.9)' : 'transparent',
-        borderColor: solid ? 'rgba(123,167,188,0.14)' : 'transparent',
+        backgroundColor: solid ? 'var(--surface-base-90)' : 'transparent',
+        borderColor: solid ? 'var(--accent-default-14)' : 'transparent',
         paddingTop: 'env(safe-area-inset-top)',
       }}>
       {/* Skip link: invisible until keyboard focus, jumps past the nav. */}
@@ -201,7 +201,7 @@ export default function PublicNav() {
 
           <div className="shrink-0 px-4 pt-2"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-            <div className="xert-glass xert-enter xert-enter-up grid grid-cols-1 gap-3 rounded-2xl p-3 shadow-[0_20px_50px_-18px_rgba(0,0,0,0.85)]"
+            <div className="xert-glass xert-enter xert-enter-up grid grid-cols-1 gap-3 rounded-2xl p-3 shadow-[0_20px_50px_-18px_var(--surface-scrim-85)]"
               style={{ animationDelay: `${navLinks.length * 55}ms` }}>
               <Link to={session ? '/account' : '/login'} onClick={() => setMenuOpen(false)}
                 className="xert-btn-ghost flex min-h-[52px] w-full items-center justify-center font-display text-lg uppercase tracking-wide">

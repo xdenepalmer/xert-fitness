@@ -1,3 +1,5 @@
+const tokens = require('./tailwind.config.tokens.cjs');
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
@@ -9,77 +11,11 @@ module.exports = {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
       },
-      colors: {
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))'
-        },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))'
-        },
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))'
-        },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))'
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))'
-        },
-        accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))'
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))'
-        },
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        chart: {
-          '1': 'hsl(var(--chart-1))',
-          '2': 'hsl(var(--chart-2))',
-          '3': 'hsl(var(--chart-3))',
-          '4': 'hsl(var(--chart-4))',
-          '5': 'hsl(var(--chart-5))'
-        },
-        sidebar: {
-          DEFAULT: 'hsl(var(--sidebar-background))',
-          foreground: 'hsl(var(--sidebar-foreground))',
-          primary: 'hsl(var(--sidebar-primary))',
-          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-          accent: 'hsl(var(--sidebar-accent))',
-          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-          border: 'hsl(var(--sidebar-border))',
-          ring: 'hsl(var(--sidebar-ring))'
-        },
-        xert: {
-          black: '#000000',
-          navy: '#101820',
-          deep: '#32485A',
-          steel: '#7BA7BC',
-          pale: '#D1DDE6',
-          offwhite: '#F1F3F4',
-          white: '#FFFFFF',
-          // legacy compat
-          ink: '#0d1720',
-          charcoal: '#32485A',
-          concrete: '#D1DDE6',
-          red: '#7BA7BC',
-          orange: '#D1DDE6',
-        }
-      },
+      ...tokens,
       fontFamily: {
-        heading: ['Bebas Neue', 'var(--font-heading)', 'Arial Black', 'sans-serif'],
-        body: ['DM Sans', 'var(--font-body)', 'system-ui', 'sans-serif'],
-        display: ['Bebas Neue', 'var(--font-display)', 'Arial Black', 'sans-serif'],
+        heading: ['var(--font-heading)'],
+        body: ['var(--font-body)'],
+        display: ['var(--font-display)'],
         mono: ['var(--font-mono)']
       },
       keyframes: {

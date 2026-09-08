@@ -9,7 +9,7 @@ const SERVICES = ['Physiotherapy', 'Nutrition / dietetics', 'Psychology / mental
 const chipClasses = 'min-h-11 px-3 py-2 text-sm font-body rounded-full border transition-colors';
 const chipActive = 'border-xert-steel bg-xert-steel text-xert-navy';
 const chipIdle = 'border-xert-steel/30 bg-white/[0.03] text-xert-pale/75 hover:border-xert-steel';
-const errorStyle = { color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' };
+const errorStyle = { color: 'var(--state-danger-text)', borderColor: 'var(--state-danger-text-35)', backgroundColor: 'var(--state-danger-text-8)' };
 const backButtonClasses = 'xert-btn-ghost inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-5 font-display text-sm uppercase tracking-wide';
 const nextButtonClasses = 'xert-btn-primary inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center px-8 font-display text-base uppercase tracking-wide';
 

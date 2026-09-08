@@ -34,7 +34,7 @@ export const ADMIN_BUTTON = Object.freeze({
 });
 
 /** Card surface used for panels and list rows. */
-export const ADMIN_PANEL = 'rounded-2xl border border-white/[0.06] bg-white/[0.035] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]';
+export const ADMIN_PANEL = 'rounded-2xl border border-white/[0.06] bg-white/[0.035] shadow-[0_1px_0_var(--surface-paper-4)_inset]';
 
 export function AdminPageHeader({ eyebrow = 'Command Centre', title, description, children }) {
   return (

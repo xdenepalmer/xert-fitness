@@ -135,7 +135,7 @@ export default function AdminToday({ onNavigate, preview = null }) {
             </button>
           </div>
         ) : (
-          <article className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-xert-deep/70 via-xert-navy to-[#0b1218] p-5 shadow-2xl shadow-black/40 sm:p-7">
+          <article className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-xert-deep/70 via-xert-navy to-surface-sidebar p-5 shadow-2xl shadow-black/40 sm:p-7">
             <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-xert-steel/15 blur-3xl" />
             <div className="relative flex flex-wrap items-start justify-between gap-5">
               <div className="min-w-0 flex-1">

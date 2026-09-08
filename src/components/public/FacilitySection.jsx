@@ -40,7 +40,7 @@ const equipmentGroups = [
   },
 ];
 
-const SOLID_TILE = { backgroundColor: '#7BA7BC', color: '#101820' };
+const SOLID_TILE = { backgroundColor: 'var(--accent-default)', color: 'var(--surface-base)' };
 
 export default function FacilitySection() {
   return (

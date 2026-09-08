@@ -65,7 +65,7 @@ export default function ReleaseClassSpot() {
                 </p>
                 {error && (
                   <div role="alert" className="mt-4 rounded-xl border p-3"
-                    style={{ color: '#f0a1a1', borderColor: 'rgba(240,161,161,0.35)', backgroundColor: 'rgba(240,161,161,0.08)' }}>
+                    style={{ color: 'var(--state-danger-text)', borderColor: 'var(--state-danger-text-35)', backgroundColor: 'var(--state-danger-text-8)' }}>
                     <p className="font-body text-sm">{error}</p>
                   </div>
                 )}

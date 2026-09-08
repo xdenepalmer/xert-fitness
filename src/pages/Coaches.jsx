@@ -137,7 +137,7 @@ export default function Coaches() {
               </div>
             )}
             {error && (
-              <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>Couldn’t load coaches: {error}</p>
+              <p className="font-body text-sm" style={{ color: 'var(--state-danger-text)' }}>Couldn’t load coaches: {error}</p>
             )}
 
             {!loading && !error && coaches.length === 0 && (

@@ -226,7 +226,7 @@ export default function Events() {
               </div>
             )}
             {error && (
-              <p className="font-body text-sm" style={{ color: '#f0a1a1' }}>
+              <p className="font-body text-sm" style={{ color: 'var(--state-danger-text)' }}>
                 Couldn’t load events: {error}
               </p>
             )}

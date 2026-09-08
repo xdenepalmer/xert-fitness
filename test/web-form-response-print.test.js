@@ -150,6 +150,6 @@ test('web response detail is selectable, navigable, and print/PDF scoped', async
   assert.match(css, /@media print[\s\S]*body\.xert-response-detail-open[\s\S]*\.xert-response-print-record/);
   assert.match(css, /\.xert-print-controls[\s\S]*display: none !important/);
   assert.match(css, /break-inside: avoid/);
-  assert.match(css, /html:has\(body\.xert-response-detail-open\)[\s\S]*background: #fff !important/);
+  assert.match(css, /html:has\(body\.xert-response-detail-open\)[\s\S]*background: var\(--surface-paper\) !important/);
   assert.match(css, /\.xert-response-print-record[\s\S]*margin: 0 !important/);
 });

@@ -38,7 +38,7 @@ const unavailableSteps = [
 ];
 
 const alertCardClasses = 'rounded-2xl border';
-const alertCardStyle = { borderColor: 'rgba(240,161,161,0.3)', backgroundColor: 'rgba(240,161,161,0.06)' };
+const alertCardStyle = { borderColor: 'var(--state-danger-text-30)', backgroundColor: 'var(--state-danger-text-6)' };
 const rowButtonClasses = 'inline-flex min-h-[52px] w-full sm:w-auto items-center justify-center gap-2 px-5 font-display text-base uppercase tracking-wide';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -283,7 +283,7 @@ export default function Booking() {
         <div className="max-w-6xl mx-auto px-6">
           {loadErrors.length > 0 && (
             <div role="alert" className={`${alertCardClasses} mt-6 p-4 sm:p-5 flex flex-wrap items-start gap-3`} style={alertCardStyle}>
-              <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: '#f0a1a1' }} />
+              <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: 'var(--state-danger-text)' }} />
               <div className="flex-1 min-w-[12rem]">
                 <p className="font-display text-sm uppercase text-xert-offwhite">Some booking information is unavailable</p>
                 <p className="font-body text-xs mt-1 text-xert-pale/60">{loadErrors.join(' | ')}</p>
@@ -306,7 +306,7 @@ export default function Booking() {
 
           {provider.blocked && (
             <div role="alert" className={`${alertCardClasses} flex items-start gap-3 p-4 sm:p-5 mt-8`} style={alertCardStyle}>
-              <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: '#f0a1a1' }} aria-hidden="true" />
+              <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: 'var(--state-danger-text)' }} aria-hidden="true" />
               <div>
                 <p className="font-display text-sm uppercase text-xert-offwhite">Booking provider needs attention</p>
                 <p className="mt-1 font-body text-xs leading-relaxed text-xert-pale/65">{provider.blockedReason}</p>
@@ -362,43 +362,43 @@ export default function Booking() {
                       Most Popular
                     </span>
                   )}
-                  <div className="xert-icon-tile mb-5" style={pack.featured ? { backgroundColor: '#7BA7BC', color: '#101820' } : undefined}>
+                  <div className="xert-icon-tile mb-5" style={pack.featured ? { backgroundColor: 'var(--accent-default)', color: 'var(--surface-base)' } : undefined}>
                     <Ticket className="w-5 h-5" />
                   </div>
                   <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none mb-2">{pack.name}</h2>
                   {comingSoon ? (
-                    <p className="font-display text-2xl uppercase mb-2" style={{ color: '#7BA7BC' }}>
+                    <p className="font-display text-2xl uppercase mb-2" style={{ color: 'var(--accent-default)' }}>
                       {PRICES_COMING_SOON_LABEL}
                     </p>
                   ) : (
-                    <p className="font-display text-4xl uppercase mb-2" style={{ color: '#7BA7BC' }}>
+                    <p className="font-display text-4xl uppercase mb-2" style={{ color: 'var(--accent-default)' }}>
                       {formatPackPrice(pack.price_cents, pack.currency)}
                     </p>
                   )}
-                  <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'rgba(209,221,230,0.45)' }}>
+                  <p className="font-body text-xs uppercase tracking-wider mb-5" style={{ color: 'var(--text-secondary-45)' }}>
                     {formatPackValidity(pack.validity_days)}
                   </p>
                   {pack.description && (
-                    <p className="font-body text-sm leading-relaxed mb-5" style={{ color: 'rgba(209,221,230,0.68)' }}>
+                    <p className="font-body text-sm leading-relaxed mb-5" style={{ color: 'var(--text-secondary-68)' }}>
                       {pack.description}
                     </p>
                   )}
                   <div className="space-y-3 mb-6 flex-1">
                     <div className="flex items-start gap-3">
-                      <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
-                      <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.62)' }}>
+                      <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--accent-default)' }} />
+                      <p className="font-body text-sm" style={{ color: 'var(--text-secondary-62)' }}>
                         {pack.sessions_count} coached session{pack.sessions_count === 1 ? '' : 's'}
                       </p>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
-                      <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.62)' }}>
+                      <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--accent-default)' }} />
+                      <p className="font-body text-sm" style={{ color: 'var(--text-secondary-62)' }}>
                         Semi-private coaching environment
                       </p>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#7BA7BC' }} />
-                      <p className="font-body text-sm" style={{ color: 'rgba(209,221,230,0.62)' }}>
+                      <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--accent-default)' }} />
+                      <p className="font-body text-sm" style={{ color: 'var(--text-secondary-62)' }}>
                         Flexible online booking
                       </p>
                     </div>
@@ -479,9 +479,9 @@ export default function Booking() {
               </div>
             ) : sessionsByDay.length === 0 ? (
               <div className="xert-card p-10 text-center">
-                <Users className="w-8 h-8 mx-auto mb-4" style={{ color: 'rgba(123,167,188,0.4)' }} />
+                <Users className="w-8 h-8 mx-auto mb-4" style={{ color: 'var(--accent-default-40)' }} />
                 <p className="font-display text-2xl uppercase text-xert-offwhite">Timetable opening soon.</p>
-                <p className="font-body text-sm mt-2 max-w-md mx-auto" style={{ color: 'rgba(209,221,230,0.55)' }}>
+                <p className="font-body text-sm mt-2 max-w-md mx-auto" style={{ color: 'var(--text-secondary-55)' }}>
                   Classes for the launch block are being scheduled. Grab a pack now and you&rsquo;ll be ready to book
                   the moment they go live.
                 </p>
@@ -529,7 +529,7 @@ export default function Booking() {
                                 </p>
                               )}
                               {timeConflict && (
-                                <p id={`booking-conflict-${s.id}`} className="font-body text-xs mt-1" style={{ color: '#f0a1a1' }}>
+                                <p id={`booking-conflict-${s.id}`} className="font-body text-xs mt-1" style={{ color: 'var(--state-danger-text)' }}>
                                   Overlaps {timeConflict.title || timeConflict.class_type || 'another active booking'}
                                 </p>
                               )}

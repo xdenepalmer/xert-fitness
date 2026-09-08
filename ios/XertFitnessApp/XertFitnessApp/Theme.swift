@@ -2,24 +2,11 @@ import SwiftUI
 import UIKit
 
 // MARK: - XERT design system
-// Mirrors the website's brand tokens (src/index.css) so both surfaces read as
+// Consumes Generated/XertTokens.swift from design/tokens.json so both surfaces read as
 // one product: navy/ink surfaces, steel accents, pale text, soft continuous
 // corners and condensed uppercase display type (Bebas Neue).
 //
-// Core brand colors (xertNavy, xertInk, xertSteel, xertOffWhite) live in
-// RootView.swift; this file adds the remaining tokens plus typography and
-// reusable components.
-
-extension Color {
-    /// #32485A — secondary surface / pressed states.
-    static let xertDeep = Color(red: 50 / 255, green: 72 / 255, blue: 90 / 255)
-    /// #D1DDE6 — pale brand tint for secondary text on dark surfaces.
-    static let xertPale = Color(red: 209 / 255, green: 221 / 255, blue: 230 / 255)
-    /// Card surface, matches the site's `--card` (hsl 213 29% 14%).
-    static let xertCard = Color(red: 25 / 255, green: 36 / 255, blue: 46 / 255)
-    /// Muted copy, matches the site's `--muted-foreground`.
-    static let xertMuted = Color(red: 119 / 255, green: 135 / 255, blue: 150 / 255)
-}
+// This file adds typography and reusable components to the generated palette.
 
 enum XertTheme {
     /// Bundled brand display font. Falls back to a condensed system face if the
@@ -41,10 +28,10 @@ enum XertTheme {
     /// Global UIKit chrome: navy tab bar and navigation bars with Bebas titles,
     /// so every screen carries the brand without per-view boilerplate.
     static func configureAppearance() {
-        let navy = UIColor(red: 16 / 255, green: 24 / 255, blue: 32 / 255, alpha: 1)
-        let ink = UIColor(red: 11 / 255, green: 18 / 255, blue: 24 / 255, alpha: 1)
-        let steel = UIColor(red: 123 / 255, green: 167 / 255, blue: 188 / 255, alpha: 1)
-        let offWhite = UIColor(red: 241 / 255, green: 243 / 255, blue: 244 / 255, alpha: 1)
+        let navy = UIColor(XertTokens.surfaceBase)
+        let ink = UIColor(XertTokens.surfaceSidebar)
+        let steel = UIColor(XertTokens.accentDefault)
+        let offWhite = UIColor(XertTokens.textPrimary)
 
         let nav = UINavigationBarAppearance()
         nav.configureWithDefaultBackground()
