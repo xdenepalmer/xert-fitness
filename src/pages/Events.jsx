@@ -253,7 +253,7 @@ export default function Events() {
               !error &&
               byMonth.map(({ month, events: list }) => (
                 <section key={month} className="mb-10">
-                  <div className="sticky top-14 z-10 -mx-6 mb-4 px-6 py-3 bg-xert-navy/85 backdrop-blur-md border-b border-xert-steel/10">
+                  <div className="sticky z-10 -mx-6 mb-4 px-6 py-3 bg-xert-navy/85 backdrop-blur-md border-b border-xert-steel/10" style={{ top: 'var(--public-nav-offset)' }}>
                     <div className="flex items-baseline gap-3">
                       <h2 className="font-display text-3xl uppercase text-xert-offwhite leading-none">{month}</h2>
                       <span className="xert-chip">

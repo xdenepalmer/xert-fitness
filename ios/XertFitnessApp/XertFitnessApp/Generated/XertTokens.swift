@@ -188,8 +188,24 @@ enum XertTokens {
     static let cardRadius: CGFloat = 16
     static let controlHeight: CGFloat = 44
     static let dockBlur: CGFloat = 14
+    static let navBookHeight: CGFloat = 48
+    static let navFontBody: CGFloat = 14
+    static let navFontEyebrow: CGFloat = 11
+    static let navFontLink: CGFloat = 13
+    static let navFontMenu: CGFloat = 30
+    static let navFontTitle: CGFloat = 24
+    static let navHandleHeight: CGFloat = 3
     static let navHeightCompact: CGFloat = 56
     static let navHeightExpanded: CGFloat = 76
+    static let navIndicatorHeight: CGFloat = 2
+    static let navLineWidth: CGFloat = 1
+    static let navLinkGap: CGFloat = 16
+    static let navLogoCompact: CGFloat = 28
+    static let navLogoExpanded: CGFloat = 34
+    static let navMaxWidth: CGFloat = 1200
+    static let navRadiusCard: CGFloat = 8
+    static let navRadiusControl: CGFloat = 6
+    static let navShadowHover = "0 3px 8px"
     static let semanticColorNames: [String] = [
         "accent.default",
         "accent.default-10",

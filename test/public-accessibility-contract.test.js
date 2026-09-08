@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 
-const nav = readFileSync(new URL('../src/components/public/PublicNav.jsx', import.meta.url), 'utf8');
+const navDirectory = new URL('../src/components/public/nav/', import.meta.url);
+const nav = [readFileSync(new URL('../src/components/public/PublicNav.jsx', import.meta.url), 'utf8'),
+  ...(existsSync(navDirectory) ? readdirSync(navDirectory).filter(name => /\.(jsx|js|css)$/.test(name)).map(name => readFileSync(new URL(name, navDirectory), 'utf8')) : []),
+].join('\n');
 const memberForm = readFileSync(new URL('../src/components/public/MemberInterestForm.jsx', import.meta.url), 'utf8');
 const events = readFileSync(new URL('../src/pages/Events.jsx', import.meta.url), 'utf8');
 const contact = readFileSync(new URL('../src/pages/Contact.jsx', import.meta.url), 'utf8');
@@ -23,6 +26,18 @@ test('mobile navigation exposes its name, expanded state, controlled menu, and m
   assert.match(nav, /aria-controls="mobile-navigation"/);
   assert.match(nav, /min-w-11 min-h-11/);
   assert.match(nav, /id="mobile-navigation"/);
+});
+
+test('extracted navigation preserves keyboard containment and names useful sheet regions', () => {
+  assert.match(nav, /aria-label="Next class"/);
+  assert.match(nav, /Retry class information/);
+  assert.match(nav, /aria-label="Close navigation menu"/);
+  assert.match(nav, /role="dialog"/);
+  assert.match(nav, /aria-modal="true"/);
+  assert.match(nav, /e\.key === 'Escape'/);
+  assert.match(nav, /e\.key !== 'Tab'/);
+  assert.match(nav, /\.focus\(/);
+  assert.match(nav, /document\.body\.style\.overflow/);
 });
 
 test('member contact fields use associated labels, stable names, and required semantics', () => {

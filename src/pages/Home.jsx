@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import PublicNav from '@/components/public/PublicNav';
 import Hero from '@/components/public/Hero';
 import Countdown from '@/components/public/Countdown';
@@ -14,7 +14,6 @@ import FAQ from '@/components/public/FAQ';
 import PublicFooter from '@/components/public/PublicFooter';
 import StickyMobileCTA from '@/components/public/StickyMobileCTA';
 import Marquee from '@/components/public/Marquee';
-import ScrollProgress from '@/components/public/motion/ScrollProgress';
 import Reveal from '@/components/public/motion/Reveal';
 import PWAInstallPrompt from '@/components/public/PWAInstallPrompt';
 import { getSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
@@ -22,24 +21,36 @@ import { DEFAULT_TARGET_LAUNCH_DATE } from '@/lib/launchSettings';
 
 export default function Home() {
   const [settings, setSettings] = useState(getDefaultSettings());
+  const homeRef = useRef(null);
+  const bannerRef = useRef(null);
 
   useEffect(() => {
     getSoftLaunchSettings().then(s => { if (s) setSettings(s); }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const home = homeRef.current;
+    const banner = bannerRef.current;
+    if (!banner) { home.style.setProperty('--public-announcement-height', '0px'); return; }
+    const measure = () => home.style.setProperty('--public-announcement-height', `${banner.getBoundingClientRect().height}px`);
+    const observer = new ResizeObserver(measure);
+    observer.observe(banner);
+    measure();
+    return () => observer.disconnect();
+  }, [settings.announcement_banner_enabled, settings.announcement_banner_text]);
+
   return (
-    <div className="min-h-screen bg-xert-navy">
-      <ScrollProgress />
+    <div ref={homeRef} className="min-h-screen bg-xert-navy">
       <PublicNav />
 
       {settings.announcement_banner_enabled && settings.announcement_banner_text && (
-        <div className="fixed top-14 left-0 right-0 z-30 py-2 px-4 text-center"
-          style={{ backgroundColor: 'var(--surface-secondary)' }}>
+        <div ref={bannerRef} data-public-announcement className="fixed left-0 right-0 z-30 py-2 px-4 text-center"
+          style={{ top: 'var(--public-nav-offset)', backgroundColor: 'var(--surface-secondary)' }}>
           <p className="font-body text-sm text-xert-offwhite">{settings.announcement_banner_text}</p>
         </div>
       )}
 
-      <main>
+      <main id="main">
         <Hero />
         <Countdown
           targetDate={settings.target_launch_date || DEFAULT_TARGET_LAUNCH_DATE}
