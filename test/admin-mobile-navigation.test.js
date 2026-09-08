@@ -23,7 +23,7 @@ test('mobile admin navigation traps focus, locks scroll and restores the trigger
   assert.match(adminLayout, /event\.key !== 'Tab'/);
   assert.match(adminLayout, /menuButtonRef\.current\?\.focus\(\)/);
   assert.match(adminLayout, /querySelectorAll\('button:not\(\[disabled\]\), a\[href\]'/);
-  assert.match(adminLayout, /window\.matchMedia\('\(min-width: 1024px\)'\)/);
+  assert.match(adminLayout, /window\.matchMedia\(navDesktopMediaQuery\(\)\)/);
 });
 
 test('admin navigation stays open when unsaved changes cancel a section change', () => {

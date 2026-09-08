@@ -1,10 +1,11 @@
-import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import PWAInstallPrompt from '@/components/public/PWAInstallPrompt';
 import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
 import { UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
+import { AdminWorkspaceBoundary, WorkspaceSkeleton, retryableLazy as lazy } from '@/components/admin/AdminWorkspaceBoundary';
 
 // Admin tools are independently code-split. Most staff sessions only need one
 // operational surface at a time, so there is no reason to preload the rest.
@@ -31,14 +32,6 @@ const SmsManager = lazy(() => import('@/components/admin/SmsManager'));
 const EmailManager = lazy(() => import('@/components/admin/EmailManager'));
 const FormsSurveysManager = lazy(() => import('@/components/admin/FormsSurveysManager'));
 
-function SectionLoader() {
-  return (
-    <div className="p-6" role="status" aria-label="Loading section">
-      <div className="h-24 bg-xert-ink animate-pulse border border-xert-steel/20" />
-    </div>
-  );
-}
-
 export default function AdminCommandCentre() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -48,16 +41,18 @@ export default function AdminCommandCentre() {
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const canonicalPath = getAdminSectionPath(section);
   const intent = new URLSearchParams(location.search);
+  const acceptedPath = useRef(`${location.pathname}${location.search}`);
 
   useEffect(() => {
     if (routeSection === section) {
-      if (location.pathname !== canonicalPath) navigate(canonicalPath, { replace: true });
+      acceptedPath.current = `${canonicalPath}${location.search}`;
+      if (location.pathname !== canonicalPath) navigate(acceptedPath.current, { replace: true });
       return;
     }
     if (hasUnsavedChanges) {
       const requestedPath = `${location.pathname}${location.search}`;
       setPendingNavigation(current => current || { kind: 'section', section: routeSection, path: requestedPath });
-      navigate(canonicalPath, { replace: true });
+      navigate(acceptedPath.current, { replace: true });
       return;
     }
     setActiveSection(routeSection);
@@ -159,9 +154,11 @@ export default function AdminCommandCentre() {
   return (
     <>
       <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedChanges} onConfirmLeave={confirmLeaveAdmin}>
-        <Suspense fallback={<SectionLoader />}>
+        <AdminWorkspaceBoundary key={section}>
+        <Suspense fallback={<WorkspaceSkeleton section={section} />}>
           {renderSection()}
         </Suspense>
+        </AdminWorkspaceBoundary>
       </AdminLayout>
       <AdminConfirmDialog
         open={Boolean(pendingNavigation)}

@@ -1,13 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  LogOut, ExternalLink, X, Search, CircleAlert, ChevronRight,
+  LogOut, ExternalLink, X, Search, CircleAlert, ChevronRight, PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Keyboard,
 } from 'lucide-react';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { getAdminBadgeCounts } from '@/lib/adminData';
 import { ADMIN_BADGE_REFRESH_INTERVAL_MS, shouldRefreshAdminData } from '@/lib/adminFreshness';
 import { useAdminDialogLayer } from '@/lib/adminDialogLayer';
 import CommandPalette from '@/components/admin/CommandPalette';
+import { useAdminShellControls, WorkspaceTabs, KeyboardShortcuts, navDesktopMediaQuery } from './AdminShellControls';
+import './adminShell.css';
 import {
   ADMIN_HUBS, ADMIN_MOBILE_WORKSPACES, ADMIN_WORKSPACES, hubForSection,
 } from '@/lib/adminWorkspaces';
@@ -18,7 +20,7 @@ const LOGO = '/assets/xert-logo-horizontal-light.png';
 export default function AdminLayout({ activeSection, onSectionChange, hasUnsavedChanges = false, onConfirmLeave = _action => true, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopNavigation, setDesktopNavigation] = useState(
-    () => window.matchMedia('(min-width: 1024px)').matches,
+    () => window.matchMedia(navDesktopMediaQuery()).matches,
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [badges, setBadges] = useState({});
@@ -28,11 +30,13 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
   const menuButtonRef = useRef(null);
   const workspaceRef = useRef(null);
   const mainRef = useRef(null);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const shell = useAdminShellControls({ onNavigate: onSectionChange, onPalette: openPalette, desktopNavigation });
 
   useAdminDialogLayer(workspaceRef);
 
   useEffect(() => {
-    const query = window.matchMedia('(min-width: 1024px)');
+    const query = window.matchMedia(navDesktopMediaQuery());
     const sync = event => {
       setDesktopNavigation(event.matches);
       if (event.matches) setSidebarOpen(false);
@@ -51,7 +55,10 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
   useEffect(() => {
     const sidebar = sidebarRef.current;
     if (!sidebar) return;
-    if (!desktopNavigation && !sidebarOpen) sidebar.setAttribute('inert', '');
+    if (!desktopNavigation && !sidebarOpen) {
+      if (sidebar.contains(document.activeElement)) menuButtonRef.current?.focus();
+      sidebar.setAttribute('inert', '');
+    }
     else sidebar.removeAttribute('inert');
   }, [desktopNavigation, sidebarOpen]);
 
@@ -59,11 +66,14 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     if (!sidebarOpen || desktopNavigation) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    workspaceRef.current?.setAttribute('inert', '');
     window.requestAnimationFrame(() => {
       sidebarRef.current?.querySelector('button, a[href]')?.focus();
     });
 
     const handleKeyDown = event => {
+      const foregroundModal = [...document.querySelectorAll('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')].filter(dialog => dialog.getAttribute('aria-hidden') !== 'true').at(-1);
+      if (foregroundModal && foregroundModal !== sidebarRef.current) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         setSidebarOpen(false);
@@ -91,21 +101,10 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
+      workspaceRef.current?.removeAttribute('inert');
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [desktopNavigation, sidebarOpen]);
-
-  // ⌘K / Ctrl+K opens the command palette.
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen(o => !o);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   // Keep attention counts current without polling while the admin tab is hidden.
   useEffect(() => {
@@ -162,7 +161,8 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     .split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('');
 
   return (
-    <div className="flex h-[100dvh] min-h-0 overflow-hidden overscroll-none bg-surface-sidebar">
+    <div data-admin-shell data-density={shell.density} data-collapsed={desktopNavigation && shell.collapsed} data-desktop={desktopNavigation}
+      style={{ '--admin-sidebar-width': `${shell.width}px` }} className="admin-shell flex h-[100dvh] min-h-0 overflow-hidden overscroll-none bg-surface-base">
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
         ref={sidebarRef}
@@ -204,13 +204,14 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
             return (
               <div key={hub.key} className="py-0.5">
                 <button type="button" onClick={() => navigateTo(hub.items[0])}
+                  aria-label={hub.label} title={hub.label}
                   aria-current={isCurrentHub && hub.items.length === 1 ? 'page' : undefined}
                   aria-expanded={hub.items.length > 1 ? isCurrentHub : undefined}
                   className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${isCurrentHub ? 'bg-white/[0.06] text-xert-offwhite' : 'text-xert-pale/60 hover:bg-white/[0.04] hover:text-xert-offwhite'}`}>
                   <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl transition-colors ${isCurrentHub ? 'bg-xert-steel text-xert-navy' : 'bg-white/[0.05] text-xert-steel'}`}>
                     <HubIcon className="h-[18px] w-[18px]" />
                   </span>
-                  <span className="min-w-0 flex-1">
+                  <span className="admin-hub-label min-w-0 flex-1">
                     <span className="block font-body text-sm font-semibold">{hub.label}</span>
                     <span className="block truncate font-body text-[11px] text-xert-pale/40">{hub.detail}</span>
                   </span>
@@ -218,7 +219,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                     <span className="shrink-0 rounded-full bg-xert-steel/20 px-2 py-0.5 font-body text-[11px] font-semibold tabular-nums text-xert-steel">{count}</span>
                   )}
                 </button>
-                {isCurrentHub && hub.items.length > 1 && (
+                {isCurrentHub && hub.items.length > 1 && !(desktopNavigation && shell.collapsed) && (
                   <div className="mb-1 ml-[3.1rem] mt-1 space-y-0.5 border-l border-white/[0.06] pl-3">
                     {hub.items.map(item => {
                       const active = activeSection === item.key;
@@ -247,7 +248,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
 >
               {initials}
             </div>
-            <div className="min-w-0">
+            <div className="admin-account-label min-w-0">
               <p className="font-body text-xs truncate text-xert-pale" >{profile?.full_name || 'Admin'}</p>
               <p className="font-body text-[10px] truncate text-xert-pale/35" title={user?.email}>{user?.email}</p>
             </div>
@@ -264,6 +265,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
           </div>
         </div>
       </aside>
+      {desktopNavigation && !shell.collapsed && <div {...shell.resizeProps} className="admin-resize" />}
 
       {/* Overlay */}
       {sidebarOpen && (
@@ -282,7 +284,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
               <div className="min-w-0">
                 <h1 className="flex min-w-0 items-center gap-1.5 font-body text-base font-semibold normal-case tracking-normal text-xert-offwhite sm:text-lg">
                   {currentHub.items.length > 1 && (
-                    <span className="hidden items-center gap-1.5 sm:inline-flex">
+                    <span className="inline-flex items-center gap-1.5">
                       <span className="text-xert-pale/45">{currentHub.label}</span>
                       <ChevronRight className="h-4 w-4 shrink-0 text-xert-pale/30" aria-hidden="true" />
                     </span>
@@ -297,6 +299,9 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
               </div>
             </div>
             <div className="flex items-center gap-2">
+            {desktopNavigation && <button type="button" className="admin-shell-control" onClick={() => shell.setCollapsed(value => !value)} aria-label={shell.collapsed ? 'Expand navigation' : 'Collapse navigation'} title={shell.collapsed ? 'Expand navigation' : 'Collapse navigation'}>{shell.collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}</button>}
+            <button type="button" className="admin-shell-control" onClick={() => shell.setDensity(value => value === 'compact' ? 'comfortable' : 'compact')} aria-label={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'} title={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'}><SlidersHorizontal /></button>
+            <button type="button" className="admin-shell-control" onClick={() => shell.setShortcutsOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts"><Keyboard /></button>
             <button ref={menuButtonRef} type="button" onClick={() => setSidebarOpen(true)} aria-label="Open account and navigation"
               aria-expanded={sidebarOpen} aria-controls="admin-navigation"
               className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] font-display text-sm text-xert-steel transition-colors hover:border-xert-steel/60 lg:hidden">
@@ -310,20 +315,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
             </div>
           </div>
           {currentHub.items.length > 1 && (
-            <div role="tablist" aria-label={`${currentHub.label} pages`} className="flex gap-2 overflow-x-auto px-4 pb-3 pt-1 [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden">
-              {currentHub.items.map(item => {
-                const active = activeSection === item.key;
-                return (
-                  <button type="button" role="tab" key={item.key} aria-selected={active} onClick={() => navigateTo(item)}
-                    className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 font-body text-sm font-medium transition-colors ${active ? 'bg-xert-steel text-xert-navy' : 'bg-white/[0.05] text-xert-pale/70 hover:bg-white/[0.09] hover:text-xert-offwhite'}`}>
-                    {item.label}
-                    {badges[item.key] > 0 && (
-                      <span className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${active ? 'bg-xert-navy/20 text-xert-navy' : 'bg-xert-steel/20 text-xert-steel'}`}>{badges[item.key]}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <WorkspaceTabs items={currentHub.items} activeSection={activeSection} navigateTo={navigateTo} badges={badges} />
           )}
         </header>
 
@@ -370,6 +362,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       </div>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onNavigate={onSectionChange} />
+      <KeyboardShortcuts open={shell.shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
     </div>
   );
 }

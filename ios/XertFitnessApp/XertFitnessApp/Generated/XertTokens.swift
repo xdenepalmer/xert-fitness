@@ -185,6 +185,12 @@ enum XertTokens {
     static let spaceRowComfortable: CGFloat = 16
     static let spaceRowCompact: CGFloat = 8
     static let spaceSection: CGFloat = 32
+    static let adminResizeWidth: CGFloat = 8
+    static let adminSidebarDefault: CGFloat = 288
+    static let adminSidebarMax: CGFloat = 384
+    static let adminSidebarMin: CGFloat = 240
+    static let adminSidebarRail: CGFloat = 80
+    static let adminSidebarStep: CGFloat = 16
     static let cardRadius: CGFloat = 16
     static let controlHeight: CGFloat = 44
     static let dockBlur: CGFloat = 14
