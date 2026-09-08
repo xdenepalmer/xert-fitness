@@ -41,7 +41,7 @@ test('staff can book a member into a class from the Command Centre', async () =>
   assert.match(data, /receipt\.request_id !== requestId \|\| receipt\.session_id !== sessionId \|\| receipt\.member_id !== memberId/,
     'an unverifiable receipt must not be reported as a booking');
   assert.match(data, /notifyTargetedAnnouncementPush\(receipt\.announcement_id\)/);
-  for (const [code, wording] of [['SESSION_FULL', /class is full/], ['NO_CREDITS', /no session credits/], ['ALREADY_BOOKED', /already has a place/]]) {
+  for (const [code, wording] of [['SESSION_FULL', /class is full/], ['NO_CREDITS', /could not be added/], ['ALREADY_BOOKED', /already has a place/]]) {
     assert.match(data, new RegExp(`${code}[\\s\\S]{0,120}`), `${code} is handled`);
     assert.match(data, wording);
   }

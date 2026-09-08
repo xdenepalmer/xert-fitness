@@ -1,20 +1,24 @@
-export const CREDIT_REFUND_LEAD_TIME_MS = 12 * 60 * 60 * 1000;
+// Class credits are retired: a booking reserves nothing, so cancelling one has
+// no credit to give back. The receipt still carries the credit fields because
+// bookings taken while packs were sold may hold one, and those are honoured —
+// but nothing said to a member today invents a credit that was never taken.
 
-export function cancellationReturnsCredit(booking, now = Date.now()) {
-  if (booking.status === 'requested') return true;
+export const LATE_CANCELLATION_LEAD_TIME_MS = 12 * 60 * 60 * 1000;
+
+export function isLateCancellation(booking, now = Date.now()) {
   if (booking.status !== 'confirmed') return false;
-  return new Date(booking.start_time).getTime() - now > CREDIT_REFUND_LEAD_TIME_MS;
+  return new Date(booking.start_time).getTime() - now <= LATE_CANCELLATION_LEAD_TIME_MS;
 }
 
 export function cancellationMessage(booking, now = Date.now()) {
   const className = booking.title || booking.class_type || 'this class';
   if (booking.status === 'waitlisted') {
-    return `This will remove you from the waitlist for ${className}. No class credit is currently reserved.`;
+    return `This will take you off the waitlist for ${className}.`;
   }
-  if (cancellationReturnsCredit(booking, now)) {
-    return `This will remove you from ${className} and return the reserved credit when its original credit pack is still valid. XERT will confirm the credit outcome after cancellation.`;
+  if (isLateCancellation(booking, now)) {
+    return `This will remove you from ${className}. It is inside 12 hours of the class, so please let XERT know as well.`;
   }
-  return `This will remove you from ${className}. Confirmed bookings cancelled within 12 hours do not return a class credit.`;
+  return `This will remove you from ${className}, and your place goes back to the class.`;
 }
 
 const CANCELLATION_OUTCOMES = new Set([
@@ -49,10 +53,14 @@ export function normalizeCancellationReceipt(data, expectedBookingId) {
 
 export function cancellationOutcomeMessage(receipt) {
   switch (receipt.credit_outcome) {
+    // Nothing was reserved, which is the normal case now that credits are gone.
+    case 'not_reserved':
+      return receipt.previous_status === 'waitlisted'
+        ? 'You have been taken off the waitlist.'
+        : 'Your booking was cancelled and your place is back in the class.';
+    // The rest only reach a member holding a booking from the class-pack era.
     case 'returned':
       return 'Your booking was cancelled and one class credit was returned.';
-    case 'not_reserved':
-      return 'You have been removed from the waitlist. No class credit was reserved.';
     case 'late_cancellation':
       return 'Your booking was cancelled within 12 hours of class, so the reserved credit was used.';
     case 'expired':

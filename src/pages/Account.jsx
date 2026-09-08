@@ -118,6 +118,9 @@ export default function Account() {
   const [readinessError, setReadinessError] = useState('');
   const [readinessSavedMessage, setReadinessSavedMessage] = useState('');
   const expiringCredits = useMemo(() => summarizeExpiringCredits(credits?.batches), [credits]);
+  // Nothing sells class packs any more, so the wallet is shown only to the
+  // members who still have one to spend.
+  const hasLegacyCredits = (credits?.total ?? 0) > 0;
   const trainingProgress = useMemo(() => summarizeMemberProgress(bookings), [bookings]);
 
   const purchaseSuccess = searchParams.get('purchase') === 'success';
@@ -1015,7 +1018,9 @@ export default function Account() {
           )}
         </section>
 
-        {/* Credits */}
+        {/* Class packs are retired. This wallet stays only for the members who
+            still hold credits bought before memberships replaced them. */}
+        {hasLegacyCredits && (
         <section className="mb-10">
           {accountReady && creditsUnavailable && (
             <div className={`${warningBoxClasses} mb-3 p-4`}>
@@ -1054,11 +1059,12 @@ export default function Account() {
                 </p>
               )}
               <Link to="/booking" className={`${primaryButtonClasses} w-full sm:w-auto`}>
-                {accountReady && credits?.total > 0 ? 'Book A Class' : 'Buy A Pack'}
+                Book A Class
               </Link>
             </div>
           </div>
         </section>
+        )}
 
         {/* Attendance-derived progress */}
         <section id="progress" className="mb-10 scroll-mt-32">
@@ -1232,8 +1238,8 @@ export default function Account() {
                     </p>
                     <p className="font-body text-xs mt-1" style={{ color: 'rgba(123,167,188,0.75)' }}>
                       {b.status === 'waitlisted'
-                        ? `You are ${b.waitlist_position ? `#${b.waitlist_position} ` : ''}on the waitlist. No class credit is currently reserved.`
-                        : 'Your credit is reserved while XERT reviews this request.'}
+                        ? `You are ${b.waitlist_position ? `#${b.waitlist_position} ` : ''}on the waitlist. XERT will let you know as soon as a place opens up.`
+                        : 'Your place is held while XERT confirms this request.'}
                     </p>
                   </div>
                   {providerAllowsNativeCancellation ? (
@@ -1315,7 +1321,7 @@ export default function Account() {
               ))}
               <p className="font-body text-xs flex items-center gap-1.5" style={{ color: 'rgba(209,221,230,0.4)' }}>
                 <Clock className="w-3.5 h-3.5" />
-                Cancel more than 12 hours before class and your credit is returned automatically.
+                Please cancel more than 12 hours before class so someone else can take the place.
               </p>
             </div>
           )}

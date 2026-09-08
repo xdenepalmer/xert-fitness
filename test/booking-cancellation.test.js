@@ -3,34 +3,35 @@ import test from 'node:test';
 import {
   cancellationMessage,
   cancellationOutcomeMessage,
-  cancellationReturnsCredit,
+  isLateCancellation,
   normalizeCancellationReceipt,
 } from '../src/lib/bookingCancellation.js';
 
-test('uses the server cancellation credit policy for requests and confirmed bookings', () => {
+test('knows which cancellations are inside the club\'s 12-hour notice window', () => {
   const now = Date.parse('2026-08-01T00:00:00.000Z');
 
-  assert.equal(cancellationReturnsCredit({ status: 'requested', start_time: '2026-08-01T01:00:00.000Z' }, now), true);
-  assert.equal(cancellationReturnsCredit({ status: 'confirmed', start_time: '2026-08-01T13:00:01.000Z' }, now), true);
-  assert.equal(cancellationReturnsCredit({ status: 'confirmed', start_time: '2026-08-01T12:00:00.000Z' }, now), false);
-  assert.equal(cancellationReturnsCredit({ status: 'waitlisted', start_time: '2026-08-02T12:00:00.000Z' }, now), false);
+  assert.equal(isLateCancellation({ status: 'confirmed', start_time: '2026-08-01T08:00:00.000Z' }, now), true);
+  assert.equal(isLateCancellation({ status: 'confirmed', start_time: '2026-08-01T12:00:00.000Z' }, now), true);
+  assert.equal(isLateCancellation({ status: 'confirmed', start_time: '2026-08-01T13:00:01.000Z' }, now), false);
+  assert.equal(isLateCancellation({ status: 'requested', start_time: '2026-08-01T01:00:00.000Z' }, now), false);
+  assert.equal(isLateCancellation({ status: 'waitlisted', start_time: '2026-08-01T01:00:00.000Z' }, now), false);
 });
 
-test('explains the cancellation outcome before a member confirms', () => {
+test('explains what cancelling does without inventing a credit nobody holds', () => {
   const now = Date.parse('2026-08-01T00:00:00.000Z');
-
-  assert.match(
+  const messages = [
     cancellationMessage({ title: 'XERT Strength', status: 'confirmed', start_time: '2026-08-01T08:00:00.000Z' }, now),
-    /do not return a class credit/
-  );
-  assert.match(
     cancellationMessage({ title: 'XERT Strength', status: 'requested', start_time: '2026-08-01T01:00:00.000Z' }, now),
-    /original credit pack is still valid.*confirm the credit outcome/
-  );
-  assert.match(
     cancellationMessage({ title: 'XERT Strength', status: 'waitlisted', start_time: '2026-08-02T01:00:00.000Z' }, now),
-    /remove you from the waitlist.*No class credit is currently reserved/
-  );
+  ];
+
+  assert.match(messages[0], /inside 12 hours of the class/);
+  assert.match(messages[1], /your place goes back to the class/);
+  assert.match(messages[2], /take you off the waitlist/);
+  for (const message of messages) {
+    assert.ok(message.includes('XERT Strength'), 'the member is told which class this is');
+    assert.doesNotMatch(message, /credit/i, 'class credits are retired');
+  }
 });
 
 test('normalizes one exact server cancellation receipt and rejects inconsistent outcomes', () => {
@@ -51,9 +52,19 @@ test('normalizes one exact server cancellation receipt and rejects inconsistent 
   );
 });
 
-test('reports the database-confirmed credit outcome instead of predicting it', () => {
+test('reports the database-confirmed outcome instead of predicting it', () => {
+  // Nothing is reserved now, so this is the outcome an ordinary member sees,
+  // and it must not mention a credit either way.
+  const cancelled = cancellationOutcomeMessage({ credit_outcome: 'not_reserved', previous_status: 'confirmed' });
+  assert.match(cancelled, /your place is back in the class/);
+  assert.doesNotMatch(cancelled, /credit/i);
+  assert.match(
+    cancellationOutcomeMessage({ credit_outcome: 'not_reserved', previous_status: 'waitlisted' }),
+    /taken off the waitlist/
+  );
+
+  // A booking made while packs were still sold is still reported honestly.
   assert.match(cancellationOutcomeMessage({ credit_outcome: 'returned' }), /one class credit was returned/);
-  assert.match(cancellationOutcomeMessage({ credit_outcome: 'not_reserved' }), /No class credit was reserved/);
   assert.match(cancellationOutcomeMessage({ credit_outcome: 'late_cancellation' }), /within 12 hours/);
   assert.match(cancellationOutcomeMessage({ credit_outcome: 'expired' }), /credit pack had already expired/);
   assert.match(cancellationOutcomeMessage({ credit_outcome: 'reservation_unavailable' }), /could not verify a credit return/);

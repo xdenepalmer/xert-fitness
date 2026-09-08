@@ -710,8 +710,10 @@ export async function staffBookMemberIntoClass(sessionId, memberId, requestId = 
     if (error.code === 'PGRST202' || /admin_book_member_into_class.*(?:not found|schema cache|does not exist)/i.test(message)) {
       throw new Error('Apply the staff-assisted booking migration before adding members to a class.');
     }
+    // Class credits are retired, so this should no longer reach staff. It is
+    // kept as a safety net for any older path that still raises it.
+    if (/NO_CREDITS/i.test(message)) throw new Error('That member could not be added. Refresh the roster and try again.');
     if (/SESSION_FULL/i.test(message)) throw new Error('That class is full. The member can join the waitlist from their account.');
-    if (/NO_CREDITS/i.test(message)) throw new Error('That member has no session credits left. Add credits first.');
     if (/ALREADY_BOOKED/i.test(message)) throw new Error('That member already has a place in this class.');
     if (/SESSION_IN_PAST|SESSION_NOT_BOOKABLE/i.test(message)) throw new Error('That class is not open for bookings.');
     throw new Error(message);
@@ -1683,7 +1685,7 @@ export async function adminPromoteNextWaitlisted(sessionId, expectedBookingId, r
     throw new Error('The queue changed before confirmation. Refresh and review the next member.');
   }
   if (/WAITLIST_MEMBER_NO_CREDITS|NO_CREDITS/i.test(message)) {
-    throw new Error('The next member has no available class credit. Contact them before changing the queue.');
+    throw new Error('The next member could not be confirmed. Refresh the roster and try again.');
   }
   if (/SESSION_FULL/i.test(message)) throw new Error('This class is still full. Refresh the roster before promoting anyone.');
   if (/BOOKING_TIME_CONFLICT/i.test(message)) {

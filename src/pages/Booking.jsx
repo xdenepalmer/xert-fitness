@@ -254,9 +254,9 @@ export default function Booking() {
       toast({
         title: joiningWaitlist ? 'Waitlist joined' : requested ? 'Booking request sent' : 'Class booked',
         description: joiningWaitlist
-          ? `You are on the waitlist for ${s.title || s.class_type}. No class credit has been used.`
+          ? `You are on the waitlist for ${s.title || s.class_type}. XERT will let you know if a place opens up.`
           : requested
-          ? `${s.title || s.class_type} is awaiting staff confirmation. Your class credit is reserved.`
+          ? `${s.title || s.class_type} is awaiting staff confirmation. XERT will let you know once your place is confirmed.`
           : `${s.title || s.class_type} — ${formatDay(s.start_time)} ${formatTime(s.start_time)}`,
       });
       await refresh();
@@ -331,13 +331,11 @@ export default function Booking() {
           {nativeOperations && (
             <>
           {/* Credits banner for signed-in members */}
-          {session && credits && (
-            <div className={`${credits.total > 0 ? 'xert-card-accent' : 'xert-card-flat'} flex flex-wrap items-center gap-3 p-4 sm:p-5 mt-8`}>
+          {session && credits?.total > 0 && (
+            <div className="xert-card-accent flex flex-wrap items-center gap-3 p-4 sm:p-5 mt-8">
               <span className="xert-icon-tile"><Ticket className="w-5 h-5" /></span>
               <p className="min-w-[12rem] flex-1 font-body text-sm text-xert-pale">
-                {credits.total > 0
-                  ? <>You have <strong>{credits.total}</strong> class credit{credits.total === 1 ? '' : 's'} — pick a class below.</>
-                  : <>You have no credits yet — purchase a pack below to start booking.</>}
+                You still have <strong>{credits.total}</strong> class credit{credits.total === 1 ? '' : 's'} from a pack — pick a class below.
               </p>
               <Link to="/account" className="xert-chip ml-auto min-h-11 shrink-0 hover:border-xert-steel transition-colors">
                 My Account
@@ -450,7 +448,7 @@ export default function Booking() {
           <section id="timetable" className="mt-16">
             <h2 className="font-display text-3xl uppercase text-xert-offwhite mb-2">Book A Class</h2>
             <p className="font-body text-sm mb-8 text-xert-pale/60">
-              Booking uses one class credit per session. All sessions are scalable to your current level.
+              Ask for a spot and XERT confirms it. All sessions are scalable to your current level.
             </p>
 
             {loading ? (

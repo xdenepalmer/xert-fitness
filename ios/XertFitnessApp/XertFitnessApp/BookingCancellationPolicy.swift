@@ -31,7 +31,7 @@ enum BookingErrorMessage {
         // queue is never jumped. Without this the member sees the bare code.
         ("SESSION_WAITLIST_FIRST", "Someone is already waiting for a place in this class, so they go first. Join the waitlist to be next in line."),
         ("BOOKING_ACCOUNT_MISMATCH", "That booking belongs to another account. Sign in again and try once more."),
-        ("NO_CREDITS", "You need available credits before booking this class."),
+        ("NO_CREDITS", "That class could not be booked. Pull to refresh, or contact XERT."),
         ("BOOKING_NOT_FOUND", "That booking could not be found. Pull to refresh your account."),
         ("NOT_CANCELLABLE", "This booking can no longer be cancelled.")
     ]

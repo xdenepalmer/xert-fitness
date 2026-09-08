@@ -151,7 +151,9 @@ const BOOKING_ERRORS = {
   // so this can arrive even when the page was loaded while bookings were open.
   BOOKINGS_PAUSED: 'Bookings are not open yet. Register your interest and we will let you know first.',
   BOOKING_ACCOUNT_MISMATCH: 'That booking belongs to another account. Sign in again and try once more.',
-  NO_CREDITS: 'You have no available class credits. Purchase a pack to book.',
+  // Class credits are retired, so this should never reach a member. If some
+  // older path still raises it, say something true rather than sell a pack.
+  NO_CREDITS: 'That class could not be booked. Refresh and try again, or contact XERT.',
   BOOKING_NOT_FOUND: 'That booking could not be found. Refresh your account and try again.',
   NOT_CANCELLABLE: 'That booking can no longer be cancelled.'
 };

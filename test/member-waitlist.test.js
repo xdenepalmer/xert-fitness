@@ -36,7 +36,7 @@ test('web and SwiftUI clients expose self-service waitlisting through the shared
   ]);
   assert.match(webData, /supabase\.rpc\('join_session_waitlist'/);
   assert.match(webPage, /await joinSessionWaitlist\(s\.id\)/);
-  assert.match(webPage, /No class credit has been used/);
+  assert.match(webPage, /XERT will let you know if a place opens up/);
   assert.match(swiftAPI, /path: "join_session_waitlist"/);
   assert.match(swiftStore, /func joinWaitlist\(_ session: ClassSession\) async/);
   assert.match(swiftView, /session\.isFull/);
