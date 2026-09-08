@@ -230,7 +230,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
           A walk-in scans the front-desk code, enters their details and pays for one visit on their own phone.
           Nothing here grants a session credit.
         </p>
-        <Toggle label="Casual visit payments" desc="When off, /casual tells visitors to pay at the front desk instead." field="casual_payments_enabled" />
+        <Toggle label="Visitor payments" desc="Controls /casual and /3daypass. When off, visitors are directed to the XERT team. The Three Day Pass is $35." field="casual_payments_enabled" />
         <div>
           <label htmlFor="casual-visit-price" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Casual visit price</label>
           <div className="flex items-center gap-2">

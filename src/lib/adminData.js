@@ -679,10 +679,17 @@ export async function getMemberBookingRequests(filters = {}) {
  * say so instead of failing.
  */
 export async function listCasualVisits({ limit = 200 } = {}) {
-  const { data, error } = await supabase.from('casual_visit_payments')
-    .select('id, full_name, email, phone, amount_cents, currency, status, created_at, stripe_payment_intent_id')
+  const columns = 'id, full_name, email, phone, amount_cents, currency, status, created_at, stripe_payment_intent_id';
+  const load = fields => supabase.from('casual_visit_payments')
+    .select(fields)
     .order('created_at', { ascending: false })
     .limit(Math.min(Math.max(Number(limit) || 200, 1), 500));
+  let { data, error } = await load(`${columns}, pass_kind`);
+  // During rollout the legacy table still supports casual takings. Only the
+  // missing additive column permits a retry; other failures stay visible.
+  if (error?.code === '42703' && /pass_kind/.test(error.message || '')) {
+    ({ data, error } = await load(columns));
+  }
   if (error) {
     if (missingFitboxMirror(error) || error.code === 'PGRST205') return { installed: false, rows: [] };
     throw new Error(error.message);

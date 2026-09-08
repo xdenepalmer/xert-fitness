@@ -6,6 +6,20 @@
 
 export const CASUAL_VISIT_ACTION = 'casual_visit';
 export const CASUAL_VISIT_METADATA_FLAG = 'xert_casual_visit';
+export const THREE_DAY_PASS_ACTION = 'three_day_pass';
+export const THREE_DAY_PASS_PRICE_CENTS = 3500;
+
+const RESPONSE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function visitorPassLabel(kind = 'casual') {
+  if (kind === 'casual') return 'Casual visit';
+  if (kind === THREE_DAY_PASS_ACTION) return 'Three Day Pass';
+  throw new Error('This visitor pass is not available.');
+}
+
+export function validQuestionnaireResponseId(value) {
+  return typeof value === 'string' && RESPONSE_ID_PATTERN.test(value);
+}
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -73,8 +87,14 @@ export function normalizeCasualVisitPriceCents(value, fallback = 1560) {
  * database, never from the browser, and the visitor's own details are carried
  * in so they never retype them at the card screen.
  */
-export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 'aud', returnURLs, now = Date.now() }) {
-  const amount = normalizeCasualVisitPriceCents(priceCents, NaN);
+export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 'aud', returnURLs, now = Date.now(), passKind = 'casual', questionnaireResponseId = '' }) {
+  const label = visitorPassLabel(passKind);
+  const threeDay = passKind === THREE_DAY_PASS_ACTION;
+  if (threeDay && !validQuestionnaireResponseId(questionnaireResponseId)) {
+    throw new Error('Complete and sign the pre-exercise questionnaire before buying this pass.');
+  }
+  const amount = threeDay ? THREE_DAY_PASS_PRICE_CENTS : normalizeCasualVisitPriceCents(priceCents, NaN);
+  const passMetadata = threeDay ? { xert_pass_kind: THREE_DAY_PASS_ACTION, questionnaire_response_id: questionnaireResponseId } : {};
   if (!Number.isInteger(amount)) throw new Error('The casual visit price is not set correctly.');
   for (const value of [returnURLs?.success, returnURLs?.cancel]) {
     let url;
@@ -100,24 +120,26 @@ export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 
     line_items: [{
       quantity: 1,
       price_data: {
-        currency: String(currency || 'aud').toLowerCase(),
+        currency: threeDay ? 'aud' : String(currency || 'aud').toLowerCase(),
         unit_amount: amount,
         product_data: {
-          name: 'XERT Fitness casual visit',
-          description: 'Entry and one class for a single visit.',
+          name: threeDay ? 'XERT Fitness Three Day Pass' : 'XERT Fitness casual visit',
+          description: threeDay ? 'Three Day Pass — show your receipt to the XERT team.' : 'Entry and one class for a single visit.',
         },
       },
     }],
     payment_intent_data: {
-      description: `Casual visit — ${visitor.fullName}`,
+      description: `${label} — ${visitor.fullName}`,
       receipt_email: visitor.email,
       metadata: {
+        ...passMetadata,
         [CASUAL_VISIT_METADATA_FLAG]: 'true',
         casual_visit_name: visitor.fullName,
         casual_visit_phone: visitor.phone,
       },
     },
     metadata: {
+      ...passMetadata,
       [CASUAL_VISIT_METADATA_FLAG]: 'true',
       casual_visit_name: visitor.fullName,
       casual_visit_email: visitor.email,
@@ -131,12 +153,25 @@ export function casualVisitPaymentFromCheckout(checkout) {
   const metadata = checkout?.metadata || {};
   if (String(metadata[CASUAL_VISIT_METADATA_FLAG] || '') !== 'true') return null;
   if (String(checkout?.payment_status || '') !== 'paid') return null;
-  const email = clean(checkout?.customer_details?.email || checkout?.customer_email || metadata.casual_visit_email).toLowerCase();
+  const passKind = metadata.xert_pass_kind || 'casual';
+  visitorPassLabel(passKind);
+  const threeDay = passKind === THREE_DAY_PASS_ACTION;
+  // Stripe's payer email can be edited at Checkout. The signed questionnaire
+  // belongs to the participant verified by our server, not that cardholder.
+  const participantEmail = clean(metadata.casual_visit_email).toLowerCase();
+  if (threeDay && (
+    checkout.mode !== 'payment' || checkout.amount_total !== THREE_DAY_PASS_PRICE_CENTS
+    || checkout.currency !== 'aud' || !validQuestionnaireResponseId(metadata.questionnaire_response_id)
+    || !/^cs_[a-zA-Z0-9_]+$/.test(checkout.id || '')
+    || !EMAIL_PATTERN.test(participantEmail) || participantEmail.length > 320
+  )) throw new Error('Three Day Pass payment does not match the approved pass or questionnaire.');
+  const email = threeDay ? participantEmail : clean(checkout?.customer_details?.email || checkout?.customer_email || metadata.casual_visit_email).toLowerCase();
   const fullName = clean(metadata.casual_visit_name || checkout?.customer_details?.name);
   const sessionID = clean(checkout?.id);
   if (!EMAIL_PATTERN.test(email) || !fullName || !sessionID) return null;
   const amount = Number(checkout?.amount_total);
   return {
+    ...(threeDay ? { pass_kind: THREE_DAY_PASS_ACTION } : {}),
     full_name: fullName.slice(0, 120),
     email,
     phone: normalizeVisitorPhone(metadata.casual_visit_phone || checkout?.customer_details?.phone) || null,

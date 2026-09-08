@@ -35,6 +35,7 @@ const NOINDEX_TITLES = Object.freeze({
   '/display': 'Workout Display | XERT Fitness',
   // Reached from a QR code at the front desk, not from a search result.
   '/casual': 'Casual visit | XERT Fitness',
+  '/3daypass': 'Three Day Pass | XERT Fitness',
 });
 
 const NOINDEX_PATHS = new Set([

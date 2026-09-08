@@ -5,7 +5,7 @@ import { getAllOrders, listCasualVisits, reconcileOrder, refundOrder } from '@/l
 import { downloadCsv } from '@/lib/csv';
 import { buildDailyRevenue, filterOrders, orderCsvRows, summarizeOrders } from '@/lib/orderAnalytics';
 import { formatPackPrice } from '@/lib/products';
-import { formatCasualVisitPrice, summarizeCasualVisits } from '@/lib/casualVisit';
+import { formatCasualVisitPrice, summarizeCasualVisits, visitorPassLabel } from '@/lib/casualVisit';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import FormQRCode from '@/components/admin/FormQRCode';
 import { ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
@@ -241,7 +241,7 @@ export default function OrdersManager() {
       {casualVisits.installed && casualVisits.rows.length > 0 && (
         <div className="mb-8 border border-xert-steel/20 bg-xert-ink">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-xert-steel/15 p-4">
-            <h3 className="font-display text-sm uppercase tracking-wider text-xert-offwhite">Casual visits</h3>
+            <h3 className="font-display text-sm uppercase tracking-wider text-xert-offwhite">Casual visits &amp; Three Day Passes</h3>
             <p className="font-body text-xs text-xert-concrete/45">
               Paid at the door on the visitor&apos;s own phone. No account, no credits.
             </p>
@@ -249,9 +249,9 @@ export default function OrdersManager() {
           <div className="grid grid-cols-2 gap-px bg-xert-steel/10 lg:grid-cols-4">
             {[
               { label: 'Today', value: `${formatCasualVisitPrice(casualSummary.todayRevenue, casualSummary.currency)}` },
-              { label: 'Visits today', value: casualSummary.todayCount },
+              { label: 'Purchases today', value: casualSummary.todayCount },
               { label: 'This month', value: formatCasualVisitPrice(casualSummary.monthRevenue, casualSummary.currency) },
-              { label: 'Visits this month', value: casualSummary.monthCount },
+              { label: 'Purchases this month', value: casualSummary.monthCount },
             ].map(item => (
               <div key={item.label} className="bg-xert-ink p-4">
                 <p className="font-display text-2xl tabular-nums text-xert-offwhite">{item.value}</p>
@@ -264,6 +264,7 @@ export default function OrdersManager() {
               <li key={visit.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
                 <div className="min-w-0">
                   <p className="truncate font-body text-sm text-xert-offwhite">{visit.full_name}</p>
+                  <p className="font-body text-xs text-xert-steel">{visitorPassLabel(visit.pass_kind)}</p>
                   <p className="truncate font-body text-xs text-xert-concrete/45">
                     <a className="hover:text-xert-steel" href={`mailto:${visit.email}`}>{visit.email}</a>
                     {visit.phone ? <> · <a className="hover:text-xert-steel" href={`tel:${visit.phone}`}>{visit.phone}</a></> : null}
