@@ -20,6 +20,10 @@ export const VISITOR_PASSES = Object.freeze({
   casual: Object.freeze({
     label: 'Casual visit',
     priceCents: null,
+    priceField: 'casual_visit_price_cents',
+    discountField: 'casual_visit_discount_cents',
+    discountEnabledField: 'casual_visit_discount_enabled',
+    defaultPriceCents: 1560,
     productName: 'XERT Fitness casual visit',
     productDescription: 'Entry and one class for a single visit.',
     needsSignedQuestionnaire: false,
@@ -27,6 +31,10 @@ export const VISITOR_PASSES = Object.freeze({
   [THREE_DAY_PASS_ACTION]: Object.freeze({
     label: 'Three Day Pass',
     priceCents: THREE_DAY_PASS_PRICE_CENTS,
+    priceField: 'three_day_pass_price_cents',
+    discountField: 'three_day_pass_discount_cents',
+    discountEnabledField: 'three_day_pass_discount_enabled',
+    defaultPriceCents: THREE_DAY_PASS_PRICE_CENTS,
     productName: 'XERT Fitness Three Day Pass',
     productDescription: 'Three Day Pass — show your receipt to the XERT team.',
     needsSignedQuestionnaire: true,
@@ -34,6 +42,10 @@ export const VISITOR_PASSES = Object.freeze({
   [THREE_MONTH_MEMBERSHIP_ACTION]: Object.freeze({
     label: 'Three month membership',
     priceCents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS,
+    priceField: 'three_month_price_cents',
+    discountField: 'three_month_discount_cents',
+    discountEnabledField: 'three_month_discount_enabled',
+    defaultPriceCents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS,
     productName: 'XERT Fitness three month membership',
     productDescription: 'Three months of training, paid in full.',
     needsSignedQuestionnaire: false,
@@ -118,6 +130,24 @@ export function normalizeCasualVisitPriceCents(value, fallback = 1560) {
 }
 
 /**
+ * What a pass costs right now, read from the club's settings.
+ *
+ * A discount is stored as the price actually charged while it runs, so there
+ * is no percentage arithmetic to get wrong: `charge` is what the visitor pays
+ * and `full` is what to show struck through beside it. A discount that is not
+ * cheaper than the full price is ignored rather than trusted, so a bad row can
+ * never raise anyone's bill.
+ */
+export function visitorPassPricing(passKind, settings = {}) {
+  const pass = visitorPass(passKind);
+  const full = normalizeCasualVisitPriceCents(settings?.[pass.priceField], pass.defaultPriceCents);
+  const discount = normalizeCasualVisitPriceCents(settings?.[pass.discountField], NaN);
+  const running = settings?.[pass.discountEnabledField] === true
+    && Number.isInteger(discount) && discount < full;
+  return { full, charge: running ? discount : full, discounted: running };
+}
+
+/**
  * The Stripe Checkout Session for one casual visit. The amount comes from the
  * database, never from the browser, and the visitor's own details are carried
  * in so they never retype them at the card screen.
@@ -128,10 +158,10 @@ export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 
   if (pass.needsSignedQuestionnaire && !validQuestionnaireResponseId(questionnaireResponseId)) {
     throw new Error('Complete and sign the pre-exercise questionnaire before buying this pass.');
   }
-  const fixedPrice = pass.priceCents !== null;
-  const amount = fixedPrice ? pass.priceCents : normalizeCasualVisitPriceCents(priceCents, NaN);
-  const passMetadata = passKind === 'casual' ? {} : {
-    xert_pass_kind: passKind,
+  const amount = normalizeCasualVisitPriceCents(priceCents, NaN);
+  const passMetadata = {
+    xert_amount_cents: String(amount),
+    ...(passKind === 'casual' ? {} : { xert_pass_kind: passKind }),
     ...(pass.needsSignedQuestionnaire ? { questionnaire_response_id: questionnaireResponseId } : {}),
     ...(paperworkVerified === null ? {} : { xert_paperwork_verified: paperworkVerified ? 'true' : 'false' }),
   };
@@ -160,7 +190,7 @@ export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 
     line_items: [{
       quantity: 1,
       price_data: {
-        currency: fixedPrice ? 'aud' : String(currency || 'aud').toLowerCase(),
+        currency: String(currency || 'aud').toLowerCase(),
         unit_amount: amount,
         product_data: {
           name: pass.productName,
@@ -195,18 +225,24 @@ export function casualVisitPaymentFromCheckout(checkout) {
   if (String(checkout?.payment_status || '') !== 'paid') return null;
   const passKind = metadata.xert_pass_kind || 'casual';
   const pass = visitorPass(passKind);
-  const fixedPrice = pass.priceCents !== null;
+  const isPass = passKind !== 'casual';
+  // Prices are set by the club and can change, so the amount to expect is the
+  // one this server put in the session rather than a constant. Stripe signs
+  // the webhook, so metadata is ours; a session charging anything else did not
+  // come from us.
+  const approvedAmount = Number.parseInt(String(metadata.xert_amount_cents ?? ''), 10);
   // Stripe's payer email can be edited at Checkout. A pass belongs to the
   // participant our server verified, not to whoever's card was used.
   const participantEmail = clean(metadata.casual_visit_email).toLowerCase();
-  if (fixedPrice && (
-    checkout.mode !== 'payment' || checkout.amount_total !== pass.priceCents
+  if (isPass && (
+    checkout.mode !== 'payment' || !Number.isInteger(approvedAmount)
+    || checkout.amount_total !== approvedAmount
     || checkout.currency !== 'aud'
     || (pass.needsSignedQuestionnaire && !validQuestionnaireResponseId(metadata.questionnaire_response_id))
     || !/^cs_[a-zA-Z0-9_]+$/.test(checkout.id || '')
     || !EMAIL_PATTERN.test(participantEmail) || participantEmail.length > 320
   )) throw new Error(`${pass.label} payment does not match the approved pass or questionnaire.`);
-  const email = fixedPrice ? participantEmail : clean(checkout?.customer_details?.email || checkout?.customer_email || metadata.casual_visit_email).toLowerCase();
+  const email = isPass ? participantEmail : clean(checkout?.customer_details?.email || checkout?.customer_email || metadata.casual_visit_email).toLowerCase();
   const fullName = clean(metadata.casual_visit_name || checkout?.customer_details?.name);
   const sessionID = clean(checkout?.id);
   if (!EMAIL_PATTERN.test(email) || !fullName || !sessionID) return null;

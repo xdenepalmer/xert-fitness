@@ -3,7 +3,7 @@ import { toast } from '@/components/ui/use-toast';
 import { activateSessionPackPayments, getCommerceConfigurationHealth, getSoftLaunchSettings, updateSoftLaunchSettings, getDefaultSettings } from '@/lib/adminData';
 import AdminLoadError from '@/components/admin/AdminLoadError';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
-import { countdownVisibility, launchSettingsChanged, normalizeLaunchSettings } from '@/lib/launchSettings';
+import { countdownVisibility, launchSettingsChanged, normalizeLaunchSettings, VISITOR_PRICE_FIELDS } from '@/lib/launchSettings';
 import { ADMIN_PAGE } from '@/components/admin/ui';
 
 /** @param {boolean} _dirty */
@@ -20,7 +20,6 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
   const [settings, setSettings] = useState(defaults);
   // The price is edited in dollars and stored in cents, so the field keeps its
   // own text while somebody is part-way through typing.
-  const [casualPriceInput, setCasualPriceInput] = useState('');
   const [savedSettings, setSavedSettings] = useState(defaults);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -240,29 +239,14 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
           A walk-in scans the front-desk code, enters their details and pays for one visit on their own phone.
           Nothing here grants a session credit.
         </p>
-        <Toggle label="Visitor payments" desc="Controls /casual and /3daypass. When off, visitors are directed to the XERT team. The Three Day Pass is $35." field="casual_payments_enabled" />
-        <div>
-          <label htmlFor="casual-visit-price" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Casual visit price</label>
-          <div className="flex items-center gap-2">
-            <span className="font-body text-sm text-xert-concrete/50">$</span>
-            <input id="casual-visit-price" type="text" inputMode="decimal"
-              value={casualPriceInput}
-              onChange={e => setCasualPriceInput(e.target.value)}
-              onBlur={() => {
-                const cents = Math.round(Number.parseFloat(String(casualPriceInput).replace(/[^\d.]/g, '')) * 100);
-                if (Number.isInteger(cents) && cents >= 100 && cents <= 100000) {
-                  set('casual_visit_price_cents', cents);
-                  setCasualPriceInput((cents / 100).toFixed(2));
-                } else {
-                  setCasualPriceInput(((settings.casual_visit_price_cents ?? 1560) / 100).toFixed(2));
-                }
-              }}
-              className="w-32 bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-          </div>
-          <p className="font-body text-xs text-xert-concrete/40 mt-2">
-            Charged once, per visit. The amount is read from here every time somebody pays, never from their browser.
-          </p>
-        </div>
+        <Toggle label="Visitor payments" desc="Controls /casual, /3daypass and /3months. When off, visitors are directed to the XERT team." field="casual_payments_enabled" />
+        {VISITOR_PRICE_FIELDS.map(field => (
+          <VisitorPriceRow key={field.key} field={field} settings={settings} set={set} />
+        ))}
+        <p className="font-body text-xs text-xert-concrete/40">
+          Every amount is read from here when somebody pays, never from their browser. A discount is the price
+          they actually pay while it is running, so type what you want charged rather than a percentage.
+        </p>
       </div>
 
       <div className="bg-xert-ink border border-xert-steel/20 p-6 space-y-5 mb-6">
@@ -315,6 +299,82 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
           if (pending) void persistSettings(pending, true);
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * One visitor price and its discount. The dollar field is typed freely and
+ * only committed on blur, so a half-typed "1" is never saved as $1 — and a
+ * value outside what the database accepts snaps back rather than failing at
+ * save time. The discount cannot be switched on until it is set and cheaper,
+ * which is the same rule the database enforces.
+ */
+function VisitorPriceRow({ field, settings, set }) {
+  const priceCents = settings[field.price] ?? field.fallback;
+  const discountCents = settings[field.discount];
+  const running = settings[field.enabled] === true;
+  const [priceInput, setPriceInput] = React.useState('');
+  const [discountInput, setDiscountInput] = React.useState('');
+
+  React.useEffect(() => { setPriceInput((priceCents / 100).toFixed(2)); }, [priceCents]);
+  React.useEffect(() => {
+    setDiscountInput(discountCents === null || discountCents === undefined ? '' : (discountCents / 100).toFixed(2));
+  }, [discountCents]);
+
+  const dollars = value => {
+    const cents = Math.round(Number.parseFloat(String(value).replace(/[^\d.]/g, '')) * 100);
+    return Number.isInteger(cents) && cents >= 100 && cents <= 100000 ? cents : null;
+  };
+  const money = (id, value, onChange, onBlur, label) => (
+    <div className="flex items-center gap-2">
+      <span aria-hidden="true" className="font-body text-sm text-xert-concrete/50">$</span>
+      <input id={id} type="text" inputMode="decimal" aria-label={label} value={value}
+        onChange={event => onChange(event.target.value)} onBlur={onBlur}
+        className="w-28 bg-xert-charcoal border border-xert-steel/40 px-4 py-3 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
+    </div>
+  );
+  const canRun = discountCents !== null && discountCents !== undefined && discountCents < priceCents;
+
+  return (
+    <div className="border border-xert-steel/15 p-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <label htmlFor={`${field.key}-price`} className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">{field.label}</label>
+          {money(`${field.key}-price`, priceInput, setPriceInput, () => {
+            const cents = dollars(priceInput);
+            if (cents === null) setPriceInput((priceCents / 100).toFixed(2));
+            else set(field.price, cents);
+          }, `${field.label} full price in dollars`)}
+        </div>
+        <div>
+          <label htmlFor={`${field.key}-discount`} className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-2">Discount price</label>
+          {money(`${field.key}-discount`, discountInput, setDiscountInput, () => {
+            if (String(discountInput).trim() === '') {
+              set(field.discount, null);
+              if (running) set(field.enabled, false);
+              return;
+            }
+            const cents = dollars(discountInput);
+            if (cents === null) {
+              setDiscountInput(discountCents === null || discountCents === undefined ? '' : (discountCents / 100).toFixed(2));
+              return;
+            }
+            set(field.discount, cents);
+            if (running && cents >= priceCents) set(field.enabled, false);
+          }, `${field.label} discount price in dollars`)}
+        </div>
+      </div>
+      <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3">
+        <input type="checkbox" checked={running} disabled={!canRun}
+          onChange={event => set(field.enabled, event.target.checked)}
+          className="h-5 w-5 shrink-0 accent-xert-steel disabled:opacity-40" />
+        <span className="font-body text-sm text-xert-offwhite">
+          Run this discount
+          {running && canRun && <span className="ml-2 text-xert-steel">paying ${(discountCents / 100).toFixed(2)} instead of ${(priceCents / 100).toFixed(2)}</span>}
+          {!canRun && <span className="ml-2 text-xert-concrete/40">set a cheaper discount price first</span>}
+        </span>
+      </label>
     </div>
   );
 }

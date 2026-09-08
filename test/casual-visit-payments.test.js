@@ -124,9 +124,14 @@ test('the owner sees door takings beside orders, counted only when actually paid
     'an empty list adds nothing to the screen');
 
   // The front desk needs a code to print, whether or not anyone has paid yet.
-  assert.match(orders, /title="Casual visit QR"/);
-  assert.match(orders, /new URL\('\/casual', window\.location\.origin\)/);
-  assert.match(orders, /slug: 'casual-visit'/, 'the download is named for what it is');
+  // A code for each thing somebody can buy at the door, named for what it is.
+  for (const [slug, path] of [
+    ['casual-visit', '/casual'], ['three-day-pass', '/3daypass'], ['three-month-membership', '/3months'],
+  ]) {
+    assert.match(orders, new RegExp(`slug: '${slug}', path: '${path}'`));
+  }
+  assert.match(orders, /new URL\(code\.path, window\.location\.origin\)/);
+  assert.match(orders, /title="Casual visit QR"|qrTitle: 'Casual visit QR'/);
   const qr = await read('../src/components/admin/FormQRCode.jsx');
   assert.match(qr, /title = 'Branded QR code'/, 'the form screens keep their wording');
   assert.match(qr, /<h2 className="font-display text-2xl uppercase text-white">\{title\}<\/h2>/);
@@ -148,8 +153,12 @@ test('the club owns the door fee: price and switch live in Settings', async () =
 
   const screen = await read('../src/components/admin/SoftLaunchSettings.jsx');
   assert.match(screen, /field="casual_payments_enabled"/);
-  assert.match(screen, /htmlFor="casual-visit-price"/);
+  assert.match(screen, /VISITOR_PRICE_FIELDS\.map/, 'every visitor price is editable, not just the casual one');
+  assert.match(screen, /function VisitorPriceRow\(/);
   assert.match(screen, /never from their browser/);
+  assert.match(screen, /Run this discount/);
+  assert.match(screen, /set a cheaper discount price first/,
+    'a discount cannot be switched on until it is actually a discount');
 });
 
 test('nobody trains unscreened: the questionnaire is answered before Stripe is opened', async () => {

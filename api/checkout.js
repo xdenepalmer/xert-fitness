@@ -18,6 +18,7 @@ import {
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 import {
   CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, normalizeCasualVisitPriceCents, normalizeCasualVisitor,
+  visitorPassPricing,
   THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, THREE_MONTH_MEMBERSHIP_ACTION,
   THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId,
 } from '../src/lib/casualVisit.js';
@@ -810,7 +811,7 @@ export async function startThreeDayPassCheckout({ payload, admin, stripe, origin
   }
   const [{ data: capability, error: capabilityError }, { data: settings, error: settingsError }] = await Promise.all([
     admin.from('xert_schema_capabilities').select('capability').eq('capability', 'three_day_visitor_pass').maybeSingle(),
-    admin.from('admin_settings').select('casual_payments_enabled').limit(1).maybeSingle(),
+    admin.from('admin_settings').select('*').limit(1).maybeSingle(),
   ]);
   if (capabilityError || !capability || settingsError || !settings) fail('Three Day Pass payments are unavailable right now.', 503);
   if (settings.casual_payments_enabled === false) fail('Visitor payments are switched off. Please speak to the XERT team.', 503);
@@ -825,7 +826,8 @@ export async function startThreeDayPassCheckout({ payload, admin, stripe, origin
   // cannot reuse a Stripe key with a different request body.
   const checkoutMinute = Math.floor(Number(now) / 60000) * 60000;
   const parameters = casualVisitCheckoutParameters({
-    visitor, priceCents: THREE_DAY_PASS_PRICE_CENTS, passKind: THREE_DAY_PASS_ACTION,
+    visitor, priceCents: visitorPassPricing(THREE_DAY_PASS_ACTION, settings).charge,
+    passKind: THREE_DAY_PASS_ACTION,
     questionnaireResponseId: payload.questionnaire_response_id, now: checkoutMinute,
     returnURLs: {
       success: new URL('/3daypass?paid=1', origin).toString(),
@@ -840,7 +842,7 @@ export async function startThreeDayPassCheckout({ payload, admin, stripe, origin
   if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com' || url.username || url.password || url.port) {
     fail('Stripe did not return a secure payment page.', 502);
   }
-  return { url: url.toString(), amount_cents: THREE_DAY_PASS_PRICE_CENTS };
+  return { url: url.toString(), amount_cents: visitorPassPricing(THREE_DAY_PASS_ACTION, settings).charge };
 }
 
 /**
@@ -866,7 +868,7 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
 
   const [{ data: capability, error: capabilityError }, { data: settings, error: settingsError }] = await Promise.all([
     admin.from('xert_schema_capabilities').select('capability').eq('capability', 'three_month_membership').maybeSingle(),
-    admin.from('admin_settings').select('casual_payments_enabled').limit(1).maybeSingle(),
+    admin.from('admin_settings').select('*').limit(1).maybeSingle(),
   ]);
   if (capabilityError || !capability || settingsError || !settings) fail('Membership payments are unavailable right now.', 503);
   if (settings.casual_payments_enabled === false) fail('Membership payments are switched off. Please speak to the XERT team.', 503);
@@ -890,7 +892,8 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
   // Keep expiry and every other parameter stable for a retry in this minute.
   const checkoutMinute = Math.floor(Number(now) / 60000) * 60000;
   const parameters = casualVisitCheckoutParameters({
-    visitor, priceCents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS, passKind: THREE_MONTH_MEMBERSHIP_ACTION,
+    visitor, priceCents: visitorPassPricing(THREE_MONTH_MEMBERSHIP_ACTION, settings).charge,
+    passKind: THREE_MONTH_MEMBERSHIP_ACTION,
     paperworkVerified, now: checkoutMinute,
     returnURLs: {
       success: new URL('/3months?paid=1', origin).toString(),
@@ -905,7 +908,7 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
   if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com' || url.username || url.password || url.port) {
     fail('Stripe did not return a secure payment page.', 502);
   }
-  return { url: url.toString(), amount_cents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS };
+  return { url: url.toString(), amount_cents: visitorPassPricing(THREE_MONTH_MEMBERSHIP_ACTION, settings).charge };
 }
 
 async function handleCasualVisitCheckout({ payload, request, admin, json }) {

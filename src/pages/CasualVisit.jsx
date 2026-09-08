@@ -5,10 +5,10 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { supabase } from '@/lib/supabase';
 import {
-  CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice, normalizeCasualVisitPriceCents,
+  CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice,
   recallCasualVisitor, rememberCasualVisitor,
   THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, THREE_MONTH_MEMBERSHIP_ACTION,
-  THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId,
+  THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId, visitorPassPricing,
 } from '@/lib/casualVisit';
 import { readFormCompletion } from '@/lib/formPrerequisites';
 
@@ -33,9 +33,13 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   const navigate = useNavigate();
   const [visitor, setVisitor] = useState({ first_name: '', last_name: '', email: '', phone: '' });
   const [questionnaire, setQuestionnaire] = useState('');
-  const [priceCents, setPriceCents] = useState(
-    threeMonth ? THREE_MONTH_MEMBERSHIP_PRICE_CENTS : threeDayPass ? THREE_DAY_PASS_PRICE_CENTS : null,
-  );
+  const passKind = threeMonth ? THREE_MONTH_MEMBERSHIP_ACTION : threeDayPass ? THREE_DAY_PASS_ACTION : CASUAL_VISIT_ACTION;
+  const [pricing, setPricing] = useState(() => (
+    threeMonth ? { full: THREE_MONTH_MEMBERSHIP_PRICE_CENTS, charge: THREE_MONTH_MEMBERSHIP_PRICE_CENTS, discounted: false }
+      : threeDayPass ? { full: THREE_DAY_PASS_PRICE_CENTS, charge: THREE_DAY_PASS_PRICE_CENTS, discounted: false }
+        : null
+  ));
+  const priceCents = pricing?.charge ?? null;
   // A member who signed when they joined should not sign again to pay. The
   // server checks whether they really did and tells staff either way.
   const [alreadySigned, setAlreadySigned] = useState(false);
@@ -69,24 +73,23 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   }, [threeMonth]);
 
   useEffect(() => {
-    if (threeMonth) { document.title = 'Three month membership | XERT Fitness'; return; }
-    if (threeDayPass) { document.title = 'Three Day Pass | XERT Fitness'; return; }
-    document.title = 'Casual visit | XERT Fitness';
+    document.title = threeMonth ? 'Three month membership | XERT Fitness'
+      : threeDayPass ? 'Three Day Pass | XERT Fitness'
+        : 'Casual visit | XERT Fitness';
     let active = true;
     // PostgREST's builder is a thenable, not a Promise, so it has no .catch.
-    // The price is a nicety here — the server reads it again before charging
-    // anyone — so a failure just leaves the default in place.
+    // The price shown here is a courtesy — the server reads it again before
+    // charging anyone — so a failure just leaves the default in place.
     void (async () => {
       try {
-        const { data } = await supabase.from('admin_settings')
-          .select('casual_visit_price_cents, casual_payments_enabled').limit(1).maybeSingle();
-        if (active && data) setPriceCents(normalizeCasualVisitPriceCents(data.casual_visit_price_cents));
+        const { data } = await supabase.from('admin_settings').select('*').limit(1).maybeSingle();
+        if (active && data) setPricing(visitorPassPricing(passKind, data));
       } catch {
         // Leave the default price showing.
       }
     })();
     return () => { active = false; };
-  }, [threeDayPass, threeMonth]);
+  }, [passKind, threeDayPass, threeMonth]);
 
   const update = (field, value) => setVisitor(current => ({ ...current, [field]: value }));
   const validation = casualVisitValidationError(visitor);
@@ -180,7 +183,10 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
                 {threeMonth ? MEMBERSHIP_COPY.lede : threeDayPass
                   ? 'Three Day Pass — show your receipt to the XERT team. Enter your details and pay on your own phone, no account needed'
                   : 'One visit, one class, no membership. Enter your details and pay on your own phone'}
-                {priceCents ? <> — <strong className="text-xert-offwhite">{formatCasualVisitPrice(priceCents)}</strong></> : null}.
+                {priceCents ? <> — {pricing?.discounted && (
+                  <s className="text-xert-pale/40">{formatCasualVisitPrice(pricing.full)}</s>
+                )} <strong className="text-xert-offwhite">{formatCasualVisitPrice(priceCents)}</strong>
+                {pricing?.discounted && <span className="text-xert-steel"> (discount on now)</span>}</> : null}.
               </p>
 
               {cancelled && (
