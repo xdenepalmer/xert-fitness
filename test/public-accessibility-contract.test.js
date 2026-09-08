@@ -64,6 +64,12 @@ test('footer contact details remain fully readable inside constrained columns', 
   assert.match(source, /lg:grid-cols-\[minmax\(0,1\.1fr\)_minmax\(0,1\.2fr\)_minmax\(0,1fr\)\]/);
 });
 
+test('facility stats allow enlarged labels to wrap inside their responsive columns', () => {
+  const source = readFileSync(new URL('../src/components/public/FacilitySection.jsx', import.meta.url), 'utf8');
+  assert.match(source, /className="min-w-0 \[overflow-wrap:anywhere\]">\s*<p[^>]*>\{stat\.label\}/);
+  assert.match(source, /grid-cols-\[repeat\(auto-fit,minmax\(min\(100%,calc\(var\(--space-section\)\*6\)\),1fr\)\)\]/);
+});
+
 test('member contact fields use associated labels, stable names, and required semantics', () => {
   for (const field of ['full-name', 'email', 'phone', 'suburb']) {
     assert.match(memberForm, new RegExp(`htmlFor="member-${field}"`));

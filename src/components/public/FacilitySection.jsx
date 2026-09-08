@@ -65,7 +65,7 @@ export default function FacilitySection() {
               XERT combines a main class training area with a dedicated accessory space so members can build strength, conditioning and recovery around their goals.
             </p>
 
-            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,calc(var(--space-section)*6)),1fr))] gap-3 lg:grid-cols-1">
               {facilityStats.map(stat => {
                 const Icon = stat.icon;
                 return (
@@ -73,7 +73,7 @@ export default function FacilitySection() {
                     <div className="xert-icon-tile" style={SOLID_TILE}>
                       <Icon className="w-5 h-5" />
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 [overflow-wrap:anywhere]">
                       <p className="font-body text-xs uppercase tracking-wider text-xert-pale/50">{stat.label}</p>
                       <p className="mt-1 font-display text-xl uppercase leading-none text-xert-offwhite">{stat.value}</p>
                     </div>
