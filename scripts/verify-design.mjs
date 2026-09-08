@@ -1,0 +1,110 @@
+// Usage: PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/verify-design.mjs
+// Optional: --tag=before --routes=/,/admin --quick (390 and 1440 only).
+// Runs only against its own loopback Vite server; external data I/O is blocked.
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { createServer } from 'vite';
+import { installDesignFixtures } from '../test/fixtures/design-data.mjs';
+
+const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
+const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
+const routes = option('routes', '/,/admin').split(',');
+const reducedMotion = option('motion', 'reduce') === 'reduce' ? 'reduce' : 'no-preference';
+const output = resolve('.superpowers', 'design-proof', tag);
+await mkdir(output, { recursive: true });
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
+  ? pathToFileURL(resolve(process.env.PLAYWRIGHT_MODULE)).href : 'playwright');
+const server = await createServer({
+  server: { host: '127.0.0.1', port: 0 },
+  define: {
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://ugmkwoapjcpiucsrxwzt.supabase.co'),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('sb_publishable_LOCAL_DESIGN_FIXTURE_NOT_A_REAL_KEY'),
+  },
+});
+let browser;
+const results = [];
+try {
+  await server.listen();
+  const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+  browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
+  const sizes = process.argv.includes('--quick') ? [[390, 844], [1440, 900]]
+    : [[390, 844], [768, 1024], [1440, 900], [1920, 1080]];
+  for (const [width, height] of sizes) {
+    for (const signedIn of [false, true]) {
+      const requests = [];
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion, serviceWorkers: 'block' });
+      await installDesignFixtures(context, { origin, signedIn, requests });
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      for (const path of routes) {
+        if (path.startsWith('/admin') && !signedIn) continue;
+        const prefix = `${width}-${signedIn ? 'signed-in' : 'signed-out'}-${path === '/' ? 'home' : path.slice(1).replaceAll('/', '-')}`;
+        try {
+          await page.goto(origin + path, { waitUntil: 'networkidle' });
+          await page.locator('main').first().waitFor();
+          if (path === '/' && signedIn && width === 390) {
+            const qr = await page.evaluate(async () => {
+              const { renderBrandedFormQR, qrCanvasBlob } = await import('/src/lib/brandedFormQR.js');
+              const canvas = document.createElement('canvas');
+              await renderBrandedFormQR(canvas, new URL('/casual', location.origin).href);
+              const blob = await qrCanvasBlob(canvas);
+              return { width: canvas.width, height: canvas.height, type: blob.type, bytes: blob.size,
+                corner: [...canvas.getContext('2d').getImageData(0, 0, 1, 1).data], png: canvas.toDataURL('image/png') };
+            });
+            assert.equal(qr.width, 1024);
+            assert.equal(qr.height, 1024);
+            assert.equal(qr.type, 'image/png');
+            assert.ok(qr.bytes > 1000, 'QR exports a nonempty PNG');
+            assert.deepEqual(qr.corner, [255, 255, 255, 255], 'QR quiet zone remains opaque white');
+            await writeFile(resolve(output, 'casual-qr.png'), Buffer.from(qr.png.split(',')[1], 'base64'));
+          }
+          await page.screenshot({ path: resolve(output, `${prefix}-rest.png`) });
+          const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+          assert.equal(overflow, false, 'Page must not overflow horizontally');
+          if (path === '/') {
+            await page.evaluate(() => window.scrollTo(0, 600));
+            await page.screenshot({ path: resolve(output, `${prefix}-scrolled.png`) });
+            const menu = page.locator('button[aria-controls="mobile-navigation"]');
+            if (await menu.isVisible()) {
+              await menu.click();
+              await page.screenshot({ path: resolve(output, `${prefix}-menu.png`) });
+              assert.equal(await menu.getAttribute('aria-expanded'), 'true');
+              for (let step = 0; step < 18; step++) {
+                await page.keyboard.press('Tab');
+                assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('nav'))), true, 'Tab stays inside the open navigation');
+              }
+              await page.keyboard.press('Shift+Tab');
+              assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('nav'))), true, 'Reverse Tab stays inside the open navigation');
+              await page.keyboard.press('Escape');
+              assert.equal(await menu.getAttribute('aria-expanded'), 'false');
+              assert.equal(await menu.evaluate(el => el === document.activeElement), true, 'Escape restores menu trigger focus');
+            }
+          }
+          await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+          const zoomMenu = page.locator('button[aria-controls="mobile-navigation"]');
+          if (path === '/' && await zoomMenu.isVisible()) await zoomMenu.click();
+          await page.screenshot({ path: resolve(output, `${prefix}-text-200.png`) });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, '200% text does not overflow horizontally');
+          if (path === '/' && await zoomMenu.isVisible()) await page.keyboard.press('Escape');
+          await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+          assert.deepEqual(errors, [], 'No browser runtime errors');
+          results.push({ prefix, passed: true });
+        } catch (error) {
+          await page.screenshot({ path: resolve(output, `${prefix}-failure.png`) });
+          results.push({ prefix, passed: false, error: error.message, browserErrors: errors });
+        }
+      }
+      await writeFile(resolve(output, `${width}-${signedIn ? 'signed-in' : 'signed-out'}-requests.json`), JSON.stringify(requests, null, 2));
+      await context.close();
+    }
+  }
+} finally {
+  await browser?.close();
+  await server.close();
+  await writeFile(resolve(output, 'results.json'), JSON.stringify(results, null, 2));
+}
+console.log(JSON.stringify({ output, results }, null, 2));
+if (results.some(result => !result.passed)) process.exitCode = 1;
