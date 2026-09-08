@@ -9,6 +9,8 @@ import { createServer } from 'vite';
 import { installDesignFixtures } from '../test/fixtures/design-data.mjs';
 import { checkPublicNavigation } from '../test/browser/public-navigation.mjs';
 import { checkAdminShell } from '../test/browser/admin-shell.mjs';
+import { checkAdminCommands } from '../test/browser/admin-commands.mjs';
+import { checkAdminRecovery } from '../test/browser/admin-recovery.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -48,8 +50,9 @@ try {
     for (const signedIn of [false, true]) {
       const requests = [];
       const failures = {};
+      const mutations = [];
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion, hasTouch: true, serviceWorkers: 'block' });
-      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement') });
+      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), mutations });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -178,6 +181,25 @@ try {
             await page.screenshot({ path: resolve(output, `${prefix}-shell-failure.png`) });
             results.push({ prefix: `${prefix}-shell`, passed: false, error: error.message, browserErrors: errors });
           }
+        }
+        if (path === '/admin' && signedIn && process.argv.includes('--commands')) {
+          try {
+            await page.goto(origin + path, { waitUntil: 'networkidle' });
+            await checkAdminCommands(page, { mutations, failures, requests, capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No browser runtime errors during command actions');
+            results.push({ prefix: `${prefix}-commands`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-commands-failure.png`) });
+            results.push({ prefix: `${prefix}-commands`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+      }
+      if (signedIn && process.argv.includes('--recovery')) {
+        try {
+          await checkAdminRecovery(context, { origin, capture: (targetPage, name) => targetPage.screenshot({ path: resolve(output, `${width}-${name}.png`) }) });
+          results.push({ prefix: `${width}-workspace-recovery`, passed: true });
+        } catch (error) {
+          results.push({ prefix: `${width}-workspace-recovery`, passed: false, error: error.message });
         }
       }
       await writeFile(resolve(output, `${width}-${signedIn ? 'signed-in' : 'signed-out'}-requests.json`), JSON.stringify(requests, null, 2));

@@ -35,6 +35,7 @@ node scripts/verify-design.mjs --tag=after-nav
 node scripts/verify-design.mjs --tag=nav --routes=/ --navigation --announcement
 node scripts/verify-design.mjs --tag=motion --motion=default --quick
 node scripts/verify-design.mjs --tag=panels --routes=/admin,/admin/calendar,/admin/forms
+node scripts/verify-design.mjs --tag=owner --routes=/admin --shell --commands --recovery
 ```
 
 The full matrix uses 390×844, 768×1024, 1440×900 and 1920×1080. It captures resting,
@@ -48,6 +49,16 @@ content is scrolled). `--announcement` uses a long fictional announcement to
 check that the full banner clears the header and hero at both text sizes.
 Interaction results are reported separately so an unrelated page overflow does
 not hide the navigation test outcomes.
+`--shell` checks persistent density, pointer-independent sidebar resizing, an icon
+rail, fuzzy results, manual-activation tabs, shortcuts and preservation of an
+actual unsaved editor draft when navigation is cancelled. `--commands` enables an
+explicit in-memory fixture for five reviewed command flows: confirmation,
+attendee addition, attendance correction/Undo, form publication and SMS preview.
+Only that fixture can simulate successful writes; all real destinations remain
+blocked, including the SMS endpoint. Failure/retry and duplicate-submit checks
+assert exact fixture receipts. The command review is also checked at 200% text.
+`--recovery` deliberately fails one local workspace chunk download and verifies
+that retry recovers the region without losing the shell or URL parameters.
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine
