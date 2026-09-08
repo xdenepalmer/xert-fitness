@@ -227,3 +227,38 @@ test('class credits are a switch the club owns, and it is off', async () => {
   // whichever way the switch is set today.
   assert.match(sql, /update public\.credit_batches set remaining = remaining \+ 1 where id = v_batch/);
 });
+
+test('a place cannot be sold twice, and the queue goes first', async () => {
+  const sql = await read('../supabase/migrations/20260908040000_restore_booking_integrity_guards.sql');
+
+  for (const fn of ['book_session', 'admin_set_booking_status']) {
+    const start = sql.indexOf(`FUNCTION public.${fn}(`);
+    assert.ok(start > 0, `${fn} is restored in the migration`);
+    const next = sql.indexOf('CREATE OR REPLACE FUNCTION', start + 1);
+    const body = next > 0 ? sql.slice(start, next) : sql.slice(start);
+
+    // Capacity counts both doors: the public timetable and member accounts.
+    assert.match(body, /class_places_held\(/, `${fn} counts public sign-ups`);
+    assert.doesNotMatch(
+      body,
+      /select count\(\*\)[\s\S]{0,120}from public\.session_bookings[\s\S]{0,160}status in \('requested', 'confirmed'\)/,
+      `${fn} must not count member bookings alone`
+    );
+    // A full class stays reachable so its waitlist still works.
+    assert.match(body, /not in \('published', 'full'\)/, `${fn} keeps full classes reachable`);
+    // The entitlement path and the credits switch both survive the repair.
+    assert.match(body, /booking_entitlement_for_session\(/, `${fn} keeps passes working`);
+    assert.match(body, /class_credits_are_enabled\(\)/, `${fn} still reads the credits switch`);
+  }
+
+  // Nobody takes a place somebody is already queued for.
+  assert.match(sql, /if coalesce\(v_waiting, 0\) > 0 then raise exception 'SESSION_WAITLIST_FIRST'/);
+
+  // Both codes reach a member in words rather than as a database code.
+  const web = await read('../src/lib/bookingData.js');
+  const native = await read('../ios/XertFitnessApp/XertFitnessApp/BookingCancellationPolicy.swift');
+  for (const code of ['SESSION_WAITLIST_FIRST', 'SESSION_FULL']) {
+    assert.match(web, new RegExp(`${code}:`));
+    assert.match(native, new RegExp(`\\("${code}"`));
+  }
+});
