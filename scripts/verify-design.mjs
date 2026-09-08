@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 import { installDesignFixtures } from '../test/fixtures/design-data.mjs';
 import { checkPublicNavigation } from '../test/browser/public-navigation.mjs';
+import { checkAdminShell } from '../test/browser/admin-shell.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -131,7 +132,27 @@ try {
             })
             .sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)
             .slice(0, 15).map(el => ({ tag: el.tagName, class: el.getAttribute('class'), text: el.textContent?.slice(0, 100), width: el.getBoundingClientRect().width, right: el.getBoundingClientRect().right })));
-          results.push({ prefix, passed: false, error: error.message, browserErrors: errors, overflow });
+          const textOverflow = await page.evaluate(() => {
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            const entries = [];
+            while (walker.nextNode()) {
+              const node = walker.currentNode;
+              const parent = node.parentElement;
+              if (!node.textContent.trim() || !parent?.checkVisibility({ visibilityProperty: true })) continue;
+              let clipped = false;
+              for (let ancestor = parent; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+                if (getComputedStyle(ancestor).overflowX !== 'visible' && ancestor.getBoundingClientRect().right <= innerWidth + 1) { clipped = true; break; }
+              }
+              if (clipped) continue;
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              for (const box of range.getClientRects()) {
+                if (box.right > innerWidth + 1) entries.push({ text: node.textContent.slice(0, 100), tag: parent.tagName, class: parent.className, right: box.right });
+              }
+            }
+            return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth, text: entries.slice(0, 15) };
+          });
+          results.push({ prefix, passed: false, error: error.message, browserErrors: errors, overflow, textOverflow });
         }
         if (path === '/' && process.argv.includes('--navigation')) {
           try {
@@ -145,6 +166,17 @@ try {
             results.push({ prefix: `${prefix}-interactions`, passed: false, error: error.message, browserErrors: errors });
           } finally {
             await page.setViewportSize({ width, height });
+          }
+        }
+        if (path.startsWith('/admin') && signedIn && process.argv.includes('--shell')) {
+          try {
+            await page.goto(origin + path, { waitUntil: 'networkidle' });
+            await checkAdminShell(page, { origin, width });
+            assert.deepEqual(errors, [], 'No browser runtime errors during shell interactions');
+            results.push({ prefix: `${prefix}-shell`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-shell-failure.png`) });
+            results.push({ prefix: `${prefix}-shell`, passed: false, error: error.message, browserErrors: errors });
           }
         }
       }
