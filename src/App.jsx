@@ -75,7 +75,8 @@ const AppRoutes = () => (
       <Route path="/open/*" element={<NativeTaskBridge />} />
       {/* The agreement moved onto /terms; anything already pointing here still lands. */}
       <Route path="/membership-terms" element={<Navigate to="/terms" replace />} />
-      <Route path="/casual" element={<CasualVisit />} />
+      <Route path="/casual" element={<CasualVisit key="casual" />} />
+      <Route path="/3daypass" element={<CasualVisit key="three-day-pass" threeDayPass />} />
       <Route path="/forms/:slug" element={<PublicForm />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/training-guide" element={<TrainingGuide />} />

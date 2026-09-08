@@ -430,8 +430,9 @@ export async function processStripeEvent(admin, event, {
       if (casualVisit) {
         const { error } = await admin
           .from('casual_visit_payments')
-          .upsert(casualVisit, { onConflict: 'stripe_checkout_session_id' });
+          .upsert(casualVisit, { onConflict: 'stripe_checkout_session_id', ignoreDuplicates: true });
         if (error) throw new Error(`Casual visit payment could not be recorded: ${error.message}`);
+        await finishStripeWebhookEvent(admin, { eventId: event.id, status: 'processed', orderId: null });
         return { duplicate: false, requiresReview: false, handled: true, orderId: null };
       }
     }

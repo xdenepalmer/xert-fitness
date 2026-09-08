@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createRequestTrace, requestHeader, requestJson } from '../src/lib/serverHttp.js';
 import {
   inspectCommerceRuntimeEnvironment,
@@ -18,6 +18,7 @@ import {
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 import {
   CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, normalizeCasualVisitPriceCents, normalizeCasualVisitor,
+  THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, validQuestionnaireResponseId,
 } from '../src/lib/casualVisit.js';
 
 // Vercel serverless function using the default Node request/response signature.
@@ -42,6 +43,10 @@ const CHECKOUT_ATTEMPT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89a
 const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKOUT_RECORDING_FAILED = 'CHECKOUT_RECORDING_FAILED';
 const CHECKOUT_CONTRACT_VERSION = 'receipt_terms_v1';
+
+class VisitorCheckoutError extends Error {
+  constructor(message, status) { super(message); this.status = status; }
+}
 
 export { stripeModeForSecret };
 
@@ -227,6 +232,7 @@ export function normalizeCheckoutRequest(input) {
 }
 
 export function publicCheckoutFailure(error) {
+  if (error instanceof VisitorCheckoutError) return { status: error.status, message: error.message };
   if (error?.code === CHECKOUT_RECORDING_FAILED) {
     return {
       status: 503,
@@ -538,6 +544,19 @@ export default async function handler(request, response) {
   if (payload && payload.action === CASUAL_VISIT_ACTION) {
     return handleCasualVisitCheckout({ payload, request, admin, json });
   }
+  if (payload?.action === THREE_DAY_PASS_ACTION) {
+    try {
+      const origin = resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || '', {
+        stripeMode: stripeModeForSecret(process.env.STRIPE_SECRET_KEY), expectedHost: XERT_VERCEL_HOST,
+      });
+      return json(await startThreeDayPassCheckout({
+        payload, admin, origin, stripe: createXertStripeClient(process.env.STRIPE_SECRET_KEY),
+      }));
+    } catch (error) {
+      const failure = publicCheckoutFailure(error);
+      return json({ error: failure.message }, failure.status);
+    }
+  }
 
   const authHeader = requestHeader(request, 'authorization');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -764,6 +783,50 @@ export default async function handler(request, response) {
     });
     return json({ error: failure.message }, failure.status);
   }
+}
+
+/** Visitor checkout only: no member account, order or automatic session credits. */
+export async function startThreeDayPassCheckout({ payload, admin, stripe, origin, now = Date.now() }) {
+  const fail = (message, status) => { throw new VisitorCheckoutError(message, status); };
+  if (payload?.action !== THREE_DAY_PASS_ACTION) fail('This visitor pass is not available.', 400);
+  let visitor;
+  try { visitor = normalizeCasualVisitor(payload); } catch (error) { fail(error.message, 400); }
+  if (!validQuestionnaireResponseId(payload.questionnaire_response_id)) {
+    fail('Complete and sign the pre-exercise questionnaire before buying this pass.', 400);
+  }
+  const [{ data: capability, error: capabilityError }, { data: settings, error: settingsError }] = await Promise.all([
+    admin.from('xert_schema_capabilities').select('capability').eq('capability', 'three_day_visitor_pass').maybeSingle(),
+    admin.from('admin_settings').select('casual_payments_enabled').limit(1).maybeSingle(),
+  ]);
+  if (capabilityError || !capability || settingsError || !settings) fail('Three Day Pass payments are unavailable right now.', 503);
+  if (settings.casual_payments_enabled === false) fail('Visitor payments are switched off. Please speak to the XERT team.', 503);
+  const { data: signed, error: proofError } = await admin.rpc('xert_visitor_questionnaire_completed', {
+    p_response_id: payload.questionnaire_response_id,
+    p_name: visitor.fullName, p_email: visitor.email, p_phone: visitor.phone,
+  });
+  if (proofError) fail('The questionnaire could not be checked. Please try again.', 503);
+  if (signed !== true) fail('Complete and sign the questionnaire using these same contact details, then return to pay.', 400);
+  // Keep expiry and every other parameter stable for a retry in this minute.
+  // Hash the server-built parameters so changed contact details or return URLs
+  // cannot reuse a Stripe key with a different request body.
+  const checkoutMinute = Math.floor(Number(now) / 60000) * 60000;
+  const parameters = casualVisitCheckoutParameters({
+    visitor, priceCents: THREE_DAY_PASS_PRICE_CENTS, passKind: THREE_DAY_PASS_ACTION,
+    questionnaireResponseId: payload.questionnaire_response_id, now: checkoutMinute,
+    returnURLs: {
+      success: new URL('/3daypass?paid=1', origin).toString(),
+      cancel: new URL('/3daypass?cancelled=1', origin).toString(),
+    },
+  });
+  const fingerprint = createHash('sha256').update(JSON.stringify(parameters)).digest('hex');
+  const session = await stripe.checkout.sessions.create(parameters, {
+    idempotencyKey: `three-day-${fingerprint}`,
+  });
+  const url = new URL(session?.url || 'https://invalid.invalid');
+  if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com' || url.username || url.password || url.port) {
+    fail('Stripe did not return a secure payment page.', 502);
+  }
+  return { url: url.toString(), amount_cents: THREE_DAY_PASS_PRICE_CENTS };
 }
 
 async function handleCasualVisitCheckout({ payload, request, admin, json }) {

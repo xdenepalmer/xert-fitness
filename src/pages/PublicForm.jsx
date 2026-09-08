@@ -302,8 +302,8 @@ export default function PublicForm() {
     }
     setSubmitting(true);
     try {
-      await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: kept, name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
-      writeFormCompletion(slug, completionIdentity(formItems, kept, { name, email, phone }));
+      const responseID = await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: kept, name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
+      writeFormCompletion(slug, { ...completionIdentity(formItems, kept, { name, email, phone }), response_id: responseID });
       // Either the form that sent them here, or the form that names this one as
       // its prerequisite: opening the questionnaire directly must still lead to
       // the agreement, and a questionnaire with nothing after it must not.

@@ -206,7 +206,9 @@ test('the public form page enforces the gate, hands over and carries details acr
   const source = await read('../src/pages/PublicForm.jsx');
   assert.match(source, /prerequisiteRedirect\(form\)/);
   assert.match(source, /if \(gatePath\) navigate\(gatePath, \{ replace: true \}\)/);
-  assert.match(source, /writeFormCompletion\(slug, completionIdentity\(formItems, kept, \{ name, email, phone \}\)\)/);
+  const storage = fakeStorage();
+  writeFormCompletion('peq-casual', { ...completionIdentity([], {}, { name: 'Casey Example', email: 'casey@example.test' }), response_id: '11111111-1111-4111-8111-111111111111' }, { storage });
+  assert.equal(readFormCompletion('peq-casual', { storage }).response_id, '11111111-1111-4111-8111-111111111111');
   assert.match(source, /const handoff = nextFormSlug\(search\)/);
   assert.match(source, /readFormCompletion\(data\.prerequisite_slug\)/);
   assert.match(source, /role="region"/, 'a long agreement scrolls inside its own panel');

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import {
   CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice, normalizeCasualVisitPriceCents,
   recallCasualVisitor, rememberCasualVisitor,
+  THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, validQuestionnaireResponseId,
 } from '@/lib/casualVisit';
 import { readFormCompletion } from '@/lib/formPrerequisites';
 
@@ -15,12 +16,13 @@ const CASUAL_PEQ_SLUG = 'peq-casual';
 // Pay for a single visit on your own phone. The club never handles anyone's
 // card: the visitor fills this in, and Stripe takes the payment with their
 // name, email and phone already carried across.
-export default function CasualVisit() {
+export default function CasualVisit({ threeDayPass = false }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [visitor, setVisitor] = useState({ first_name: '', last_name: '', email: '', phone: '' });
   const [questionnaire, setQuestionnaire] = useState('');
-  const [priceCents, setPriceCents] = useState(null);
+  const [priceCents, setPriceCents] = useState(threeDayPass ? THREE_DAY_PASS_PRICE_CENTS : null);
+  const [questionnaireResponseId, setQuestionnaireResponseId] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const paid = params.get('paid') === '1';
@@ -46,9 +48,11 @@ export default function CasualVisit() {
       phone: carried.phone || current.phone,
     }));
     if (completed) setQuestionnaire('done');
+    if (completed?.response_id) setQuestionnaireResponseId(completed.response_id);
   }, []);
 
   useEffect(() => {
+    if (threeDayPass) { document.title = 'Three Day Pass | XERT Fitness'; return; }
     document.title = 'Casual visit | XERT Fitness';
     let active = true;
     // PostgREST's builder is a thenable, not a Promise, so it has no .catch.
@@ -64,16 +68,23 @@ export default function CasualVisit() {
       }
     })();
     return () => { active = false; };
-  }, []);
+  }, [threeDayPass]);
 
   const update = (field, value) => setVisitor(current => ({ ...current, [field]: value }));
   const validation = casualVisitValidationError(visitor);
+  const needsThreeDayQuestionnaire = threeDayPass
+    && (!validQuestionnaireResponseId(questionnaireResponseId) || questionnaire !== 'done');
 
   const pay = async event => {
     event.preventDefault();
     setError('');
     if (validation) { setError(validation); return; }
     if (!questionnaire) { setError('Tell us whether you have completed the pre-exercise questionnaire.'); return; }
+    if (needsThreeDayQuestionnaire) {
+      rememberCasualVisitor(visitor);
+      navigate(`/forms/${CASUAL_PEQ_SLUG}?return=3daypass`);
+      return;
+    }
     // Nobody trains without being screened, so the questionnaire comes before
     // the payment rather than being an afterthought on the receipt page.
     if (questionnaire === 'not-done') {
@@ -86,7 +97,9 @@ export default function CasualVisit() {
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: CASUAL_VISIT_ACTION, ...visitor }),
+        body: JSON.stringify(threeDayPass
+          ? { action: THREE_DAY_PASS_ACTION, ...visitor, questionnaire_response_id: questionnaireResponseId }
+          : { action: CASUAL_VISIT_ACTION, ...visitor }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok || !body.url) throw new Error(body.error || 'The payment page could not be opened. Please try again.');
@@ -105,16 +118,17 @@ export default function CasualVisit() {
         <div className="relative mx-auto w-full max-w-lg">
           <div className="flex items-center gap-3 mb-5">
             <div className="h-px w-6 bg-xert-steel" aria-hidden="true" />
-            <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">Casual visit</span>
+            <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">{threeDayPass ? 'Three Day Pass' : 'Casual visit'}</span>
           </div>
 
           {paid ? (
             <div className="xert-card p-6 sm:p-8">
               <CheckCircle2 className="mb-4 h-9 w-9 text-emerald-300" aria-hidden="true" />
-              <h1 className="font-display text-4xl uppercase leading-tight text-xert-offwhite">Payment received</h1>
+              <h1 className="font-display text-4xl uppercase leading-tight text-xert-offwhite">{threeDayPass ? 'Check your payment receipt' : 'Payment received'}</h1>
               <p className="mt-4 font-body text-sm leading-relaxed text-xert-pale/75">
-                Thanks — your receipt is on its way by email, and the team has been told you are here.
-                If you have not filled in the pre-exercise questionnaire yet, do that before you train.
+                {threeDayPass
+                  ? 'If your payment completed, Stripe will email your Three Day Pass receipt. Show it to the XERT team before training; the team will arrange your visits.'
+                  : 'Thanks — your receipt is on its way by email, and the team has been told you are here. If you have not filled in the pre-exercise questionnaire yet, do that before you train.'}
               </p>
               <Link to="/forms/peq-casual" className="mt-6 inline-flex min-h-12 items-center justify-center bg-xert-steel px-5 font-display text-sm uppercase tracking-wide text-xert-navy transition-colors hover:bg-xert-pale">
                 Fill in the questionnaire
@@ -123,10 +137,12 @@ export default function CasualVisit() {
           ) : (
             <>
               <h1 className="font-display text-[clamp(2.25rem,7vw,3.25rem)] uppercase leading-tight text-xert-offwhite">
-                Pay for today&apos;s visit
+                {threeDayPass ? 'Get your Three Day Pass' : <>Pay for today&apos;s visit</>}
               </h1>
               <p className="mt-4 max-w-prose font-body text-sm leading-relaxed text-xert-pale/75">
-                One visit, one class, no membership. Enter your details and pay on your own phone
+                {threeDayPass
+                  ? 'Three Day Pass — show your receipt to the XERT team. Enter your details and pay on your own phone, no account needed'
+                  : 'One visit, one class, no membership. Enter your details and pay on your own phone'}
                 {priceCents ? <> — <strong className="text-xert-offwhite">{formatCasualVisitPrice(priceCents)}</strong></> : null}.
               </p>
 
@@ -163,6 +179,9 @@ export default function CasualVisit() {
 
                 <fieldset className="border border-xert-steel/20 p-4">
                   <legend className="px-2 font-body text-xs uppercase tracking-wider text-xert-pale/60">Pre-exercise questionnaire</legend>
+                  {threeDayPass && <p className="mb-3 font-body text-xs leading-relaxed text-xert-pale/60">
+                    Complete and sign the questionnaire on this device before paying. We check the saved response against your contact details. Your details will carry back here afterwards.
+                  </p>}
                   <div className="space-y-2" role="radiogroup" aria-label="Pre-exercise questionnaire">
                     {[
                       ['done', 'I have already completed the pre-exercise questionnaire'],
@@ -191,12 +210,14 @@ export default function CasualVisit() {
                   className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 bg-xert-steel px-5 font-display text-sm uppercase tracking-wide text-xert-navy transition-colors hover:bg-xert-pale disabled:opacity-50">
                   {sending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
                   {sending ? 'Opening secure payment…'
-                    : questionnaire === 'not-done' ? 'Fill in the questionnaire first'
+                    : questionnaire === 'not-done' || needsThreeDayQuestionnaire ? 'Fill in the questionnaire first'
                     : priceCents ? `Pay ${formatCasualVisitPrice(priceCents)}` : 'Continue to payment'}
                 </button>
                 <p className="font-body text-xs leading-relaxed text-xert-pale/45">
                   Payment is taken by Stripe on their secure page. XERT never sees or stores your card details.
-                  New here? Please also complete the <Link to="/forms/peq-casual" className="text-xert-steel underline">pre-exercise questionnaire</Link> before you train.
+                  New here? Please also complete the <Link to={threeDayPass ? '/forms/peq-casual?return=3daypass' : '/forms/peq-casual'}
+                    onClick={threeDayPass ? () => { rememberCasualVisitor(visitor); } : undefined}
+                    className="text-xert-steel underline">pre-exercise questionnaire</Link> before you train.
                 </p>
               </form>
             </>
