@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertTriangle, BellRing, CalendarDays, CheckCheck, ClipboardCheck, Copy, Download, List, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
+import { AlertTriangle, BellRing, CalendarDays, CheckCheck, ClipboardCheck, Copy, Download, List, LoaderCircle, Mail, Phone, RotateCcw, Search, UserCheck, X } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminClassCapacity, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, adminSearchMembers, staffBookMemberIntoClass, getBlackoutPeriods, getClassTemplates, createClassTemplate, getSoftLaunchSettings } from '@/lib/adminData';
+import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminClassCapacity, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, adminSearchMembers, staffBookMemberIntoClass, searchClassAttendees, getBlackoutPeriods, getClassTemplates, createClassTemplate, getSoftLaunchSettings } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
 import { blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
 import { classSessionFromTemplate, classSessionSeedForDate, classTemplateFromSession } from '@/lib/classCalendar';
 import { BOOKING_MODE_LABELS } from '@/lib/classSignup';
+import { attendeeMatchesByPerson, summarizeAttendeeSearch } from '@/lib/classAttendeeSearch';
 import { gymDateKey, gymDateTimeLabel, gymDayLabel, gymTimeLabel } from '@/lib/gymTime';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { attendanceRoll, attendanceRowId, blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import ClassCalendarBoard from '@/components/admin/ClassCalendarBoard';
 import ClassBankManager from '@/components/admin/ClassBankManager';
-import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
+import { ADMIN_BUTTON, ADMIN_INPUT, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
 const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
@@ -498,6 +499,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const [showEditor, setShowEditor] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
   const [expandedBookings, setExpandedBookings] = useState(null);
+  const [attendeeQuery, setAttendeeQuery] = useState('');
+  const [attendeeMatches, setAttendeeMatches] = useState(null);
+  const [attendeeSearching, setAttendeeSearching] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [roster, setRoster] = useState([]);
   const [attendeeSearch, setAttendeeSearch] = useState('');
@@ -699,6 +703,30 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       toast({ title: 'Could not load class bookings', description: e.message, variant: 'destructive' });
     }
   };
+
+  // Searching the whole timetable for one person. Debounced so typing a name
+  // is one query rather than one per keystroke, and the last answer wins even
+  // if an earlier query comes back slower.
+  useEffect(() => {
+    const term = attendeeQuery.trim();
+    if (term.length < 2) { setAttendeeMatches(null); setAttendeeSearching(false); return undefined; }
+    let active = true;
+    setAttendeeSearching(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const rows = await searchClassAttendees(term);
+        if (active) setAttendeeMatches(attendeeMatchesByPerson(rows));
+      } catch (error) {
+        if (active) {
+          setAttendeeMatches([]);
+          toast({ title: 'Could not search the timetable', description: error.message, variant: 'destructive' });
+        }
+      } finally {
+        if (active) setAttendeeSearching(false);
+      }
+    }, 280);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [attendeeQuery]);
 
   const openWaitlistRoster = async sessionId => {
     setView('list');
@@ -1114,6 +1142,71 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             + New Class
           </button>
         </div>
+      </div>
+
+      {/* Find one person across the whole timetable, both ways into a class. */}
+      <div className="mb-6">
+        <label className="relative block max-w-md">
+          <span className="sr-only">Search everyone registered for a class</span>
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-xert-pale/35" />
+          <input
+            type="search"
+            value={attendeeQuery}
+            onChange={event => setAttendeeQuery(event.target.value)}
+            placeholder="Search a name, email or phone across every class"
+            className={`${ADMIN_INPUT} pl-10`}
+          />
+          {attendeeSearching && <LoaderCircle aria-hidden="true" className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-xert-steel" />}
+        </label>
+
+        {attendeeMatches && (
+          <div className="mt-3 border border-xert-steel/20 bg-xert-ink">
+            {attendeeMatches.length === 0 ? (
+              <p className="p-4 font-body text-sm text-xert-pale/55">
+                Nobody matching &ldquo;{attendeeQuery.trim()}&rdquo; is registered for a class.
+              </p>
+            ) : (
+              <>
+                <p className="border-b border-xert-steel/15 px-4 py-2 font-body text-xs text-xert-pale/45">
+                  {(() => {
+                    const totals = summarizeAttendeeSearch(attendeeMatches);
+                    return `${totals.people} ${totals.people === 1 ? 'person' : 'people'} \u00b7 ${totals.bookings} ${totals.bookings === 1 ? 'booking' : 'bookings'} \u00b7 ${totals.upcoming} still to come`;
+                  })()}
+                </p>
+                <ul className="max-h-96 divide-y divide-white/5 overflow-y-auto">
+                  {attendeeMatches.map(person => (
+                    <li key={person.key} className="p-4">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <p className="font-display text-lg uppercase text-xert-offwhite">{person.name}</p>
+                        {person.sources.includes('member') && <span className="border border-xert-steel/30 px-2 py-0.5 font-body text-[10px] uppercase tracking-wider text-xert-steel">Member</span>}
+                        {person.sources.includes('signup') && <span className="border border-xert-steel/20 px-2 py-0.5 font-body text-[10px] uppercase tracking-wider text-xert-pale/50">Sign-up</span>}
+                        {person.email && <a href={`mailto:${person.email}`} className="font-body text-xs text-xert-steel">{person.email}</a>}
+                        {person.phone && <a href={`tel:${person.phone.replace(/\s+/g, '')}`} className="font-body text-xs text-xert-pale/55">{person.phone}</a>}
+                      </div>
+                      <ul className="mt-2 space-y-1">
+                        {person.classes.map(entry => (
+                          <li key={`${entry.source}:${entry.bookingId}`}>
+                            <button
+                              type="button"
+                              onClick={() => openWaitlistRoster(entry.sessionId)}
+                              className={`flex min-h-11 w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 border-l-2 px-3 py-1.5 text-left transition-colors hover:bg-white/[0.03] ${entry.active ? 'border-xert-steel/40' : 'border-xert-steel/10'}`}
+                            >
+                              <span className={`font-body text-sm ${entry.active ? 'text-xert-offwhite' : 'text-xert-pale/40 line-through'}`}>
+                                {entry.startsAt ? new Date(entry.startsAt).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'Date unknown'}
+                              </span>
+                              <span className="font-body text-sm text-xert-pale/60">{entry.title}</span>
+                              <span className="font-body text-xs uppercase tracking-wider text-xert-pale/40">{entry.status.replace(/_/g, ' ')}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {bookingsEnabled === false && (

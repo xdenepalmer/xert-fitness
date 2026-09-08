@@ -1568,6 +1568,32 @@ export async function getAdminAuditRecords(days = '30') {
 
 // ─── Class rosters (credit-based bookings) ───────────────────────────────────
 
+/**
+ * Find one person across the whole timetable, without opening classes one at a
+ * time. There are two ways into a class — a public sign-up and a member
+ * booking — and this searches both, so the answer is never half the story.
+ *
+ * The database does the matching and the bounds; this only refuses to ask on a
+ * query too short to be worth asking about.
+ */
+export async function searchClassAttendees(query, { from = null, to = null, limit = 100 } = {}) {
+  const term = String(query || '').trim();
+  if (term.length < 2) return [];
+  const { data, error } = await supabase.rpc('admin_search_class_attendees', {
+    p_query: term,
+    p_from: from ? new Date(from).toISOString() : null,
+    p_to: to ? new Date(to).toISOString() : null,
+    p_limit: limit,
+  });
+  if (error) {
+    if (/admin_search_class_attendees|schema cache|function.*not found/i.test(error.message || '')) {
+      throw new Error('Apply the attendee search migration before searching the timetable.');
+    }
+    throw new Error(error.message);
+  }
+  return data || [];
+}
+
 export async function adminSessionRoster(sessionId) {
   const { data, error } = await supabase.rpc('admin_session_roster', {
     p_session_id: sessionId
