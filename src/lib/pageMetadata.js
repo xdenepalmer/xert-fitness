@@ -36,6 +36,7 @@ const NOINDEX_TITLES = Object.freeze({
   // Reached from a QR code at the front desk, not from a search result.
   '/casual': 'Casual visit | XERT Fitness',
   '/3daypass': 'Three Day Pass | XERT Fitness',
+  '/3months': 'Three month membership | XERT Fitness',
 });
 
 const NOINDEX_PATHS = new Set([

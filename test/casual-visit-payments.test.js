@@ -174,7 +174,8 @@ test('nobody trains unscreened: the questionnaire is answered before Stripe is o
     'the button says where it is about to take them');
 
   // Coming back, their details are already in the form and the answer is set.
-  assert.match(page, /readFormCompletion\(CASUAL_PEQ_SLUG\)/);
+  assert.match(page, /readFormCompletion\(threeMonth \? MEMBER_PEQ_SLUG : CASUAL_PEQ_SLUG\)/,
+    'a casual visit reads the casual questionnaire; a membership reads the member one');
   assert.match(page, /recallCasualVisitor\(\)/);
   assert.match(page, /if \(completed\) setQuestionnaire\('done'\)/);
 });

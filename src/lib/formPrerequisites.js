@@ -102,7 +102,7 @@ export function nextFormSlug(search) {
 
 // A form can also hand back to a page rather than another form. Only these
 // are ever accepted, so a crafted link can never bounce someone off the site.
-const RETURN_PATHS = Object.freeze({ casual: '/casual', '3daypass': '/3daypass' });
+const RETURN_PATHS = Object.freeze({ casual: '/casual', '3daypass': '/3daypass', '3months': '/3months' });
 
 /** Where a finished form should return to, taken from ?return= */
 export function returnPathAfterForm(search) {
@@ -110,9 +110,21 @@ export function returnPathAfterForm(search) {
   return Object.prototype.hasOwnProperty.call(RETURN_PATHS, raw) ? RETURN_PATHS[raw] : null;
 }
 
-export function formPath(slug, nextSlug = null) {
-  const next = SLUG_PATTERN.test(String(nextSlug || '')) ? `?next=${encodeURIComponent(nextSlug)}` : '';
-  return `/forms/${encodeURIComponent(slug)}${next}`;
+/** The ?return= key itself, so a handoff can carry it to the next form. */
+export function returnKeyAfterForm(search) {
+  const raw = new URLSearchParams(search || '').get('return') || '';
+  return Object.prototype.hasOwnProperty.call(RETURN_PATHS, raw) ? raw : null;
+}
+
+export function formPath(slug, nextSlug = null, returnKey = null) {
+  const query = new URLSearchParams();
+  if (SLUG_PATTERN.test(String(nextSlug || ''))) query.set('next', String(nextSlug));
+  // A questionnaire that hands off to the agreement has to carry the page that
+  // sent them, or finishing the agreement leaves them stranded on a thank-you
+  // screen half way through paying.
+  if (returnKey && Object.prototype.hasOwnProperty.call(RETURN_PATHS, returnKey)) query.set('return', returnKey);
+  const search = query.size ? `?${query}` : '';
+  return `/forms/${encodeURIComponent(slug)}${search}`;
 }
 
 /**

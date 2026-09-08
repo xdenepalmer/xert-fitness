@@ -18,7 +18,8 @@ import {
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 import {
   CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, normalizeCasualVisitPriceCents, normalizeCasualVisitor,
-  THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, validQuestionnaireResponseId,
+  THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, THREE_MONTH_MEMBERSHIP_ACTION,
+  THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId,
 } from '../src/lib/casualVisit.js';
 
 // Vercel serverless function using the default Node request/response signature.
@@ -557,6 +558,19 @@ export default async function handler(request, response) {
       return json({ error: failure.message }, failure.status);
     }
   }
+  if (payload?.action === THREE_MONTH_MEMBERSHIP_ACTION) {
+    try {
+      const origin = resolveCheckoutOrigin(request.url, process.env.APP_BASE_URL || '', {
+        stripeMode: stripeModeForSecret(process.env.STRIPE_SECRET_KEY), expectedHost: XERT_VERCEL_HOST,
+      });
+      return json(await startThreeMonthMembershipCheckout({
+        payload, admin, origin, stripe: createXertStripeClient(process.env.STRIPE_SECRET_KEY),
+      }));
+    } catch (error) {
+      const failure = publicCheckoutFailure(error);
+      return json({ error: failure.message }, failure.status);
+    }
+  }
 
   const authHeader = requestHeader(request, 'authorization');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -827,6 +841,71 @@ export async function startThreeDayPassCheckout({ payload, admin, stripe, origin
     fail('Stripe did not return a secure payment page.', 502);
   }
   return { url: url.toString(), amount_cents: THREE_DAY_PASS_PRICE_CENTS };
+}
+
+/**
+ * Three months paid up front. Like the other visitor pages there is no account,
+ * order or credit behind it — the club sets the membership up itself.
+ *
+ * A buyer who has already signed the questionnaire and agreement should not
+ * have to sign them twice, so they can say so. That is a claim rather than
+ * proof, so the server looks for the signed records under their email and
+ * records what it found: the payment still goes through either way, and the
+ * owner alert says plainly whether the paperwork is really on file.
+ */
+export async function startThreeMonthMembershipCheckout({ payload, admin, stripe, origin, now = Date.now() }) {
+  const fail = (message, status) => { throw new VisitorCheckoutError(message, status); };
+  if (payload?.action !== THREE_MONTH_MEMBERSHIP_ACTION) fail('This membership is not available.', 400);
+  let visitor;
+  try { visitor = normalizeCasualVisitor(payload); } catch (error) { fail(error.message, 400); }
+
+  const declaredSigned = payload.already_signed === true;
+  if (!declaredSigned && !validQuestionnaireResponseId(payload.questionnaire_response_id)) {
+    fail('Complete the pre-exercise questionnaire and membership agreement before paying.', 400);
+  }
+
+  const [{ data: capability, error: capabilityError }, { data: settings, error: settingsError }] = await Promise.all([
+    admin.from('xert_schema_capabilities').select('capability').eq('capability', 'three_month_membership').maybeSingle(),
+    admin.from('admin_settings').select('casual_payments_enabled').limit(1).maybeSingle(),
+  ]);
+  if (capabilityError || !capability || settingsError || !settings) fail('Membership payments are unavailable right now.', 503);
+  if (settings.casual_payments_enabled === false) fail('Membership payments are switched off. Please speak to the XERT team.', 503);
+
+  let paperworkVerified = null;
+  if (declaredSigned) {
+    const { data: signed, error: signedError } = await admin.rpc('xert_membership_paperwork_signed', {
+      p_email: visitor.email,
+    });
+    if (signedError) fail('Your paperwork could not be checked. Please try again.', 503);
+    paperworkVerified = signed?.questionnaire === true && signed?.agreement === true;
+  } else {
+    const { data: proven, error: proofError } = await admin.rpc('xert_visitor_questionnaire_completed', {
+      p_response_id: payload.questionnaire_response_id,
+      p_name: visitor.fullName, p_email: visitor.email, p_phone: visitor.phone,
+    });
+    if (proofError) fail('The questionnaire could not be checked. Please try again.', 503);
+    if (proven !== true) fail('Complete and sign the questionnaire using these same contact details, then return to pay.', 400);
+  }
+
+  // Keep expiry and every other parameter stable for a retry in this minute.
+  const checkoutMinute = Math.floor(Number(now) / 60000) * 60000;
+  const parameters = casualVisitCheckoutParameters({
+    visitor, priceCents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS, passKind: THREE_MONTH_MEMBERSHIP_ACTION,
+    paperworkVerified, now: checkoutMinute,
+    returnURLs: {
+      success: new URL('/3months?paid=1', origin).toString(),
+      cancel: new URL('/3months?cancelled=1', origin).toString(),
+    },
+  });
+  const fingerprint = createHash('sha256').update(JSON.stringify(parameters)).digest('hex');
+  const session = await stripe.checkout.sessions.create(parameters, {
+    idempotencyKey: `three-month-${fingerprint}`,
+  });
+  const url = new URL(session?.url || 'https://invalid.invalid');
+  if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com' || url.username || url.password || url.port) {
+    fail('Stripe did not return a secure payment page.', 502);
+  }
+  return { url: url.toString(), amount_cents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS };
 }
 
 async function handleCasualVisitCheckout({ payload, request, admin, json }) {
