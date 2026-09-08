@@ -5,7 +5,7 @@ import {
   LoaderCircle, Pause, Pencil, Play, Plus, Search, Settings2, Trash2, X,
 } from 'lucide-react';
 import { activeQuestions, archiveFormResponse, archiveOwnerForm, CHARTABLE_TYPES, CHOICE_TYPES, createField, createFormDraft, FIELD_TYPES, FORM_TYPES, getFormResponse, listFormResponses, listOwnerForms, publicFormURL, responseCSV, saveOwnerForm, slugifyFormTitle, updateFormResponseStatus, validateFormDraft } from '@/lib/xertForms';
-import { numberedAnswers } from '@/lib/formAnswers';
+import { answerTable } from '@/lib/formAnswers';
 import AdminConfirmDialog from './AdminConfirmDialog';
 import FormQRCode from './FormQRCode';
 import FormResponseRecord from './FormResponseRecord';
@@ -208,9 +208,11 @@ function Analytics({ form, onBack }) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Responses',responses.length],['New',responses.filter(item => item.status === 'new').length],['Avg. time',responses.length ? `${Math.round(responses.reduce((sum,item) => sum + (item.time_taken_seconds || 0), 0) / responses.length)}s` : '—'],['Fields',questions.length]].map(([label,value]) => <div key={label} className={`${panel} p-4`}><p className="font-display text-3xl text-white">{value}</p><p className="text-xs uppercase tracking-wider text-xert-pale/45">{label}</p></div>)}</div>
     <div className="flex overflow-x-auto border-b border-xert-steel/20">{[['overview','Overview'],['responses','Responses'],['trends','Trends']].map(([value,label]) => <button key={value} onClick={() => setTab(value)} className={`min-h-12 shrink-0 px-5 text-sm font-semibold ${tab === value ? 'border-b-2 border-xert-steel text-white' : 'text-xert-pale/50'}`}>{label}</button>)}</div>
     {error && <p role="alert" className="border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{error}</p>}
-    {loading ? <p role="status" className="py-20 text-center text-xert-pale"><LoaderCircle className="mr-2 inline animate-spin" />Loading responses…</p> : tab === 'overview' ? <div className="grid gap-4 lg:grid-cols-2">{questions.map(question => {
+    {loading ? <p role="status" className="py-20 text-center text-xert-pale"><LoaderCircle className="mr-2 inline animate-spin" />Loading responses…</p> : tab === 'overview' ? <div className="space-y-4">
+    <WrittenAnswers responses={responses} questions={questions.filter(question => !CHARTABLE_TYPES.has(question.type))} />
+    <div className="grid gap-4 lg:grid-cols-2">{questions.filter(question => CHARTABLE_TYPES.has(question.type)).map(question => {
       const values = responses.map(item => item.answers?.[question.id]).filter(value => value !== undefined && value !== null && value !== '');
-      if (CHARTABLE_TYPES.has(question.type)) {
+      {
         const flattened = values.flatMap(value => Array.isArray(value) ? value : [value]).map(String);
         const labels = question.type === 'yes_no' ? ['Yes','No'] : question.type === 'star_rating' ? ['1','2','3','4','5'] : question.type === 'nps' ? Array.from({length:11},(_,i) => String(i)) : question.options || [...new Set(flattened)];
         // Keep the respondents behind each option, not just the tally, so staff
@@ -226,11 +228,7 @@ function Analytics({ form, onBack }) {
         const maximum = Math.max(1, ...rows.map(row => row.count));
         return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-4 text-xs text-xert-pale/40">{values.length} answers · select an option to see who</p><div className="space-y-1">{rows.map(row => <OptionBreakdown key={row.label} {...row} total={values.length} maximum={maximum} isOpen={openOption === `${question.id}:${row.label}`} onToggle={() => setOpenOption(current => current === `${question.id}:${row.label}` ? null : `${question.id}:${row.label}`)} />)}</div></section>;
       }
-      // Numbered by respondent, so the same number is the same person on every
-      // card and staff can read across name, mobile and email.
-      const answers = numberedAnswers(responses, question.id);
-      return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-white">{question.question}</h2><p className="mb-3 text-xs text-xert-pale/40">{answers.length} answers</p><ol className="max-h-56 space-y-2 overflow-y-auto">{answers.map(answer => <li key={answer.id} className="flex gap-2.5 border-l-2 border-xert-steel/35 pl-3 text-sm text-xert-pale"><span aria-hidden="true" className="w-6 shrink-0 text-right font-mono text-xs tabular-nums text-xert-steel/70">{answer.number}</span><span className="min-w-0 flex-1">{answer.text}</span></li>)}</ol></section>;
-    })}</div> : tab === 'responses' ? <div className="space-y-4">
+    })}</div></div> : tab === 'responses' ? <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]"><label className="relative"><span className="sr-only">Search respondents</span><Search className="absolute left-3 top-3.5 h-4 w-4 text-xert-pale/35" /><input className={`${control} pl-10`} value={responseQuery} onChange={event => setResponseQuery(event.target.value)} placeholder="Search name, email or phone" /></label><select aria-label="Filter responses by status" className={control} value={responseStatus} onChange={event => setResponseStatus(event.target.value)}><option value="all">All statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="followed_up">Followed up</option><option value="closed">Closed</option></select></div>
       <div className="space-y-3">{filteredResponses.map(response => <article key={response.id} className={`${panel} p-4 sm:p-5`}><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-semibold text-white">{respondentLabel(response)}</h2><span className="border border-xert-steel/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-xert-pale/55">{String(response.status || 'new').replace('_', ' ')}</span></div><p className="mt-1 text-xs text-xert-pale/45">{new Date(response.completed_at).toLocaleString('en-AU')} · {response.time_taken_seconds || 0}s</p>{respondentIdentity(response).email && <a className="mt-1 block truncate text-sm text-xert-steel" href={`mailto:${respondentIdentity(response).email}`}>{respondentIdentity(response).email}</a>}{respondentIdentity(response).phone && <a className="mt-1 block text-sm text-xert-pale/60" href={`tel:${respondentIdentity(response).phone}`}>{respondentIdentity(response).phone}</a>}</div><div className="grid grid-cols-[1fr_auto] gap-2 sm:flex"><button type="button" className={primary} onClick={() => setSelectedResponseID(response.id)}><Eye className="h-4 w-4" /> View full form</button><button type="button" className={`${button} px-3 text-red-300`} onClick={() => setResponseToArchive(response)} aria-label={`Archive response from ${respondentLabel(response)}`}><Archive className="h-4 w-4" /></button></div></div></article>)}
         {!responses.length && <Empty title="No responses yet" detail="Share the live link to start collecting responses." />}
@@ -240,6 +238,61 @@ function Analytics({ form, onBack }) {
     <AdminConfirmDialog open={Boolean(responseToArchive)} onOpenChange={open => !open && setResponseToArchive(null)} title="Archive this response?" description="It will be removed from analytics and the response list. The underlying record remains recoverable in the database." warning={undefined} cancelLabel="Keep response" confirmLabel="Archive response" busy={updatingResponseID === responseToArchive?.id} onConfirm={archive} />
   </div>;
 }
+/**
+ * Every written answer in one table: a row per person, a column per question.
+ * Reading a name against its own phone number was the whole problem with the
+ * old side-by-side lists, so the name is frozen in the first column and the
+ * questions scroll under it. On a phone there is no room for that, so each
+ * person becomes a card instead.
+ */
+function WrittenAnswers({ responses, questions }) {
+  const { columns, rows } = answerTable(responses, questions);
+  if (!columns.length || !rows.length) return null;
+
+  return <section className={`${panel} p-5`}>
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+      <h2 className="font-semibold text-white">Written answers</h2>
+      <p className="text-xs text-xert-pale/40">{rows.length} {rows.length === 1 ? 'person' : 'people'} · {columns.length} {columns.length === 1 ? 'question' : 'questions'}{columns.length > 2 ? ' · scroll sideways for more' : ''}</p>
+    </div>
+
+    {/* Phones: one card per person. */}
+    <ul className="space-y-3 sm:hidden">
+      {rows.map(row => <li key={row.id} className="border-l-2 border-xert-steel/35 pl-3">
+        <p className="flex gap-2 text-sm font-semibold text-white"><span aria-hidden="true" className="font-mono text-xs tabular-nums text-xert-steel/70">{row.number}</span>{row.person}</p>
+        <dl className="mt-1 space-y-0.5">
+          {columns.filter(column => row.cells[column.id]).map(column => <div key={column.id} className="flex flex-wrap gap-x-2 text-sm">
+            <dt className="text-xert-pale/45">{column.label}</dt>
+            <dd className="text-xert-pale">{row.cells[column.id]}</dd>
+          </div>)}
+        </dl>
+      </li>)}
+    </ul>
+
+    {/* Everything wider: a real table, name column pinned. */}
+    <div className="hidden max-h-[26rem] overflow-auto sm:block">
+      <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">Written answers, one row per person</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="sticky left-0 top-0 z-20 border-b border-xert-steel/25 bg-xert-ink px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-xert-pale/55">Person</th>
+            {columns.map(column => <th key={column.id} scope="col" className="sticky top-0 z-10 whitespace-nowrap border-b border-xert-steel/25 bg-xert-ink px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-xert-pale/55">{column.label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => <tr key={row.id} className="align-top">
+            <th scope="row" className="sticky left-0 z-10 border-b border-white/5 bg-xert-ink px-3 py-2 text-left font-medium text-white">
+              <span aria-hidden="true" className="mr-2 font-mono text-xs tabular-nums text-xert-steel/70">{row.number}</span>{row.person}
+            </th>
+            {columns.map(column => <td key={column.id} className="border-b border-white/5 px-3 py-2 text-xert-pale">
+              {row.cells[column.id] || <span className="text-xert-pale/25">—</span>}
+            </td>)}
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </section>;
+}
+
 function Empty({ title, detail }) { return <div className={`${panel} py-20 text-center`}><ClipboardList className="mx-auto h-12 w-12 text-xert-steel/30" /><h2 className="mt-4 font-display text-2xl uppercase text-white">{title}</h2><p className="mt-2 text-sm text-xert-pale/50">{detail}</p></div>; }
 
 export default function FormsSurveysManager({ initialAction = null, onIntentHandled = () => {}, onDirtyChange = (_dirty) => {} }) {

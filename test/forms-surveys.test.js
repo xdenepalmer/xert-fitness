@@ -98,33 +98,62 @@ test('choice breakdowns name the people behind each option', async () => {
   assert.match(source, /select an option to see who/);
 });
 
-test('overview answers are numbered by respondent so staff can read across the cards', async () => {
-  const { numberedAnswers } = await import('../src/lib/formAnswers.js');
+test('written answers read as one table, a row per person with their name attached', async () => {
+  const { answerTable, answerText, numberedAnswers } = await import('../src/lib/formAnswers.js');
+  const questions = [
+    { id: 'name', question: 'Full name' },
+    { id: 'mobile', question: 'Mobile' },
+    { id: 'notes', question: 'Anything else' },
+  ];
   const responses = [
-    { id: 'r1', answers: { name: 'Collins, Aleisha', mobile: '0439570959' } },
-    { id: 'r2', answers: { name: 'Bonwick, Jasmine' } },                        // skipped mobile
-    { id: 'r3', answers: { name: 'Berthold, Holly', mobile: '0467207777' } },
+    { id: 'r1', respondent_name: 'Aleisha Collins', answers: { name: 'Collins, Aleisha', mobile: '0439570959' } },
+    { id: 'r2', respondent_name: 'Jasmine Bonwick', answers: { name: 'Bonwick, Jasmine' } },
+    { id: 'r3', respondent_email: 'holly@example.com', answers: { name: 'Berthold, Holly', mobile: '0467207777' } },
   ];
 
-  assert.deepEqual(numberedAnswers(responses, 'name').map(a => a.number), [1, 2, 3]);
-  // The gap matters: without it Holly's mobile would be numbered 2 and read as
-  // Jasmine's on the card beside it.
-  assert.deepEqual(numberedAnswers(responses, 'mobile'), [
-    { number: 1, text: '0439570959', id: 'r1' },
-    { number: 3, text: '0467207777', id: 'r3' },
+  const { columns, rows } = answerTable(responses, questions);
+
+  // A question nobody answered is not a column of dashes to scroll past, and
+  // the question that asked for their name is not repeated beside the person.
+  assert.deepEqual(columns.map(column => column.id), ['mobile']);
+
+  // Only an exact repeat is dropped. A question that merely mentions a name
+  // for one person is a real answer and keeps its column.
+  const nicknames = answerTable(
+    [{ id: 'a', respondent_name: 'Aleisha Collins', answers: { who: 'Collins, Aleisha' } },
+     { id: 'b', respondent_name: 'Max Eastwell', answers: { who: 'Trains with Aleisha' } }],
+    [{ id: 'who', question: 'Who referred you' }],
+  );
+  assert.deepEqual(nicknames.columns.map(column => column.id), ['who']);
+
+  // The name travels with the answer, which is the whole point — and Holly's
+  // record has no stored name, so the one she typed is used instead of the
+  // email address the record would otherwise fall back to.
+  assert.deepEqual(rows.map(row => [row.number, row.person, row.cells.mobile]), [
+    [1, 'Aleisha Collins', '0439570959'],
+    [2, 'Jasmine Bonwick', ''],
+    [3, 'Berthold, Holly', '0467207777'],
   ]);
 
-  // Blank, missing and empty answers are left out entirely.
-  assert.deepEqual(numberedAnswers([{ answers: { a: '' } }, { answers: {} }, { answers: { a: null } }], 'a'), []);
-  assert.deepEqual(numberedAnswers(null, 'a'), []);
+  // Somebody who wrote nothing gets no row; a missing answer is a blank cell.
+  assert.deepEqual(answerTable([{ id: 'x', answers: {} }], questions).rows, []);
+  assert.deepEqual(answerTable(null, questions), { columns: [], rows: [] });
 
-  // Composite answers stay readable on one line.
-  assert.equal(numberedAnswers([{ answers: { a: ['Strength', 'Conditioning'] } }], 'a')[0].text, 'Strength, Conditioning');
-  assert.equal(numberedAnswers([{ answers: { a: { street: '27 Pound St', suburb: 'Kingaroy' } } }], 'a')[0].text, '27 Pound St, Kingaroy');
+  // Composite answers stay on one line.
+  assert.equal(answerText(['Strength', 'Conditioning']), 'Strength, Conditioning');
+  assert.equal(answerText({ street: '27 Pound St', suburb: 'Kingaroy' }), '27 Pound St, Kingaroy');
+  assert.equal(answerText(''), '');
+  assert.equal(answerText(null), '');
+
+  // The single-question helper still numbers by respondent, so a skipped answer
+  // leaves a gap instead of shifting everyone below it.
+  assert.deepEqual(numberedAnswers(responses, 'mobile').map(answer => answer.number), [1, 3]);
 
   const screen = await readFile(new URL('../src/components/admin/FormsSurveysManager.jsx', import.meta.url), 'utf8');
-  assert.match(screen, /numberedAnswers\(responses, question\.id\)/);
-  assert.match(screen, /tabular-nums/, 'the numbers line up in a column');
+  assert.match(screen, /function WrittenAnswers\(/);
+  assert.match(screen, /answerTable\(responses, questions\)/);
+  assert.match(screen, /sticky left-0/, 'the person column stays put while the answers scroll');
+  assert.match(screen, /sm:hidden/, 'phones get cards instead of a sideways table');
   assert.doesNotMatch(screen, /values\.slice\(0,\s*20\)/,
-    'the card must not claim 22 answers and then show 20');
+    'the overview must not claim 22 answers and then show 20');
 });
