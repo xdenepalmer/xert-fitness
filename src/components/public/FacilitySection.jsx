@@ -55,7 +55,7 @@ export default function FacilitySection() {
 
             <h2
               className="mb-6 font-display uppercase text-xert-offwhite"
-              style={{ fontSize: 'clamp(2.5rem,6vw,4rem)', lineHeight: 0.95 }}
+              style={{ fontSize: 'clamp(2.5rem,6vw,4rem)', lineHeight: 0.95, overflowWrap: 'anywhere' }}
             >
               Built for coached<br />
               <span className="text-xert-steel">performance.</span>

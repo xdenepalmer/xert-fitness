@@ -31,7 +31,7 @@ export default function WhatXertIs() {
               <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">The XERT Training System</span>
             </div>
             <h2 className="mb-6 font-display uppercase text-xert-offwhite"
-              style={{ fontSize: 'clamp(2.5rem,6vw,4.5rem)', lineHeight: 0.95 }}>
+              style={{ fontSize: 'clamp(2.5rem,6vw,4.5rem)', lineHeight: 0.95, overflowWrap: 'anywhere' }}>
               Purposeful.<br />
               <span className="text-xert-steel">Progressive.</span><br />
               Sustainable.

@@ -40,6 +40,15 @@ test('extracted navigation preserves keyboard containment and names useful sheet
   assert.match(nav, /document\.body\.style\.overflow/);
 });
 
+test('Home display headings allow long words to wrap at enlarged text sizes', () => {
+  for (const file of ['WhatXertIs', 'FacilitySection']) {
+    const source = readFileSync(new URL(`../src/components/public/${file}.jsx`, import.meta.url), 'utf8');
+    const heading = source.match(/<h2\b[\s\S]*?>/)?.[0];
+    assert.ok(heading, `${file} has its display heading`);
+    assert.match(heading, /overflowWrap: 'anywhere'/, `${file} must wrap long words within its column`);
+  }
+});
+
 test('member contact fields use associated labels, stable names, and required semantics', () => {
   for (const field of ['full-name', 'email', 'phone', 'suburb']) {
     assert.match(memberForm, new RegExp(`htmlFor="member-${field}"`));
