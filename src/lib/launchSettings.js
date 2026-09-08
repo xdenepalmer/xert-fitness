@@ -77,6 +77,9 @@ export function normalizeLaunchSettings(settings = {}) {
     announcement_banner_text: announcement || null,
     fitbox_enabled: Boolean(settings.fitbox_enabled),
     fitbox_booking_url: fitboxUrl,
+    // Class packs are retired, so credits stay off unless the club turns them
+    // back on. Off means booking never looks for one.
+    class_credits_enabled: Boolean(settings.class_credits_enabled),
     casual_payments_enabled: settings.casual_payments_enabled !== false,
     casual_visit_price_cents: normalizeCasualPrice(settings.casual_visit_price_cents),
   };
@@ -105,6 +108,7 @@ export function launchSettingsChanged(current = {}, saved = {}) {
     'announcement_banner_text',
     'fitbox_enabled',
     'fitbox_booking_url',
+    'class_credits_enabled',
     'casual_payments_enabled',
     'casual_visit_price_cents',
   ];

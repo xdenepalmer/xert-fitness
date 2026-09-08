@@ -208,6 +208,16 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
       </div>
 
       <div className="bg-xert-ink border border-xert-steel/20 p-6 mb-6">
+        <h3 className="font-display text-sm uppercase tracking-wider text-xert-offwhite mb-1">Class credits</h3>
+        <p className="font-body text-xs text-xert-concrete/40 mb-2">
+          Class packs were retired in favour of memberships, so credits are off: a member asks for a spot and staff
+          confirm it. Turn this back on only if XERT sells class packs again &mdash; booking will then require a credit
+          and spend one, and a member without any cannot book. Credits already bought are honoured either way.
+        </p>
+        <Toggle label="Class credits required" desc="Off means booking never looks for a credit. On restores class packs gating every booking." field="class_credits_enabled" />
+      </div>
+
+      <div className="bg-xert-ink border border-xert-steel/20 p-6 mb-6">
         <h3 className="font-display text-sm text-xert-offwhite uppercase mb-1">Fitbox handoff</h3>
         <p className="font-body text-xs text-xert-concrete/40 mb-2">
           When on, public Book and Join buttons send people to your Fitbox member portal, and XERT&rsquo;s built-in checkout stays paused. Memberships, billing and class bookings then live in Fitbox.

@@ -197,3 +197,33 @@ test('a visitor sent off to the questionnaire comes back to a form that still kn
   assert.equal(rememberCasualVisitor(typed, { storage: null }), false, 'a browser with no storage still pays');
   assert.equal(recallCasualVisitor({ storage: null }), null);
 });
+
+test('class credits are a switch the club owns, and it is off', async () => {
+  const { normalizeLaunchSettings, launchSettingsChanged } = await import('../src/lib/launchSettings.js');
+
+  // Retired means off unless someone deliberately turns it back on.
+  const base = { casual_visit_price_cents: 1560, target_launch_date: '2026-09-05' };
+  assert.equal(normalizeLaunchSettings(base).class_credits_enabled, false);
+  assert.equal(normalizeLaunchSettings({ ...base, class_credits_enabled: true }).class_credits_enabled, true);
+  assert.ok(
+    launchSettingsChanged({ class_credits_enabled: true }, { class_credits_enabled: false }),
+    'flipping the switch must enable Save'
+  );
+
+  const screen = await read('../src/components/admin/SoftLaunchSettings.jsx');
+  assert.match(screen, /field="class_credits_enabled"/);
+  assert.match(screen, /Off means booking never looks for a credit/);
+
+  const sql = await read('../supabase/migrations/20260908030000_class_credits_switch.sql');
+  assert.match(sql, /add column if not exists class_credits_enabled boolean not null default false/);
+  // Every path that could spend a credit asks the switch first.
+  for (const fn of ['book_session', 'admin_set_booking_status', 'admin_book_member_into_class']) {
+    const start = sql.indexOf(`FUNCTION public.${fn}(`);
+    assert.ok(start > 0, `${fn} is in the migration`);
+    const body = sql.slice(start, sql.indexOf('CREATE OR REPLACE FUNCTION', start + 1) + 1 || undefined);
+    assert.match(body, /class_credits_are_enabled\(\)/, `${fn} reads the switch`);
+  }
+  // A credit already bought is still returned when a booking is undone,
+  // whichever way the switch is set today.
+  assert.match(sql, /update public\.credit_batches set remaining = remaining \+ 1 where id = v_batch/);
+});
