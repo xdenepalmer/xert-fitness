@@ -97,3 +97,34 @@ test('choice breakdowns name the people behind each option', async () => {
   assert.match(source, /disabled=\{count === 0\}/);
   assert.match(source, /select an option to see who/);
 });
+
+test('overview answers are numbered by respondent so staff can read across the cards', async () => {
+  const { numberedAnswers } = await import('../src/lib/formAnswers.js');
+  const responses = [
+    { id: 'r1', answers: { name: 'Collins, Aleisha', mobile: '0439570959' } },
+    { id: 'r2', answers: { name: 'Bonwick, Jasmine' } },                        // skipped mobile
+    { id: 'r3', answers: { name: 'Berthold, Holly', mobile: '0467207777' } },
+  ];
+
+  assert.deepEqual(numberedAnswers(responses, 'name').map(a => a.number), [1, 2, 3]);
+  // The gap matters: without it Holly's mobile would be numbered 2 and read as
+  // Jasmine's on the card beside it.
+  assert.deepEqual(numberedAnswers(responses, 'mobile'), [
+    { number: 1, text: '0439570959', id: 'r1' },
+    { number: 3, text: '0467207777', id: 'r3' },
+  ]);
+
+  // Blank, missing and empty answers are left out entirely.
+  assert.deepEqual(numberedAnswers([{ answers: { a: '' } }, { answers: {} }, { answers: { a: null } }], 'a'), []);
+  assert.deepEqual(numberedAnswers(null, 'a'), []);
+
+  // Composite answers stay readable on one line.
+  assert.equal(numberedAnswers([{ answers: { a: ['Strength', 'Conditioning'] } }], 'a')[0].text, 'Strength, Conditioning');
+  assert.equal(numberedAnswers([{ answers: { a: { street: '27 Pound St', suburb: 'Kingaroy' } } }], 'a')[0].text, '27 Pound St, Kingaroy');
+
+  const screen = await readFile(new URL('../src/components/admin/FormsSurveysManager.jsx', import.meta.url), 'utf8');
+  assert.match(screen, /numberedAnswers\(responses, question\.id\)/);
+  assert.match(screen, /tabular-nums/, 'the numbers line up in a column');
+  assert.doesNotMatch(screen, /values\.slice\(0,\s*20\)/,
+    'the card must not claim 22 answers and then show 20');
+});
