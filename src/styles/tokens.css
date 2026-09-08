@@ -504,6 +504,9 @@
   --control-height: 44px;
   --dock-blur: 14px;
   --nav-book-height: 48px;
+  --nav-breakpoint-desktop: 64rem;
+  --nav-easing-spring: cubic-bezier(.2,1.35,.35,1);
+  --nav-easing-standard: cubic-bezier(.2,.8,.2,1);
   --nav-font-body: 0.875rem;
   --nav-font-eyebrow: 0.6875rem;
   --nav-font-link: 0.8125rem;

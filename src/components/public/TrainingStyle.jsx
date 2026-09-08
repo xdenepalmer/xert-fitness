@@ -24,7 +24,7 @@ export default function TrainingStyle() {
               <span className="font-body text-xs uppercase tracking-[0.2em] text-xert-steel">How We Train</span>
             </div>
             <h2 className="mb-6 font-display uppercase text-xert-offwhite"
-              style={{ fontSize: 'clamp(2.5rem,6vw,4rem)', lineHeight: 0.95 }}>
+              style={{ fontSize: 'clamp(2.5rem,6vw,4rem)', lineHeight: 0.95, overflowWrap: 'anywhere' }}>
               Structure.<br />
               <span className="text-xert-steel">Purpose.</span><br />
               Performance.

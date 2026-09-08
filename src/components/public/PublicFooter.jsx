@@ -36,7 +36,7 @@ export default function PublicFooter() {
       style={{ borderTop: '1px solid var(--accent-default-10)', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }}
     >
       <div className="max-w-5xl mx-auto">
-        <div className="mb-10 grid grid-cols-1 gap-9 md:grid-cols-[1.1fr_1.2fr_1fr] md:gap-8">
+        <div className="mb-10 grid grid-cols-1 gap-9 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)] md:gap-8">
           {/* Brand */}
           <div className="flex items-center gap-4 md:block">
             <img src={LOGO} alt="XERT Fitness. Beat Your Best." loading="lazy" decoding="async" width="574" height="619" className="h-16 w-auto shrink-0 opacity-90 sm:h-20 md:mb-5 md:h-28" />
@@ -68,16 +68,16 @@ export default function PublicFooter() {
               <a href={`mailto:${contact.email}`}
                 className={`${CONTACT_ROW} hover:border-xert-steel/50 hover:text-xert-offwhite`}>
                 <Mail className="w-3.5 h-3.5 shrink-0 text-xert-steel" aria-hidden="true" />
-                <span className="truncate">{contact.email}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{contact.email}</span>
               </a>
               <a href={contact.instagram_url} target="_blank" rel="noopener noreferrer"
                 className={`${CONTACT_ROW} hover:border-xert-steel/50 hover:text-xert-offwhite`}>
                 <Instagram className="w-3.5 h-3.5 shrink-0 text-xert-steel" aria-hidden="true" />
-                <span className="truncate">{contact.instagram_handle}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{contact.instagram_handle}</span>
               </a>
               <p className={CONTACT_ROW}>
                 <MapPin className="w-3.5 h-3.5 shrink-0 text-xert-steel" aria-hidden="true" />
-                <span className="truncate">{contact.address}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{contact.address}</span>
               </p>
             </div>
             <Link to="/booking"

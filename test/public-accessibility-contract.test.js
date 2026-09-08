@@ -41,12 +41,27 @@ test('extracted navigation preserves keyboard containment and names useful sheet
 });
 
 test('Home display headings allow long words to wrap at enlarged text sizes', () => {
-  for (const file of ['WhatXertIs', 'FacilitySection']) {
+  for (const file of ['WhatXertIs', 'FacilitySection', 'TrainingStyle']) {
     const source = readFileSync(new URL(`../src/components/public/${file}.jsx`, import.meta.url), 'utf8');
     const heading = source.match(/<h2\b[\s\S]*?>/)?.[0];
     assert.ok(heading, `${file} has its display heading`);
     assert.match(heading, /overflowWrap: 'anywhere'/, `${file} must wrap long words within its column`);
   }
+});
+
+test('acquisition steppers wrap whole step groups rather than overflowing at enlarged text', () => {
+  for (const file of ['MemberInterestForm', 'TrainerInterestForm', 'PartnerInterestForm']) {
+    const source = readFileSync(new URL(`../src/components/public/${file}.jsx`, import.meta.url), 'utf8');
+    assert.match(source, /className="flex flex-wrap items-center gap-2 mb-8">\s*\{STEPS\.map/);
+  }
+});
+
+test('footer contact details remain fully readable inside constrained columns', () => {
+  const source = readFileSync(new URL('../src/components/public/PublicFooter.jsx', import.meta.url), 'utf8');
+  for (const field of ['email', 'instagram_handle', 'address']) {
+    assert.match(source, new RegExp(`className="min-w-0 \\[overflow-wrap:anywhere\\]">\\{contact\\.${field}\\}`));
+  }
+  assert.match(source, /lg:grid-cols-\[minmax\(0,1\.1fr\)_minmax\(0,1\.2fr\)_minmax\(0,1fr\)\]/);
 });
 
 test('member contact fields use associated labels, stable names, and required semantics', () => {

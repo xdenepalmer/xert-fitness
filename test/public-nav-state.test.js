@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as model from '../src/components/public/nav/navState.js';
+import * as navTokens from '../src/components/public/nav/navTokens.js';
 const now = new Date('2026-09-09T00:00:00Z');
 const upcoming = { id: 'next', title: 'Strength', start_time: '2026-09-09T02:00:00Z', status: 'published', public_visible: true, booking_mode: 'request_to_book', coach_name: 'Sam' };
 
@@ -55,4 +56,9 @@ test('view transitions leave modified, external and hash navigation to the route
   for (const to of ['/#facility', '#main', 'https://example.com', 'tel:123']) assert.equal(model.shouldTransition(click, to), false);
   assert.equal(model.shouldTransition({ ...click, ctrlKey: true }, '/coaches'), false);
   assert.equal(model.shouldTransition({ ...click, button: 1 }, '/coaches'), false);
+});
+
+test('desktop cleanup and layout can share a media query from the current generated breakpoint', () => {
+  assert.equal(typeof navTokens.navDesktopMediaQuery, 'function');
+  assert.equal(navTokens.navDesktopMediaQuery({ getPropertyValue: key => key === '--nav-breakpoint-desktop' ? ' 72rem ' : '' }), '(min-width: 72rem)');
 });

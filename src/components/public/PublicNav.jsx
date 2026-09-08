@@ -5,6 +5,7 @@ import DesktopLinks from './nav/DesktopLinks';
 import MobileSheet from './nav/MobileSheet';
 import NavLink from './nav/NavLink';
 import useNavScroll from './nav/useNavScroll';
+import { navDesktopMediaQuery } from './nav/navTokens';
 import './nav/public-nav.css';
 
 const LOGO = '/assets/xert-logo-horizontal-light.png';
@@ -29,7 +30,7 @@ export default function PublicNav() {
     const desktop = navRef.current.querySelector('.public-nav-desktop');
     const logo = navRef.current.querySelector('.public-nav-logo img');
     const trigger = triggerRef.current;
-    const mq = window.matchMedia('(min-width: 64rem)');
+    const mq = window.matchMedia(navDesktopMediaQuery());
     const measure = () => {
       const style = getComputedStyle(bar);
       const available = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);

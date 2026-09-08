@@ -30,7 +30,7 @@ export default function DesktopLinks({ links, pathname, signedIn, visible }) {
         indicator.animate([
           { transform: `translateX(${previous.x - next.x}px) scaleX(${previous.width / next.width})` },
           { transform: 'translateX(0) scaleX(1)' },
-        ], { duration: parseFloat(getComputedStyle(group).getPropertyValue('--duration-standard')) || 0, easing: 'cubic-bezier(.2,.8,.2,1)' });
+        ], { duration: parseFloat(getComputedStyle(group).getPropertyValue('--duration-standard')) || 0, easing: getComputedStyle(group).getPropertyValue('--nav-easing-standard').trim() });
       }
       previousIndicator = next;
     };

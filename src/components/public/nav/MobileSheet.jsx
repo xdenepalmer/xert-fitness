@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import NavLink from './NavLink';
 import MenuInformation from './MenuInformation';
+import { navDesktopMediaQuery } from './navTokens';
 
 export default function MobileSheet({ links, pathname, user, profile, close, triggerRef }) {
   const sheetRef = useRef(null);
@@ -20,7 +21,7 @@ export default function MobileSheet({ links, pathname, user, profile, close, tri
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
       else if ((!e.shiftKey && document.activeElement === last) || !root.contains(document.activeElement)) { e.preventDefault(); first?.focus(); }
     };
-    const mq = window.matchMedia('(min-width: 64rem)');
+    const mq = window.matchMedia(navDesktopMediaQuery());
     const onChange = e => { if (e.matches) close(); };
     mq.addEventListener('change', onChange);
     window.addEventListener('keydown', onKeyDown);

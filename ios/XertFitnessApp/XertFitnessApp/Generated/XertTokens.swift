@@ -189,6 +189,9 @@ enum XertTokens {
     static let controlHeight: CGFloat = 44
     static let dockBlur: CGFloat = 14
     static let navBookHeight: CGFloat = 48
+    static let navBreakpointDesktop: CGFloat = 1024
+    static let navEasingSpring = "cubic-bezier(.2,1.35,.35,1)"
+    static let navEasingStandard = "cubic-bezier(.2,.8,.2,1)"
     static let navFontBody: CGFloat = 14
     static let navFontEyebrow: CGFloat = 11
     static let navFontLink: CGFloat = 13

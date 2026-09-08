@@ -30,7 +30,7 @@
 .public-nav-skip { position: fixed; top: var(--space-inline); left: var(--space-inline); transform: translateY(-200%); padding: var(--space-control) var(--space-row-comfortable); color: var(--text-inverse); background: var(--accent-default); z-index: 60; }
 .public-nav-skip:focus { transform: translateY(0); }
 .public-nav :focus-visible { outline: var(--nav-indicator-height) solid var(--accent-default); outline-offset: calc(var(--space-inline) / 2); }
-.public-nav-sheet { position: fixed; inset: var(--public-nav-offset) 0 0; display: flex; flex-direction: column; min-height: 0; background: var(--surface-base); border-top: var(--nav-line-width) solid var(--border-hairline); transition: transform var(--duration-slow) cubic-bezier(.2,.8,.2,1); }
+.public-nav-sheet { position: fixed; inset: var(--public-nav-offset) 0 0; display: flex; flex-direction: column; min-height: 0; background: var(--surface-base); border-top: var(--nav-line-width) solid var(--border-hairline); transition: transform var(--duration-slow) var(--nav-easing-standard); }
 .public-menu-top { display: flex; justify-content: flex-end; align-items: center; position: relative; padding: calc(var(--space-inline) / 2) var(--space-row-comfortable); flex-shrink: 0; }
 .public-menu-handle { position: absolute; left: calc(50% - var(--space-row-comfortable)); top: var(--space-inline); width: var(--space-section); height: var(--nav-handle-height); background: var(--border-strong); border-radius: var(--nav-indicator-height); }
 .public-menu-close { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-control); font-size: var(--nav-font-body); }
@@ -56,8 +56,8 @@
 .public-nav[data-desktop="true"] .public-nav-desktop { position: static; visibility: visible; }
 .public-nav[data-desktop="true"] .public-nav-trigger, .public-nav[data-desktop="true"] .public-nav-sheet { display: none; }
 @media (prefers-reduced-motion: no-preference) {
-  .public-menu-link { animation: public-menu-spring var(--duration-slow) cubic-bezier(.2,1.35,.35,1) both; animation-delay: calc(var(--menu-order) * calc(var(--duration-quick) / 4)); }
-  .public-menu-information { animation: public-menu-spring var(--duration-slow) cubic-bezier(.2,1.35,.35,1) var(--duration-quick) both; }
+  .public-menu-link { animation: public-menu-spring var(--duration-slow) var(--nav-easing-spring) both; animation-delay: calc(var(--menu-order) * calc(var(--duration-quick) / 4)); }
+  .public-menu-information { animation: public-menu-spring var(--duration-slow) var(--nav-easing-spring) var(--duration-quick) both; }
 }
 @keyframes public-menu-spring { from { opacity: 0; transform: translateY(var(--space-row-comfortable)); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .public-nav-sheet, .public-nav-book { transition: none; } }

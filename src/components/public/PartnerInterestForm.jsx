@@ -107,7 +107,7 @@ export default function PartnerInterestForm() {
         className="absolute opacity-0 h-0 w-0 pointer-events-none" tabIndex={-1} aria-hidden="true" />
 
       {/* Progress */}
-      <div className="flex items-center gap-2 mb-8">
+      <div className="flex flex-wrap items-center gap-2 mb-8">
         {STEPS.map((s, i) => (
           <React.Fragment key={i}>
             <div className={`flex items-center gap-1.5 ${i <= step ? 'opacity-100' : 'opacity-40'}`}>
