@@ -61,7 +61,7 @@ function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onR
           <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
         </div>
       ) : !available ? (
-        <p className="font-body text-xs text-amber-300" >The waitlist desk becomes available after waitlist_fifo_promotion_upgrade.sql is applied.</p>
+        <p className="font-body text-xs text-status-warning-300" >The waitlist desk becomes available after waitlist_fifo_promotion_upgrade.sql is applied.</p>
       ) : rows.length === 0 ? (
         <p className="font-body text-sm text-xert-concrete/40">No upcoming class waitlists.</p>
       ) : (
@@ -99,7 +99,7 @@ function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onR
                       {promotingSessionId === item.session_id ? 'Promoting...' : 'Promote next'}
                     </button>
                   )}
-                  {item.can_promote && credits === 0 && <span className="font-body text-xs text-amber-300" >Next member needs a credit</span>}
+                  {item.can_promote && credits === 0 && <span className="font-body text-xs text-status-warning-300" >Next member needs a credit</span>}
                 </div>
               </article>
             );
@@ -222,7 +222,7 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
 
 const STATUS_COLORS = {
   draft: 'text-xert-concrete/40 border-xert-steel/30',
-  published: 'text-green-400 border-green-600/40',
+  published: 'text-status-confirmed-400 border-status-confirmed-600/40',
   full: 'text-xert-orange border-xert-orange/40',
   cancelled: 'text-xert-red/50 border-xert-red/20',
   completed: 'text-xert-concrete/40 border-xert-steel/30',
@@ -379,7 +379,7 @@ function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) 
             </label>
             <label className="flex min-h-11 items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.public_visible} onChange={e => set('public_visible', e.target.checked)} className="peer sr-only" />
-              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-green-500 peer-checked:bg-green-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.public_visible && <span className="text-white text-xs">&#10003;</span>}</span>
+              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-status-confirmed-500 peer-checked:bg-status-confirmed-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.public_visible && <span className="text-white text-xs">&#10003;</span>}</span>
               <span className="font-body text-sm text-xert-concrete/80">Public visible</span>
             </label>
           </div>
@@ -476,7 +476,7 @@ function RepeatModal({ session, onDone, onCancel }) {
           )}
           <label className="flex min-h-11 items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={keepPublished} onChange={e => setKeepPublished(e.target.checked)} className="peer sr-only" />
-            <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-green-500 peer-checked:bg-green-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{keepPublished && <span className="text-white text-xs">&#10003;</span>}</span>
+            <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-status-confirmed-500 peer-checked:bg-status-confirmed-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{keepPublished && <span className="text-white text-xs">&#10003;</span>}</span>
             <span className="font-body text-sm text-xert-concrete/80">Copies keep this class&rsquo;s publish status</span>
           </label>
         </div>
@@ -1205,7 +1205,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className={`font-body text-xs border px-2 py-0.5 uppercase ${STATUS_COLORS[s.status] || 'text-xert-concrete/40 border-xert-steel/30'}`}>{s.status}</span>
-                      {s.public_visible && <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">Public</span>}
+                      {s.public_visible && <span className="font-body text-xs border border-status-confirmed-600/40 text-status-confirmed-400 px-2 py-0.5 uppercase">Public</span>}
                       {s.beginner_friendly && <span className="font-body text-xs text-xert-concrete/40 uppercase text-xs">Beginner friendly</span>}
                       {s.booking_mode && <span className="font-body text-xs text-xert-concrete/40 uppercase">{s.booking_mode.replaceAll('_', ' ')}</span>}
                     </div>
@@ -1273,7 +1273,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                         && ['published', 'full', 'completed'].includes(s.status)
                         && [...roster, ...bookings].some(person => ['confirmed', 'attended', 'no_show'].includes(person.status)) && (
                         <button type="button" onClick={() => openAttendance(s)}
-                          className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-green-600/40 font-body text-[11px] uppercase tracking-wider text-green-400 hover:bg-green-900/20 transition-colors">
+                          className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-status-confirmed-600/40 font-body text-[11px] uppercase tracking-wider text-status-confirmed-400 hover:bg-status-confirmed-900/20 transition-colors">
                           <ClipboardCheck className="w-3.5 h-3.5" />
                           Take attendance
                         </button>
@@ -1427,13 +1427,13 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-5 font-body text-xs text-xert-concrete/60" aria-live="polite">
                   <span><strong className="text-xert-offwhite">{attendanceSummary.marked}/{attendanceSummary.total}</strong> marked</span>
-                  <span><strong className="text-green-400">{attendanceSummary.attended}</strong> present</span>
+                  <span><strong className="text-status-confirmed-400">{attendanceSummary.attended}</strong> present</span>
                   <span><strong className="text-xert-orange">{attendanceSummary.noShow}</strong> no show</span>
                   {attendanceSummary.unmarked > 0 && <span><strong className="text-xert-steel">{attendanceSummary.unmarked}</strong> unmarked</span>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => setAttendanceDraft(markAllAttendance(classRoll))} disabled={isSavingAttendance}
-                    className="inline-flex min-h-11 items-center gap-2 border border-green-600/40 px-3 font-body text-xs text-green-400 disabled:opacity-40">
+                    className="inline-flex min-h-11 items-center gap-2 border border-status-confirmed-600/40 px-3 font-body text-xs text-status-confirmed-400 disabled:opacity-40">
                     <CheckCheck className="h-4 w-4" /> Mark all present
                   </button>
                   <button type="button" onClick={() => setAttendanceDraft(blankAttendanceDraft(classRoll))} disabled={isSavingAttendance || attendanceSummary.marked === 0}
@@ -1471,7 +1471,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                     <div className="grid grid-cols-2" role="group" aria-label={`Attendance for ${who}`}>
                       <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [rowId]: 'attended' }))}
                         aria-pressed={attendanceDraft[rowId] === 'attended'}
-                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[rowId] === 'attended' ? 'bg-green-700 text-white' : 'border border-xert-steel/30 text-xert-concrete/60'}`}>
+                        className={`min-h-11 px-4 font-body text-xs transition-colors ${attendanceDraft[rowId] === 'attended' ? 'bg-status-confirmed-700 text-white' : 'border border-xert-steel/30 text-xert-concrete/60'}`}>
                         Present
                       </button>
                       <button type="button" onClick={() => setAttendanceDraft(current => ({ ...current, [rowId]: 'no_show' }))}
@@ -1491,7 +1491,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                 className="min-h-11 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
               <button type="button" onClick={() => void saveAttendance()} disabled={isSavingAttendance || !attendanceSummary.complete || pendingAttendanceRequests.length > 0}
                 title={pendingAttendanceRequests.length > 0 ? 'Resolve pending booking requests first' : attendanceSummary.complete ? 'Save complete roll call' : 'Mark every member before saving'}
-                className="min-h-11 bg-green-700 px-5 font-display text-xs uppercase text-white transition-colors hover:bg-green-600 disabled:opacity-40">
+                className="min-h-11 bg-status-confirmed-700 px-5 font-display text-xs uppercase text-white transition-colors hover:bg-status-confirmed-600 disabled:opacity-40">
                 {isSavingAttendance ? 'Saving roll call...' : 'Save attendance'}
               </button>
             </div>

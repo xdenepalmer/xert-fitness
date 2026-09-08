@@ -228,7 +228,7 @@ export default function SmsManager() {
                 {outcome.results.map(result => (
                   <li key={result.phone} className="flex items-center gap-3 px-4 py-2">
                     {result.ok
-                      ? <CheckCheck className="h-4 w-4 shrink-0 text-green-500" aria-label="Sent" />
+                      ? <CheckCheck className="h-4 w-4 shrink-0 text-status-confirmed-500" aria-label="Sent" />
                       : <XCircle className="h-4 w-4 shrink-0 text-xert-red" aria-label="Failed" />}
                     <span className="min-w-0 flex-1 truncate font-body text-sm text-xert-offwhite">{result.name}</span>
                     <span className="truncate font-body text-xs text-xert-concrete/40">{result.ok ? result.status : result.error}</span>

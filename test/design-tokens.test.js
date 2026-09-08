@@ -3,8 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolveTokens, generateTokens } from '../scripts/build-tokens.mjs';
 import { resolveSemanticColor } from '../src/lib/designTokens.js';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+const require = createRequire(import.meta.url);
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const source = JSON.parse(read('design/tokens.json'));
+const primitiveUtilityPattern = /(?:bg|text|border(?:-[trblxy])?|divide|ring(?:-offset)?|outline|shadow|from|via|to|fill|stroke|accent|caret|decoration|placeholder)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
 
 test('tokens resolve semantic references, elevation, opacity, and component knobs', () => {
   const values = resolveTokens(source);
@@ -54,6 +58,7 @@ test('components and pages consume semantics, never raw colors or primitives', (
         assert.ok(!content.includes(`var(--${key})`), `${dir}/${path} consumes primitive ${key}`);
       }
       assert.doesNotMatch(content, /(?:import|require)[^\n]*design\/tokens\.json/, 'components must not import the primitive source');
+      assert.doesNotMatch(content, primitiveUtilityPattern, `${dir}/${path} uses a default palette utility (including modifiers)`);
     }
   }
 });
@@ -80,17 +85,43 @@ test('motion, transparency, and density preferences are centralized', () => {
 test('canvas color resolution returns encoder-compatible hex and fails on missing tokens', () => {
   const original = globalThis.getComputedStyle;
   const values = resolveTokens(source);
-  const properties = { '--qr-background': values['semantics.qr.background'], '--qr-foreground': values['semantics.qr.foreground'], '--signature-ink': values['semantics.signature.ink'], '--chart-primary-rgb': '123 167 188' };
+  const properties = { '--qr-background': values['semantics.qr.background'], '--qr-foreground': values['semantics.qr.foreground'], '--signature-ink': values['semantics.signature.ink'], '--chart-primary': 'rgb(12 34 56 / 50%)', '--chart-primary-rgb': '123 167 188' };
   globalThis.getComputedStyle = () => ({ getPropertyValue: name => properties[name] || '' });
   try {
     assert.equal(resolveSemanticColor('qr.background', {}), '#FFFFFF');
     assert.equal(resolveSemanticColor('qr.foreground', {}), '#101820');
     assert.equal(resolveSemanticColor('signature.ink', {}), '#000000');
-    assert.equal(resolveSemanticColor('chart.primary', {}), '#7ba7bc');
+    assert.equal(resolveSemanticColor('chart.primary', {}), '#0c223880', 'actual override wins over stale generated channels, with alpha preserved');
+    properties['--chart-primary'] = 'rgba(100%, 0%, 50%, 0.25)';
+    assert.equal(resolveSemanticColor('chart.primary', {}), '#ff008040');
+    properties['--chart-primary'] = '#abcd';
+    assert.equal(resolveSemanticColor('chart.primary', {}), '#aabbccdd');
+    properties['--chart-primary'] = 'rgb(999 0 0)';
+    assert.throws(() => resolveSemanticColor('chart.primary', {}), /Missing resolved/);
     assert.throws(() => resolveSemanticColor('missing', {}), /Missing resolved/);
     assert.throws(() => resolveSemanticColor('bad;name', {}), /Invalid semantic/);
   } finally {
     if (original) globalThis.getComputedStyle = original;
     else delete globalThis.getComputedStyle;
+  }
+});
+test('default Tailwind palettes are unavailable and compatibility colors resolve to semantics', () => {
+  for (const fixture of ['hover:border-red-300/40', 'lg:dark:focus-visible:ring-offset-amber-300', '[&>svg]:fill-blue-500', 'peer-checked:bg-green-500', 'placeholder:text-slate-400']) assert.match(fixture, primitiveUtilityPattern);
+  assert.doesNotMatch('hover:border-status-danger-300/40 text-document-neutral-600', primitiveUtilityPattern);
+  const resolveConfig = require('tailwindcss/resolveConfig');
+  const config = require('tailwindcss/loadConfig')(fileURLToPath(new URL('../tailwind.config.js', import.meta.url)));
+  const palette = resolveConfig(config).theme.colors;
+  for (const key of ['red', 'amber', 'green', 'slate', 'blue', 'purple', 'emerald', 'gray']) assert.equal(palette[key], undefined, `${key} must not silently expose primitive utilities`);
+  assert.match(palette['status-danger-200'], /var\(--status-danger-200-rgb\)/);
+  assert.match(palette.black, /var\(--surface-scrim-rgb\)/);
+  assert.match(palette.white, /var\(--surface-paper-rgb\)/);
+  const values = resolveTokens(source);
+  assert.equal(values['semantics.status.danger-200'], '#fecaca');
+  assert.equal(values['semantics.status.warning-300'], '#fcd34d');
+  // Verify every former palette shade against the installed, unchanged Tailwind palette.
+  const legacy = require('tailwindcss/colors');
+  for (const [key, value] of Object.entries(source.semantics)) {
+    const reference = typeof value === 'string' && value.match(/^\{primitives\.(\w+)-(\d{2,3})\}$/);
+    if (reference && legacy[reference[1]]?.[reference[2]]) assert.equal(values[`semantics.${key}`].toLowerCase(), legacy[reference[1]][reference[2]].toLowerCase());
   }
 });

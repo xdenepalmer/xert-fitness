@@ -233,7 +233,7 @@ function ImageListEditor({ value, onChange, folder }) {
               <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 py-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity bg-surface-sidebar/85"
 >
                 <button type="button" aria-label={`Move photo ${i + 1} left`} disabled={i === 0} onClick={() => move(i, -1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30 text-xert-steel" >&#8592;</button>
-                <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="min-w-11 min-h-11 text-xs text-red-300" >&#10005;</button>
+                <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="min-w-11 min-h-11 text-xs text-status-danger-300" >&#10005;</button>
                 <button type="button" aria-label={`Move photo ${i + 1} right`} disabled={i === items.length - 1} onClick={() => move(i, 1)} className="min-w-11 min-h-11 text-xs disabled:opacity-30 text-xert-steel" >&#8594;</button>
               </div>
             </div>
@@ -359,7 +359,7 @@ function SectionEditor({ section, initial, expectedUpdatedAt, onSaved, onDirtyCh
           </button>
         )}
         {dirty && <span className="font-body text-xs ml-auto text-xert-steel" >Unsaved changes</span>}
-        {!dirty && savedAt && <span className="font-body text-xs text-green-400 ml-auto">Live ✓</span>}
+        {!dirty && savedAt && <span className="font-body text-xs text-status-confirmed-400 ml-auto">Live ✓</span>}
       </div>
     </div>
   );

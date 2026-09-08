@@ -5,6 +5,8 @@ module.exports = {
   darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   theme: {
+    // Disable Tailwind's primitive palette; every color comes from semantic tokens.
+    colors: { inherit: 'inherit', current: 'currentColor', transparent: 'transparent', ...tokens.colors },
     extend: {
       borderRadius: {
         lg: 'var(--radius)',

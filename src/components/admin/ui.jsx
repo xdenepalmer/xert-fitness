@@ -30,7 +30,7 @@ const BUTTON_BASE = 'inline-flex min-h-11 items-center justify-center gap-2 roun
 export const ADMIN_BUTTON = Object.freeze({
   primary: `${BUTTON_BASE} bg-xert-steel text-xert-navy shadow-lg shadow-xert-steel/20 hover:bg-xert-pale`,
   ghost: `${BUTTON_BASE} border border-white/10 bg-white/[0.03] text-xert-pale hover:border-xert-steel/60 hover:bg-white/[0.06] hover:text-xert-offwhite`,
-  danger: `${BUTTON_BASE} border border-red-300/40 text-red-200 hover:border-red-300 hover:text-red-100`,
+  danger: `${BUTTON_BASE} border border-status-danger-300/40 text-status-danger-200 hover:border-status-danger-300 hover:text-status-danger-100`,
 });
 
 /** Card surface used for panels and list rows. */

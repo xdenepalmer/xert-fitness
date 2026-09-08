@@ -101,6 +101,10 @@ ${durationNames}
 }
 `;
   const twColors = Object.fromEntries(colors.map(([key]) => [cssName(key), `rgb(var(--${cssName(key)}-rgb) / calc(var(--${cssName(key)}-alpha) * <alpha-value>))`]));
+  for (const [alias, key] of Object.entries(source.utilityAliases || {})) {
+    if (!colors.some(([name]) => name === key)) throw new Error(`Invalid utility alias: ${alias}`);
+    twColors[alias] = twColors[cssName(key)];
+  }
   const color = key => twColors[cssName(key)];
   Object.assign(twColors, {
     background: color('surface.base'), foreground: color('text.primary'),

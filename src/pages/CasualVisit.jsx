@@ -123,7 +123,7 @@ export default function CasualVisit({ threeDayPass = false }) {
 
           {paid ? (
             <div className="xert-card p-6 sm:p-8">
-              <CheckCircle2 className="mb-4 h-9 w-9 text-emerald-300" aria-hidden="true" />
+              <CheckCircle2 className="mb-4 h-9 w-9 text-status-success-300" aria-hidden="true" />
               <h1 className="font-display text-4xl uppercase leading-tight text-xert-offwhite">{threeDayPass ? 'Check your payment receipt' : 'Payment received'}</h1>
               <p className="mt-4 font-body text-sm leading-relaxed text-xert-pale/75">
                 {threeDayPass
@@ -147,7 +147,7 @@ export default function CasualVisit({ threeDayPass = false }) {
               </p>
 
               {cancelled && (
-                <p role="status" className="mt-6 border border-amber-300/30 bg-amber-300/10 p-3 font-body text-sm text-amber-100">
+                <p role="status" className="mt-6 border border-status-warning-300/30 bg-status-warning-300/10 p-3 font-body text-sm text-status-warning-100">
                   That payment was cancelled. Nothing has been charged — you can try again below.
                 </p>
               )}
@@ -204,7 +204,7 @@ export default function CasualVisit({ threeDayPass = false }) {
                   )}
                 </fieldset>
 
-                {error && <p role="alert" className="border border-red-300/30 bg-red-300/10 p-3 font-body text-sm text-red-100">{error}</p>}
+                {error && <p role="alert" className="border border-status-danger-300/30 bg-status-danger-300/10 p-3 font-body text-sm text-status-danger-100">{error}</p>}
 
                 <button type="submit" disabled={sending}
                   className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 bg-xert-steel px-5 font-display text-sm uppercase tracking-wide text-xert-navy transition-colors hover:bg-xert-pale disabled:opacity-50">

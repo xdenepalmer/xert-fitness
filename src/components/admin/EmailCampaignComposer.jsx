@@ -240,7 +240,7 @@ export default function EmailCampaignComposer({ emailEnabled = true, providerRea
             Email {selected.length} {selected.length === 1 ? 'person' : 'people'}
           </button>
           {blocked ? (
-            <p className="font-body text-xs text-amber-200/80">{blocked}</p>
+            <p className="font-body text-xs text-status-warning-200/80">{blocked}</p>
           ) : validationError && (subject.trim() || body.trim()) ? (
             <p className="font-body text-xs text-xert-pale/45">{validationError}</p>
           ) : null}
@@ -259,7 +259,7 @@ export default function EmailCampaignComposer({ emailEnabled = true, providerRea
                 {(outcome.results || []).map(result => (
                   <li key={result.email} className="flex items-center gap-3 px-4 py-2">
                     {result.status === 'queued'
-                      ? <CheckCheck className="h-4 w-4 shrink-0 text-green-500" aria-label="Queued" />
+                      ? <CheckCheck className="h-4 w-4 shrink-0 text-status-confirmed-500" aria-label="Queued" />
                       : <XCircle className="h-4 w-4 shrink-0 text-xert-red" aria-label="Not sent" />}
                     <span className="min-w-0 flex-1 truncate font-body text-sm text-xert-offwhite">{result.name || result.email}</span>
                     <span className="truncate font-body text-xs text-xert-pale/40">{result.status}</span>

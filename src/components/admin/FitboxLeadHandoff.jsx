@@ -104,12 +104,12 @@ export default function FitboxLeadHandoff({ lead }) {
       {loading && !state ? (
         <div className="mt-4 flex items-center gap-2 font-body text-xs text-xert-concrete/50"><Loader2 className="h-4 w-4 animate-spin" /> Checking FitBox status…</div>
       ) : linked ? (
-        <div className="mt-4 rounded-sm border border-emerald-500/30 bg-emerald-500/10 p-3">
-          <div className="flex items-center gap-2 text-emerald-300"><CheckCircle2 className="h-4 w-4" /><span className="font-display text-xs uppercase">Linked</span></div>
+        <div className="mt-4 rounded-sm border border-status-success-500/30 bg-status-success-500/10 p-3">
+          <div className="flex items-center gap-2 text-status-success-300"><CheckCircle2 className="h-4 w-4" /><span className="font-display text-xs uppercase">Linked</span></div>
           <p className="mt-2 font-body text-sm text-xert-offwhite">FitBox user {linked.fitbox_user_id}</p>
           <p className="mt-0.5 font-body text-xs text-xert-concrete/50">Provider status: {statusLabel(linked.fitbox_status || 'prospect')}</p>
           {linked.profile_synced_at ? (
-            <dl className="mt-3 space-y-1 border-t border-emerald-500/20 pt-3 font-body text-xs text-xert-concrete/70">
+            <dl className="mt-3 space-y-1 border-t border-status-success-500/20 pt-3 font-body text-xs text-xert-concrete/70">
               <div><dt className="inline text-xert-concrete/40">FitBox name: </dt><dd className="inline">{[linked.profile_first_name, linked.profile_last_name].filter(Boolean).join(' ') || 'Not supplied'}</dd></div>
               <div><dt className="inline text-xert-concrete/40">FitBox email: </dt><dd className="inline break-all">{linked.profile_email || 'Not supplied'}</dd></div>
               <div><dt className="inline text-xert-concrete/40">FitBox phone: </dt><dd className="inline">{linked.profile_phone || 'Not supplied'}</dd></div>
@@ -117,7 +117,7 @@ export default function FitboxLeadHandoff({ lead }) {
             </dl>
           ) : <p className="mt-2 font-body text-xs text-xert-concrete/50">No FitBox profile snapshot yet.</p>}
           {['failed', 'expired'].includes(profileJob?.status) && (
-            <p className={`mt-3 font-body text-xs leading-5 ${profileNeedsReview ? 'text-amber-200' : 'text-red-200'}`}>
+            <p className={`mt-3 font-body text-xs leading-5 ${profileNeedsReview ? 'text-status-warning-200' : 'text-status-danger-200'}`}>
               {ERROR_LABELS[profileJob.last_error_code] || 'The previous read-only profile refresh did not complete.'}
             </p>
           )}
@@ -125,17 +125,17 @@ export default function FitboxLeadHandoff({ lead }) {
             type="button"
             onClick={() => void refreshProfile()}
             disabled={loading || sending || refreshingProfile || profileInProgress || state?.profile_refresh_ready === false || profileNeedsReview}
-            className="mt-3 min-h-11 w-full inline-flex items-center justify-center gap-2 border border-emerald-400/35 px-4 font-display text-xs uppercase text-emerald-100 disabled:opacity-40"
+            className="mt-3 min-h-11 w-full inline-flex items-center justify-center gap-2 border border-status-success-400/35 px-4 font-display text-xs uppercase text-status-success-100 disabled:opacity-40"
           >
             <RefreshCw className={`h-4 w-4 ${(refreshingProfile || profileInProgress) ? 'animate-spin' : ''}`} />
             {profileInProgress ? 'Refreshing FitBox profile…' : 'Refresh read-only profile'}
           </button>
-          {state?.profile_refresh_ready === false && <p className="mt-2 font-body text-xs text-amber-200">{state.profile_refresh_issue}</p>}
+          {state?.profile_refresh_ready === false && <p className="mt-2 font-body text-xs text-status-warning-200">{state.profile_refresh_issue}</p>}
           <p className="mt-2 font-body text-[11px] leading-4 text-xert-concrete/45">Reads name, email, phone and provider status only. XERT profile, membership, bookings and billing are never changed.</p>
         </div>
       ) : inProgress ? (
-        <div className="mt-4 rounded-sm border border-amber-500/30 bg-amber-500/10 p-3">
-          <div className="flex items-center gap-2 text-amber-300">{job?.status === 'dispatch_unknown' ? <TriangleAlert className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}<span className="font-display text-xs uppercase">{job?.status === 'dispatch_unknown' ? 'Check FitBox before retrying' : 'Handoff in progress'}</span></div>
+        <div className="mt-4 rounded-sm border border-status-warning-500/30 bg-status-warning-500/10 p-3">
+          <div className="flex items-center gap-2 text-status-warning-300">{job?.status === 'dispatch_unknown' ? <TriangleAlert className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}<span className="font-display text-xs uppercase">{job?.status === 'dispatch_unknown' ? 'Check FitBox before retrying' : 'Handoff in progress'}</span></div>
           <p className="mt-2 font-body text-xs leading-5 text-xert-concrete/60">{job?.status === 'dispatch_unknown' ? ERROR_LABELS.ZAPIER_DISPATCH_OUTCOME_UNKNOWN : 'Zapier accepted the request. Refresh shortly to see the verified FitBox ID.'}</p>
         </div>
       ) : confirming ? (
@@ -156,11 +156,11 @@ export default function FitboxLeadHandoff({ lead }) {
         </div>
       ) : (
         <div className="mt-4">
-          {failed && <div className="mb-3 flex items-start gap-2 rounded-sm border border-red-500/30 bg-red-500/10 p-3 text-red-200"><TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /><p className="font-body text-xs leading-5">{ERROR_LABELS[job.last_error_code] || 'The previous FitBox handoff did not complete.'}</p></div>}
+          {failed && <div className="mb-3 flex items-start gap-2 rounded-sm border border-status-danger-500/30 bg-status-danger-500/10 p-3 text-status-danger-200"><TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /><p className="font-body text-xs leading-5">{ERROR_LABELS[job.last_error_code] || 'The previous FitBox handoff did not complete.'}</p></div>}
           {state?.ready === false ? (
-            <p className="font-body text-xs leading-5 text-amber-200">{state.configuration_issue}</p>
+            <p className="font-body text-xs leading-5 text-status-warning-200">{state.configuration_issue}</p>
           ) : needsProviderReview ? (
-            <p className="font-body text-xs leading-5 text-amber-200">Search for this email in FitBox and reconcile the existing prospect before sending again. Automatic retry is blocked to prevent duplicates.</p>
+            <p className="font-body text-xs leading-5 text-status-warning-200">Search for this email in FitBox and reconcile the existing prospect before sending again. Automatic retry is blocked to prevent duplicates.</p>
           ) : (
             <button type="button" onClick={() => setConfirming(true)} disabled={sending} className="min-h-11 w-full inline-flex items-center justify-center gap-2 bg-xert-steel px-4 font-display text-xs uppercase text-xert-navy hover:bg-xert-pale disabled:opacity-40">
               <ExternalLink className="h-4 w-4" /> {safeToRetry ? 'Retry FitBox handoff' : 'Send to FitBox'}
@@ -169,7 +169,7 @@ export default function FitboxLeadHandoff({ lead }) {
         </div>
       )}
 
-      {error && <p role="alert" className="mt-3 font-body text-xs leading-5 text-red-300">{error}</p>}
+      {error && <p role="alert" className="mt-3 font-body text-xs leading-5 text-status-danger-300">{error}</p>}
     </section>
   );
 }

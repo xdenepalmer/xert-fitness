@@ -18,7 +18,7 @@ import {
 } from '@/lib/classCalendar';
 
 const STATUS_CHIP = {
-  published: 'border-green-600/50 text-green-300 bg-green-900/20',
+  published: 'border-status-confirmed-600/50 text-status-confirmed-300 bg-status-confirmed-900/20',
   full: 'border-xert-orange/60 text-xert-orange bg-xert-steel/10',
   draft: 'border-dashed border-xert-steel/40 text-xert-concrete/50 bg-transparent',
   cancelled: 'border-xert-red/20 text-xert-red/40 line-through',
@@ -26,7 +26,7 @@ const STATUS_CHIP = {
 };
 
 const STATUS_DOT = {
-  published: 'bg-green-400',
+  published: 'bg-status-confirmed-400',
   full: 'bg-xert-orange',
   draft: 'bg-xert-steel/40',
   cancelled: 'bg-xert-red/30',
@@ -76,7 +76,7 @@ function TemplateQuickAddRow({ template, dayKey, onQuickAdd }) {
         </label>
         <label className="flex min-h-11 cursor-pointer items-center gap-1.5">
           <input type="checkbox" checked={publish} onChange={e => setPublish(e.target.checked)} disabled={adding} className="peer sr-only" />
-          <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center border-2 border-xert-steel/50 peer-checked:border-green-500 peer-checked:bg-green-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{publish && <span className="text-[9px] text-white">&#10003;</span>}</span>
+          <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center border-2 border-xert-steel/50 peer-checked:border-status-confirmed-500 peer-checked:bg-status-confirmed-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{publish && <span className="text-[9px] text-white">&#10003;</span>}</span>
           <span className="font-body text-[11px] uppercase tracking-wider text-xert-concrete/55">Publish</span>
         </label>
         <button type="button" onClick={handleAdd} disabled={adding}
@@ -325,7 +325,7 @@ export default function ClassCalendarBoard({
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <span className={`border px-2 py-0.5 font-body text-[10px] uppercase ${STATUS_CHIP[session.status] || STATUS_CHIP.draft}`}>{session.status}</span>
-                      {session.public_visible && <span className="border border-green-600/40 px-2 py-0.5 font-body text-[10px] uppercase text-green-400">Public</span>}
+                      {session.public_visible && <span className="border border-status-confirmed-600/40 px-2 py-0.5 font-body text-[10px] uppercase text-status-confirmed-400">Public</span>}
                     </div>
                     <p className="font-display text-base uppercase text-xert-offwhite">{session.title}</p>
                     <p className="mt-0.5 font-body text-xs text-xert-concrete/50">
@@ -398,7 +398,7 @@ export default function ClassCalendarBoard({
               </button>
             </div>
             {!templatesAvailable ? (
-              <p className="font-body text-xs text-amber-300" >
+              <p className="font-body text-xs text-status-warning-300" >
                 The class bank becomes available after class_template_bank.sql is applied.
               </p>
             ) : templatesLoading ? (

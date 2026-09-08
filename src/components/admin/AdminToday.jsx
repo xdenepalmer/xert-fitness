@@ -108,8 +108,8 @@ export default function AdminToday({ onNavigate, preview = null }) {
       </header>
 
       {error && (
-        <p role="status" className="flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4 font-body text-sm text-amber-200/80">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" /> {error}
+        <p role="status" className="flex items-start gap-3 rounded-2xl border border-status-warning-300/20 bg-status-warning-300/5 p-4 font-body text-sm text-status-warning-200/80">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-warning-300" /> {error}
         </p>
       )}
 
@@ -169,7 +169,7 @@ export default function AdminToday({ onNavigate, preview = null }) {
                   sees. places_held is the same count the capacity guards use,
                   so the tile and the guard cannot disagree. */}
               <Stat value={`${classPlacesHeld(focus)}${focus.capacity ? `/${focus.capacity}` : ''}`} label="Confirmed" />
-              <Stat value={Number(focus.requested_count || 0) + Number(focus.public_request_count || 0)} label="Requested" tone="text-amber-200" />
+              <Stat value={Number(focus.requested_count || 0) + Number(focus.public_request_count || 0)} label="Requested" tone="text-status-warning-200" />
               <Stat value={Number(focus.waitlist_count || 0) + Number(focus.public_waitlist_count || 0)} label="Waiting" tone="text-xert-steel" />
             </div>
             {todayCount > 1 && (
@@ -189,7 +189,7 @@ export default function AdminToday({ onNavigate, preview = null }) {
           <div className="space-y-2">{[0, 1].map(i => <div key={i} className="h-16 animate-pulse rounded-2xl bg-white/[0.03]" />)}</div>
         ) : queue.length === 0 ? (
           <div className={`${ADMIN_PANEL} flex items-center gap-3 p-5`}>
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-green-400/15 text-green-400"><CheckCircle2 className="h-5 w-5" /></span>
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-status-confirmed-400/15 text-status-confirmed-400"><CheckCircle2 className="h-5 w-5" /></span>
             <p className="font-body text-sm text-xert-pale/70">Nothing waiting on you. Nice.</p>
           </div>
         ) : (
@@ -201,14 +201,14 @@ export default function AdminToday({ onNavigate, preview = null }) {
                 <li key={action.key}>
                   <button type="button" onClick={() => onNavigate?.(action.target)}
                     className="flex w-full items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-white/[0.04] sm:px-5">
-                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${urgent ? 'bg-amber-300/15 text-amber-300' : 'bg-xert-steel/15 text-xert-steel'}`}>
+                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${urgent ? 'bg-status-warning-300/15 text-status-warning-300' : 'bg-xert-steel/15 text-xert-steel'}`}>
                       <Icon className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block font-body text-base font-semibold text-xert-offwhite">{action.title}</span>
                       <span className="block truncate font-body text-sm text-xert-pale/50">{action.detail}</span>
                     </span>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 font-display text-lg leading-none tabular-nums ${urgent ? 'bg-amber-300/15 text-amber-200' : 'bg-white/[0.06] text-xert-offwhite'}`}>{action.count}</span>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 font-display text-lg leading-none tabular-nums ${urgent ? 'bg-status-warning-300/15 text-status-warning-200' : 'bg-white/[0.06] text-xert-offwhite'}`}>{action.count}</span>
                     <ChevronRight className="h-5 w-5 shrink-0 text-xert-pale/30" />
                   </button>
                 </li>

@@ -226,7 +226,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
               </div>
 
               {!detail.memberNoticesAvailable ? (
-                <p className="font-body text-xs text-amber-300" >
+                <p className="font-body text-xs text-status-warning-300" >
                   Private notices are paused until targeted_member_notices_upgrade.sql is applied.
                 </p>
               ) : (
@@ -339,7 +339,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
               </div>
 
               {!detail.memberNotesAvailable ? (
-                <p className="font-body text-xs text-amber-300" >
+                <p className="font-body text-xs text-status-warning-300" >
                   Staff notes are paused until admin_member_notes_upgrade.sql is applied.
                 </p>
               ) : (
@@ -434,7 +434,7 @@ function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
                 </div>
               )}
               {!detail.creditAuditAvailable && (
-                <p className="font-body text-xs mt-3 text-amber-300" >Credit audit migration is not installed; new manual grants are paused.</p>
+                <p className="font-body text-xs mt-3 text-status-warning-300" >Credit audit migration is not installed; new manual grants are paused.</p>
               )}
             </section>
 
@@ -737,7 +737,7 @@ function FollowUpQueue({ rows, available, error, loading, onRetry, onView, onLog
           <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
         </div>
       ) : !available ? (
-        <p className="font-body text-xs text-amber-300" >Follow-ups are paused until admin_member_follow_up_upgrade.sql is applied.</p>
+        <p className="font-body text-xs text-status-warning-300" >Follow-ups are paused until admin_member_follow_up_upgrade.sql is applied.</p>
       ) : rows.length === 0 ? (
         <p className="font-body text-sm text-xert-concrete/40">No follow-ups due.</p>
       ) : (

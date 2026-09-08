@@ -146,7 +146,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
           <label htmlFor={`product-${product.id}-stripe`} className={`${labelCls} mb-0`}>Stripe Price ID (required for live checkout)</label>
           {form.active && (
-            <span className={`inline-flex items-center gap-1 font-body text-xs ${hasStripePrice && !dirty ? 'text-green-400' : 'text-xert-orange'}`}>
+            <span className={`inline-flex items-center gap-1 font-body text-xs ${hasStripePrice && !dirty ? 'text-status-confirmed-400' : 'text-xert-orange'}`}>
               {hasStripePrice && !dirty ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
               {hasStripePrice && !dirty ? 'Verified on last save' : 'Verification required'}
             </span>
@@ -174,7 +174,7 @@ function ProductCard({ product, onSaved, onDirtyChange }) {
         </label>
         <label className="flex min-h-11 items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)} disabled={provisioning} className="peer sr-only" />
-          <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center transition-all peer-checked:border-green-500 peer-checked:bg-green-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">
+          <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center transition-all peer-checked:border-status-confirmed-500 peer-checked:bg-status-confirmed-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">
             {form.active && <span className="text-white text-xs">&#10003;</span>}
           </span>
           <span className="font-body text-sm text-xert-concrete/80">Active (purchasable)</span>
@@ -377,10 +377,10 @@ export default function ProductsManager({ initialAction, onIntentHandled, onDirt
         XERT currently sells one-off session packs rather than recurring subscriptions. Price and credit changes apply to new purchases only; existing credits keep their original terms.
       </p>
       {!loading && !loadError && (
-        <div role="status" className={`mb-6 border-l-4 px-4 py-3 ${stripeReadiness.readyForLive ? 'border-green-500 bg-green-500/10' : 'border-xert-orange bg-xert-orange/10'}`}>
+        <div role="status" className={`mb-6 border-l-4 px-4 py-3 ${stripeReadiness.readyForLive ? 'border-status-confirmed-500 bg-status-confirmed-500/10' : 'border-xert-orange bg-xert-orange/10'}`}>
           <div className="flex items-start gap-3">
             {stripeReadiness.readyForLive
-              ? <CheckCircle2 className="mt-0.5 w-5 h-5 shrink-0 text-green-400" />
+              ? <CheckCircle2 className="mt-0.5 w-5 h-5 shrink-0 text-status-confirmed-400" />
               : <AlertTriangle className="mt-0.5 w-5 h-5 shrink-0 text-xert-orange" />}
             <div>
               <p className="font-display text-sm uppercase text-xert-offwhite">Live Stripe readiness</p>

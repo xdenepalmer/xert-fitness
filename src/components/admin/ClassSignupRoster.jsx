@@ -5,10 +5,10 @@ import { gymTimeLabel } from '@/lib/gymTime';
 import { rosterPeople, rosterPlacesHeld } from '@/lib/classRoster';
 
 const STATUS_CHIP = {
-  confirmed: 'border-green-600/40 text-green-400',
+  confirmed: 'border-status-confirmed-600/40 text-status-confirmed-400',
   requested: 'border-xert-orange/40 text-xert-orange',
-  waitlisted: 'border-blue-600/40 text-blue-400',
-  attended: 'border-green-600/40 text-green-400',
+  waitlisted: 'border-status-info-600/40 text-status-info-400',
+  attended: 'border-status-confirmed-600/40 text-status-confirmed-400',
   cancelled: 'border-xert-steel/30 text-xert-concrete/40',
   declined: 'border-xert-steel/30 text-xert-concrete/40',
   no_show: 'border-xert-red/40 text-xert-red',
@@ -47,7 +47,7 @@ export default function ClassSignupRoster({
             {SOURCE_LABEL[person.source]}
           </span>
           {group === 'waiting' && (
-            <span className="shrink-0 font-body text-[10px] uppercase tracking-wide text-blue-400">
+            <span className="shrink-0 font-body text-[10px] uppercase tracking-wide text-status-info-400">
               #{index + 1} in the queue
             </span>
           )}

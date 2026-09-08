@@ -180,7 +180,7 @@ export default function ClassBankManager({ templates, available, loading, onChan
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
           {!available ? (
-            <p className="font-body text-xs text-amber-300" >
+            <p className="font-body text-xs text-status-warning-300" >
               The class bank becomes available after class_template_bank.sql is applied.
             </p>
           ) : editing ? (

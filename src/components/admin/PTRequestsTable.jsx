@@ -13,10 +13,10 @@ import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 const STATUSES = ['requested', 'approved', 'declined', 'reschedule_requested', 'completed', 'cancelled'];
 const STATUS_COLORS = {
   requested: 'bg-xert-steel/20 text-xert-red',
-  approved: 'bg-green-900/30 text-green-400',
+  approved: 'bg-status-confirmed-900/30 text-status-confirmed-400',
   declined: 'bg-xert-steel/30 text-xert-concrete/40',
-  reschedule_requested: 'bg-yellow-900/30 text-yellow-400',
-  completed: 'bg-green-700/30 text-green-300',
+  reschedule_requested: 'bg-status-attention-900/30 text-status-attention-400',
+  completed: 'bg-status-confirmed-700/30 text-status-confirmed-300',
   cancelled: 'bg-xert-steel/20 text-xert-concrete/30',
 };
 const PAGE_SIZE = 50;
@@ -282,10 +282,10 @@ export default function PTRequestsTable() {
                   {isPendingPTRequest(r.status) && (
                     <>
                       <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'approved')}
-                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Approve</button>
+                        className="min-h-11 px-3 py-2.5 border border-status-confirmed-600/40 font-body text-xs text-status-confirmed-400 transition-colors">Approve</button>
                       {r.status === 'requested' && (
                         <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'reschedule_requested')}
-                          className="min-h-11 px-3 py-2.5 border border-yellow-600/40 font-body text-xs text-yellow-400 transition-colors">Reschedule</button>
+                          className="min-h-11 px-3 py-2.5 border border-status-attention-600/40 font-body text-xs text-status-attention-400 transition-colors">Reschedule</button>
                       )}
                       <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'declined')}
                         className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">Decline</button>
@@ -294,7 +294,7 @@ export default function PTRequestsTable() {
                   {r.status === 'approved' && (
                     <>
                       <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'completed')}
-                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">Mark complete</button>
+                        className="min-h-11 px-3 py-2.5 border border-status-confirmed-600/40 font-body text-xs text-status-confirmed-400 transition-colors">Mark complete</button>
                       <button disabled={updatingId !== null} onClick={() => handleUpdate(r.id, 'cancelled')}
                         className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/50 transition-colors">Cancel</button>
                     </>

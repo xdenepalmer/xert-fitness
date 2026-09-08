@@ -438,7 +438,7 @@ export default function EventsManager({ initialAction, onIntentHandled, onDirtyC
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/60 px-2 py-0.5 uppercase">{ev.category || 'other'}</span>
                   {!ev.published && <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/40 px-2 py-0.5 uppercase">Hidden</span>}
-                  {ev.url && <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">Link</span>}
+                  {ev.url && <span className="font-body text-xs border border-status-confirmed-600/40 text-status-confirmed-400 px-2 py-0.5 uppercase">Link</span>}
                   <button type="button" onClick={() => setRosterEvent(ev)} disabled={Boolean(goalLoadError)} title={goalLoadError || 'View training group'} className="inline-flex min-h-11 items-center gap-1 font-body text-xs border border-xert-red/40 text-xert-red px-2 py-2.5 uppercase disabled:opacity-40">
                       <Target className="w-3 h-3" />
                       {goalCounts[ev.id] || 0} training

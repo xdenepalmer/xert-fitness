@@ -66,9 +66,9 @@ function fullName(row) {
 
 function StatusChip({ value, tone = '' }) {
   const tones = {
-    good: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200',
-    warn: 'border-amber-300/35 bg-amber-300/10 text-amber-200',
-    bad: 'border-red-300/35 bg-red-300/10 text-red-200',
+    good: 'border-status-success-300/30 bg-status-success-300/10 text-status-success-200',
+    warn: 'border-status-warning-300/35 bg-status-warning-300/10 text-status-warning-200',
+    bad: 'border-status-danger-300/35 bg-status-danger-300/10 text-status-danger-200',
     quiet: 'border-white/10 bg-white/[0.04] text-xert-pale/70',
   };
   const resolved = tone || ({ active: 'good', booked: 'good', prospect: 'warn', cancelled: 'bad', archived: 'quiet', suspended: 'bad', completed: 'good', failed: 'bad', running: 'warn' }[value] || 'quiet');
@@ -92,7 +92,7 @@ function Stat({ label, value, hint }) {
 function ReadinessRow({ ok, label, detail }) {
   return (
     <li className="flex items-start gap-3 py-2">
-      {ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-300" /> : <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-200" />}
+      {ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-status-success-300" /> : <TriangleAlert className="mt-0.5 size-4 shrink-0 text-status-warning-200" />}
       <div>
         <p className="font-body text-sm text-xert-offwhite">{label}</p>
         {detail && <p className="font-body text-xs text-xert-pale/55">{detail}</p>}
@@ -123,9 +123,9 @@ function useMirror(loader, deps) {
 function MirrorNotice({ installed }) {
   if (installed) return null;
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-amber-300/35 bg-amber-300/10 p-4" role="status">
-      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-200" />
-      <p className="font-body text-sm leading-relaxed text-amber-100/80">
+    <div className="flex items-start gap-3 rounded-2xl border border-status-warning-300/35 bg-status-warning-300/10 p-4" role="status">
+      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-status-warning-200" />
+      <p className="font-body text-sm leading-relaxed text-status-warning-100/80">
         The FitBox mirror tables are not installed yet. Apply <code className="font-mono text-xs">supabase/migrations/20260903000000_fitbox_live_mirror.sql</code> in Supabase, then sync.
       </p>
     </div>
@@ -146,7 +146,7 @@ function OverviewTab({ overview, loading, error, onReload, onSync, syncing, sync
       <MirrorNotice installed={overview.mirror_installed} />
       <div className={`${ADMIN_PANEL} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
         <div className="flex items-start gap-3">
-          <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${gatewayReady ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}>
+          <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${gatewayReady ? 'bg-status-success-300/15 text-status-success-200' : 'bg-status-warning-300/15 text-status-warning-200'}`}>
             <Zap className="size-5" />
           </div>
           <div>
@@ -188,7 +188,7 @@ function OverviewTab({ overview, loading, error, onReload, onSync, syncing, sync
             <li className="flex items-center justify-between py-3">
               <span className="font-body text-sm text-xert-offwhite">FitBox signals awaiting review</span>
               <button type="button" onClick={() => onGoTo('review')} className="inline-flex items-center gap-2 font-body text-sm text-xert-steel">
-                <span className={`rounded-full px-2.5 py-0.5 font-body text-xs ${overview.review_queue > 0 ? 'bg-amber-300/20 text-amber-100' : 'bg-white/[0.06] text-xert-pale/60'}`}>{overview.review_queue}</span>
+                <span className={`rounded-full px-2.5 py-0.5 font-body text-xs ${overview.review_queue > 0 ? 'bg-status-warning-300/20 text-status-warning-100' : 'bg-white/[0.06] text-xert-pale/60'}`}>{overview.review_queue}</span>
                 Open
               </button>
             </li>
@@ -255,14 +255,14 @@ function LookupCard({ onFound }) {
         </button>
       </div>
       <p className="mt-2 font-body text-xs text-xert-pale/50">Asks FitBox live, stores the profile in the mirror and links it to an XERT member when the email matches exactly.</p>
-      {error && <p role="alert" className="mt-3 font-body text-sm text-red-200">{error}</p>}
-      {result && !result.found && <p className="mt-3 font-body text-sm text-amber-200">FitBox has no user for that lookup.</p>}
+      {error && <p role="alert" className="mt-3 font-body text-sm text-status-danger-200">{error}</p>}
+      {result && !result.found && <p className="mt-3 font-body text-sm text-status-warning-200">FitBox has no user for that lookup.</p>}
       {result?.found && (
-        <div className="mt-3 rounded-xl border border-emerald-300/25 bg-emerald-300/5 p-3 font-body text-sm text-xert-pale/80">
+        <div className="mt-3 rounded-xl border border-status-success-300/25 bg-status-success-300/5 p-3 font-body text-sm text-xert-pale/80">
           <p className="text-xert-offwhite">{fullName(result.user)} · <StatusChip value={result.user.status} /></p>
           <p className="mt-1 text-xs">{result.user.email || 'No email'} · {result.user.phone || 'No phone'} · FitBox ID {result.user.fitbox_user_id}</p>
           <p className="mt-1 text-xs">Next session: {result.next_session?.session_start_time ? `${result.next_session.class_name || 'Class'} · ${when(result.next_session.session_start_time)}` : result.next_session?.unavailable ? 'Could not be checked' : 'None booked'}</p>
-          {result.linked > 0 && <p className="mt-1 text-xs text-emerald-200">Linked to an XERT member by verified email.</p>}
+          {result.linked > 0 && <p className="mt-1 text-xs text-status-success-200">Linked to an XERT member by verified email.</p>}
         </div>
       )}
     </form>
@@ -302,7 +302,7 @@ function MembersTab({ links }) {
                 <p className="font-body text-[11px] text-xert-pale/40">FitBox ID {row.fitbox_user_id} · synced {when(row.synced_at)}</p>
               </div>
               <div className="flex items-center gap-2">
-                {linkedIds.has(row.fitbox_user_id) && <span className="inline-flex items-center gap-1 font-body text-[11px] uppercase tracking-wider text-emerald-200"><Link2 className="size-3" /> Linked</span>}
+                {linkedIds.has(row.fitbox_user_id) && <span className="inline-flex items-center gap-1 font-body text-[11px] uppercase tracking-wider text-status-success-200"><Link2 className="size-3" /> Linked</span>}
                 <StatusChip value={row.status} />
               </div>
             </li>
@@ -483,7 +483,7 @@ export default function FitboxHub({ initialTab = 'overview' }) {
             <button key={item.key} type="button" role="tab" aria-selected={active} onClick={() => setTab(item.key)}
               className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-4 font-body text-xs uppercase tracking-wider transition-colors ${active ? 'border-xert-steel/50 bg-xert-steel/15 text-xert-offwhite' : 'border-white/[0.06] bg-white/[0.02] text-xert-pale/60 hover:text-xert-offwhite'}`}>
               <Icon className="size-4" /> {item.label}
-              {item.key === 'review' && overview?.review_queue > 0 && <span className="rounded-full bg-amber-300/25 px-2 py-0.5 text-[10px] text-amber-100">{overview.review_queue}</span>}
+              {item.key === 'review' && overview?.review_queue > 0 && <span className="rounded-full bg-status-warning-300/25 px-2 py-0.5 text-[10px] text-status-warning-100">{overview.review_queue}</span>}
             </button>
           );
         })}

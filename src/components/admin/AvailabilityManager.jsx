@@ -175,7 +175,7 @@ export default function AvailabilityManager() {
                     <p className="font-body text-xs text-xert-concrete/50">{b.start_time ? new Date(b.start_time).toLocaleString('en-AU') : ''} — {b.end_time ? new Date(b.end_time).toLocaleString('en-AU') : ''}</p>
                     {b.coach_name && <p className="font-body text-xs text-xert-concrete/40">{b.coach_name}</p>}
                     {b.notes && <p className="font-body text-xs text-xert-concrete/40 mt-1">{b.notes}</p>}
-                    {b.is_bookable && <span className="inline-block mt-1 font-body text-[10px] uppercase tracking-wider text-green-400">Bookable</span>}
+                    {b.is_bookable && <span className="inline-block mt-1 font-body text-[10px] uppercase tracking-wider text-status-confirmed-400">Bookable</span>}
                   </div>
                   <div className="grid shrink-0 grid-cols-2 gap-2 min-[420px]:flex">
                     <button type="button" onClick={() => {

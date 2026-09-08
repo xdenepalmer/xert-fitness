@@ -124,11 +124,11 @@ export default function FitboxReconciliation({ embedded = false } = {}) {
       </header>
 
       {orphanedLinks > 0 && (
-        <section className="flex items-start gap-3 border border-amber-300/35 bg-amber-300/10 p-4" role="status">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-200" />
+        <section className="flex items-start gap-3 border border-status-warning-300/35 bg-status-warning-300/10 p-4" role="status">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-status-warning-200" />
           <div>
-            <h3 className="font-display text-sm uppercase text-amber-100">FitBox link needs source review</h3>
-            <p className="mt-1 font-body text-sm leading-relaxed text-amber-100/75">
+            <h3 className="font-display text-sm uppercase text-status-warning-100">FitBox link needs source review</h3>
+            <p className="mt-1 font-body text-sm leading-relaxed text-status-warning-100/75">
               {orphanedLinks} FitBox link{orphanedLinks === 1 ? '' : 's'} {orphanedLinks === 1 ? 'has' : 'have'} no matching XERT lead. Preserve the provider evidence and investigate the original XERT source; do not create a replacement lead or register the same FitBox user again.
             </p>
           </div>
@@ -140,8 +140,8 @@ export default function FitboxReconciliation({ embedded = false } = {}) {
           {[1, 2, 3].map(item => <div key={item} className="h-36 animate-pulse border border-xert-steel/15 bg-xert-ink" />)}
         </div>
       ) : events.length === 0 ? (
-        <section className="border border-emerald-400/25 bg-emerald-400/5 p-6 text-center">
-          <CheckCircle2 className="mx-auto size-6 text-emerald-300" />
+        <section className="border border-status-success-400/25 bg-status-success-400/5 p-6 text-center">
+          <CheckCircle2 className="mx-auto size-6 text-status-success-300" />
           <h3 className="mt-3 font-display text-xl uppercase text-xert-offwhite">Nothing waiting here</h3>
           <p className="mx-auto mt-2 max-w-lg font-body text-sm leading-relaxed text-xert-pale/60">
             There are no FitBox events in the selected state. New provider signals will remain review-only until an owner records their review.
@@ -156,7 +156,7 @@ export default function FitboxReconciliation({ embedded = false } = {}) {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center gap-1.5 border px-2 py-1 font-body text-[10px] uppercase tracking-wider ${awaitingReview ? 'border-amber-300/35 bg-amber-300/10 text-amber-200' : 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200'}`}>
+                      <span className={`inline-flex items-center gap-1.5 border px-2 py-1 font-body text-[10px] uppercase tracking-wider ${awaitingReview ? 'border-status-warning-300/35 bg-status-warning-300/10 text-status-warning-200' : 'border-status-success-300/30 bg-status-success-300/10 text-status-success-200'}`}>
                         {awaitingReview ? <TriangleAlert className="size-3" /> : <CheckCircle2 className="size-3" />}
                         {readable(event.processing_state)}
                       </span>

@@ -290,7 +290,7 @@ export default function SoftLaunchSettings({ onDirtyChange = NOOP }) {
 
       <div className="flex flex-col sm:flex-row gap-3">
         <button onClick={handleSave} disabled={saving || !dirty}
-          className={`flex-1 min-h-12 py-3 font-display text-base uppercase transition-colors disabled:opacity-50 ${saved ? 'bg-green-600 text-xert-navy' : 'bg-xert-steel text-xert-navy hover:bg-xert-pale'}`}>
+          className={`flex-1 min-h-12 py-3 font-display text-base uppercase transition-colors disabled:opacity-50 ${saved ? 'bg-status-confirmed-600 text-xert-navy' : 'bg-xert-steel text-xert-navy hover:bg-xert-pale'}`}>
           {saved ? 'Saved ✓' : saving ? 'Saving...' : dirty ? 'Save settings' : 'Settings saved'}
         </button>
         {dirty && (

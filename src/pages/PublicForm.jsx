@@ -156,7 +156,7 @@ function SignatureInput({ value, onChange }) {
       <p className="mt-2 text-xs text-xert-pale/55">
         Dated <time dateTime={new Date().toISOString().slice(0, 10)}>{new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</time>, recorded with your signature.
       </p>
-      {value && <p className="text-xs text-emerald-300">Signature captured</p>}
+      {value && <p className="text-xs text-status-success-300">Signature captured</p>}
     </div>
   );
 }
@@ -320,7 +320,7 @@ export default function PublicForm() {
   if (loading || handingOver) return <main className="min-h-screen bg-xert-navy grid place-items-center text-xert-pale" role="status"><LoaderCircle className="mr-3 inline h-6 w-6 animate-spin text-xert-steel" /> {handingOver ? 'Saved. Opening the next form…' : 'Loading form…'}</main>;
   if (gatePath) return <main className="min-h-screen bg-xert-navy grid place-items-center p-6 text-center text-xert-pale" role="status"><div><LoaderCircle className="mx-auto mb-4 h-6 w-6 animate-spin text-xert-steel" /><p className="text-xert-offwhite">{form.prerequisite_title || 'Another form'} comes first.</p><p className="mt-2 text-sm text-xert-pale/60">Taking you there now. {form.title} opens as soon as it is done.</p></div></main>;
   if (!form) return <main className="min-h-screen bg-xert-navy grid place-items-center p-6 text-center"><div><img src="/assets/xert-logo-horizontal-light.png" alt="XERT" className="mx-auto mb-8 h-10" /><h1 className="font-display text-4xl text-white">Form unavailable</h1><p className="mt-3 text-xert-pale/60">This link may be paused, archived or incorrect.</p></div></main>;
-  if (submitted) return <main className="min-h-screen bg-xert-navy xert-glow-top grid place-items-center p-6"><section className="xert-card w-full max-w-xl p-8 text-center"><span className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full bg-emerald-400/10 text-emerald-300"><Check /></span><h1 className="font-display text-4xl uppercase tracking-wide text-white">Response received</h1><p className="mt-4 text-xert-pale/70">{form.thank_you_message}</p></section></main>;
+  if (submitted) return <main className="min-h-screen bg-xert-navy xert-glow-top grid place-items-center p-6"><section className="xert-card w-full max-w-xl p-8 text-center"><span className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full bg-status-success-400/10 text-status-success-300"><Check /></span><h1 className="font-display text-4xl uppercase tracking-wide text-white">Response received</h1><p className="mt-4 text-xert-pale/70">{form.thank_you_message}</p></section></main>;
   const progress = steps.length ? Math.min(100, Math.max(0, step / steps.length * 100)) : 100;
   return (
     <main className="min-h-screen bg-xert-navy xert-glow-top px-4 py-6 text-xert-offwhite sm:px-6 sm:py-12">

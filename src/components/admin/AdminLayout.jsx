@@ -180,7 +180,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
             <img src={LOGO} alt="XERT" className="h-6 w-auto mb-2" />
             <div className="flex items-center gap-2">
               {badgesUnavailable ? (
-                <CircleAlert className="w-3.5 h-3.5 text-amber-300" />
+                <CircleAlert className="w-3.5 h-3.5 text-status-warning-300" />
               ) : (
                 <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-xert-steel" />
               )}
@@ -290,8 +290,8 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                   <span className="truncate">{activeLabel}</span>
                 </h1>
                 {hasUnsavedChanges && (
-                  <p className="mt-0.5 inline-flex items-center gap-1.5 font-body text-[11px] font-medium text-amber-300" role="status">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-300" /> Unsaved changes
+                  <p className="mt-0.5 inline-flex items-center gap-1.5 font-body text-[11px] font-medium text-status-warning-300" role="status">
+                    <span className="h-1.5 w-1.5 rounded-full bg-status-warning-300" /> Unsaved changes
                   </p>
                 )}
               </div>

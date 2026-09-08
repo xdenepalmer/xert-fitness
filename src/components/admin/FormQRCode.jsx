@@ -81,10 +81,10 @@ export default function FormQRCode({
       <div className="mx-auto mt-5 max-w-72 bg-white p-3">
         <div className="relative aspect-square w-full">
           <canvas ref={canvasRef} aria-label={`QR code for ${form.title || title}`} className={`h-full w-full transition-opacity ${ready ? 'opacity-100' : 'opacity-0'}`} />
-          {!ready && !error && <div role="status" className="absolute inset-0 grid place-items-center text-sm text-slate-600"><span><LoaderCircle className="mr-2 inline h-5 w-5 animate-spin" />Creating QR…</span></div>}
+          {!ready && !error && <div role="status" className="absolute inset-0 grid place-items-center text-sm text-document-neutral-600"><span><LoaderCircle className="mr-2 inline h-5 w-5 animate-spin" />Creating QR…</span></div>}
         </div>
       </div>
-      {error && <p role="alert" className="mt-3 border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">{error}</p>}
+      {error && <p role="alert" className="mt-3 border border-status-warning-300/25 bg-status-warning-300/10 p-3 text-sm text-status-warning-100">{error}</p>}
       <div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" className={action} disabled={!ready || busy} onClick={download}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Download PNG</button>{canShareFile && <button type="button" className={action} disabled={!ready || busy} onClick={share}><Share2 className="h-4 w-4" /> Share QR image</button>}</div>
       <p className="mt-3 break-all text-xs text-xert-pale/40">{publicURL}</p>
     </section>

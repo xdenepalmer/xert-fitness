@@ -17,11 +17,11 @@ const EMPTY_FORM = { title: '', body: '', tone: 'info', expires_at: '', cta_labe
 const NOOP = _dirty => {};
 const TONE_LABELS = { info: 'Information', action: 'Action requested', urgent: 'Urgent' };
 const STATE_STYLES = {
-  live: 'border-green-500/40 text-green-300',
+  live: 'border-status-confirmed-500/40 text-status-confirmed-300',
   scheduled: 'border-xert-steel/50 text-xert-steel',
   draft: 'border-xert-pale/25 text-xert-pale/60',
   expired: 'border-xert-pale/15 text-xert-pale/35',
-  archived: 'border-amber-500/30 text-amber-300/70',
+  archived: 'border-status-warning-500/30 text-status-warning-300/70',
 };
 const inputClass = ADMIN_INPUT;
 
@@ -284,17 +284,17 @@ export default function AnnouncementsManager({ initialAction, onIntentHandled, o
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
                     {state === 'archived' ? (
-                      <button type="button" onClick={() => void setArchived(item, false)} disabled={saving} title="Restore announcement as draft" aria-label={`Restore ${item.title} as draft`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-amber-500/30 text-amber-300 disabled:opacity-40"><ArchiveRestore className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => void setArchived(item, false)} disabled={saving} title="Restore announcement as draft" aria-label={`Restore ${item.title} as draft`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-status-warning-500/30 text-status-warning-300 disabled:opacity-40"><ArchiveRestore className="w-4 h-4" /></button>
                     ) : (
                       <>
                         <button type="button" onClick={() => openEdit(item)} disabled={saving} title="Edit announcement" aria-label={`Edit ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><Pencil className="w-4 h-4" /></button>
                         {state === 'live' || state === 'scheduled' ? (
                           <button type="button" onClick={() => void setPublished(item, false)} disabled={saving} title="Unpublish announcement" aria-label={`Unpublish ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-pale disabled:opacity-40"><EyeOff className="w-4 h-4" /></button>
                         ) : (
-                          <button type="button" onClick={() => void setPublished(item, true)} disabled={saving} title="Publish announcement" aria-label={`Publish ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-green-500/40 text-green-300 disabled:opacity-40"><Eye className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => void setPublished(item, true)} disabled={saving} title="Publish announcement" aria-label={`Publish ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-status-confirmed-500/40 text-status-confirmed-300 disabled:opacity-40"><Eye className="w-4 h-4" /></button>
                         )}
                         {item.first_published_at ? (
-                          <button type="button" onClick={() => setPendingArchive(item)} disabled={saving} title="Archive announcement" aria-label={`Archive ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-amber-500/30 text-amber-300 disabled:opacity-40"><Archive className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => setPendingArchive(item)} disabled={saving} title="Archive announcement" aria-label={`Archive ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-status-warning-500/30 text-status-warning-300 disabled:opacity-40"><Archive className="w-4 h-4" /></button>
                         ) : (
                           <button type="button" onClick={() => setPendingDelete(item)} disabled={saving} title="Delete draft" aria-label={`Delete draft ${item.title}`} className="min-w-11 min-h-11 inline-flex items-center justify-center border border-xert-red/30 text-xert-red disabled:opacity-40"><Trash2 className="w-4 h-4" /></button>
                         )}

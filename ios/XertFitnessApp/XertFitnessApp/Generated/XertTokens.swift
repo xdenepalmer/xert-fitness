@@ -28,10 +28,26 @@ enum XertTokens {
     static let brandGoogleGreen = Color(.sRGB, red: 52.0 / 255, green: 168.0 / 255, blue: 83.0 / 255, opacity: 255.0 / 255)
     static let brandGoogleRed = Color(.sRGB, red: 234.0 / 255, green: 67.0 / 255, blue: 53.0 / 255, opacity: 255.0 / 255)
     static let brandGoogleYellow = Color(.sRGB, red: 251.0 / 255, green: 188.0 / 255, blue: 5.0 / 255, opacity: 255.0 / 255)
+    static let categoryRecovery300 = Color(.sRGB, red: 94.0 / 255, green: 234.0 / 255, blue: 212.0 / 255, opacity: 255.0 / 255)
+    static let categoryRecovery900 = Color(.sRGB, red: 19.0 / 255, green: 78.0 / 255, blue: 74.0 / 255, opacity: 255.0 / 255)
+    static let categorySpecialty400 = Color(.sRGB, red: 192.0 / 255, green: 132.0 / 255, blue: 252.0 / 255, opacity: 255.0 / 255)
+    static let categorySpecialty600 = Color(.sRGB, red: 147.0 / 255, green: 51.0 / 255, blue: 234.0 / 255, opacity: 255.0 / 255)
+    static let categorySpecialty900 = Color(.sRGB, red: 88.0 / 255, green: 28.0 / 255, blue: 135.0 / 255, opacity: 255.0 / 255)
     static let chartDanger = Color(.sRGB, red: 240.0 / 255, green: 161.0 / 255, blue: 161.0 / 255, opacity: 255.0 / 255)
     static let chartPrimary = Color(.sRGB, red: 123.0 / 255, green: 167.0 / 255, blue: 188.0 / 255, opacity: 255.0 / 255)
     static let chartSuccess = Color(.sRGB, red: 126.0 / 255, green: 201.0 / 255, blue: 143.0 / 255, opacity: 255.0 / 255)
     static let chartWarning = Color(.sRGB, red: 228.0 / 255, green: 179.0 / 255, blue: 99.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral100 = Color(.sRGB, red: 241.0 / 255, green: 245.0 / 255, blue: 249.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral200 = Color(.sRGB, red: 226.0 / 255, green: 232.0 / 255, blue: 240.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral300 = Color(.sRGB, red: 203.0 / 255, green: 213.0 / 255, blue: 225.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral400 = Color(.sRGB, red: 148.0 / 255, green: 163.0 / 255, blue: 184.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral50 = Color(.sRGB, red: 248.0 / 255, green: 250.0 / 255, blue: 252.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral500 = Color(.sRGB, red: 100.0 / 255, green: 116.0 / 255, blue: 139.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral600 = Color(.sRGB, red: 71.0 / 255, green: 85.0 / 255, blue: 105.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral700 = Color(.sRGB, red: 51.0 / 255, green: 65.0 / 255, blue: 85.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral800 = Color(.sRGB, red: 30.0 / 255, green: 41.0 / 255, blue: 59.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral900 = Color(.sRGB, red: 15.0 / 255, green: 23.0 / 255, blue: 42.0 / 255, opacity: 255.0 / 255)
+    static let documentNeutral950 = Color(.sRGB, red: 2.0 / 255, green: 6.0 / 255, blue: 23.0 / 255, opacity: 255.0 / 255)
     static let focusRing = Color(.sRGB, red: 123.0 / 255, green: 167.0 / 255, blue: 188.0 / 255, opacity: 255.0 / 255)
     static let qrBackground = Color(.sRGB, red: 255.0 / 255, green: 255.0 / 255, blue: 255.0 / 255, opacity: 255.0 / 255)
     static let qrForeground = Color(.sRGB, red: 16.0 / 255, green: 24.0 / 255, blue: 32.0 / 255, opacity: 255.0 / 255)
@@ -63,6 +79,41 @@ enum XertTokens {
     static let stateWarning10 = Color(.sRGB, red: 224.0 / 255, green: 179.0 / 255, blue: 106.0 / 255, opacity: 26.0 / 255)
     static let stateWarning28 = Color(.sRGB, red: 224.0 / 255, green: 179.0 / 255, blue: 106.0 / 255, opacity: 71.0 / 255)
     static let stateWarning50 = Color(.sRGB, red: 224.0 / 255, green: 179.0 / 255, blue: 106.0 / 255, opacity: 128.0 / 255)
+    static let statusAttention400 = Color(.sRGB, red: 250.0 / 255, green: 204.0 / 255, blue: 21.0 / 255, opacity: 255.0 / 255)
+    static let statusAttention600 = Color(.sRGB, red: 202.0 / 255, green: 138.0 / 255, blue: 4.0 / 255, opacity: 255.0 / 255)
+    static let statusAttention900 = Color(.sRGB, red: 113.0 / 255, green: 63.0 / 255, blue: 18.0 / 255, opacity: 255.0 / 255)
+    static let statusCaution900 = Color(.sRGB, red: 124.0 / 255, green: 45.0 / 255, blue: 18.0 / 255, opacity: 255.0 / 255)
+    static let statusConfirmed300 = Color(.sRGB, red: 134.0 / 255, green: 239.0 / 255, blue: 172.0 / 255, opacity: 255.0 / 255)
+    static let statusConfirmed400 = Color(.sRGB, red: 74.0 / 255, green: 222.0 / 255, blue: 128.0 / 255, opacity: 255.0 / 255)
+    static let statusConfirmed500 = Color(.sRGB, red: 34.0 / 255, green: 197.0 / 255, blue: 94.0 / 255, opacity: 255.0 / 255)
+    static let statusConfirmed600 = Color(.sRGB, red: 22.0 / 255, green: 163.0 / 255, blue: 74.0 / 255, opacity: 255.0 / 255)
+    static let statusConfirmed700 = Color(.sRGB, red: 21.0 / 255, green: 128.0 / 255, blue: 61.0 / 255, opacity: 255.0 / 255)
+    static let statusConfirmed900 = Color(.sRGB, red: 20.0 / 255, green: 83.0 / 255, blue: 45.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger100 = Color(.sRGB, red: 254.0 / 255, green: 226.0 / 255, blue: 226.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger200 = Color(.sRGB, red: 254.0 / 255, green: 202.0 / 255, blue: 202.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger300 = Color(.sRGB, red: 252.0 / 255, green: 165.0 / 255, blue: 165.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger400 = Color(.sRGB, red: 248.0 / 255, green: 113.0 / 255, blue: 113.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger50 = Color(.sRGB, red: 254.0 / 255, green: 242.0 / 255, blue: 242.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger500 = Color(.sRGB, red: 239.0 / 255, green: 68.0 / 255, blue: 68.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger600 = Color(.sRGB, red: 220.0 / 255, green: 38.0 / 255, blue: 38.0 / 255, opacity: 255.0 / 255)
+    static let statusDanger700 = Color(.sRGB, red: 185.0 / 255, green: 28.0 / 255, blue: 28.0 / 255, opacity: 255.0 / 255)
+    static let statusInfo400 = Color(.sRGB, red: 96.0 / 255, green: 165.0 / 255, blue: 250.0 / 255, opacity: 255.0 / 255)
+    static let statusInfo600 = Color(.sRGB, red: 37.0 / 255, green: 99.0 / 255, blue: 235.0 / 255, opacity: 255.0 / 255)
+    static let statusInfo900 = Color(.sRGB, red: 30.0 / 255, green: 58.0 / 255, blue: 138.0 / 255, opacity: 255.0 / 255)
+    static let statusSuccess100 = Color(.sRGB, red: 209.0 / 255, green: 250.0 / 255, blue: 229.0 / 255, opacity: 255.0 / 255)
+    static let statusSuccess200 = Color(.sRGB, red: 167.0 / 255, green: 243.0 / 255, blue: 208.0 / 255, opacity: 255.0 / 255)
+    static let statusSuccess300 = Color(.sRGB, red: 110.0 / 255, green: 231.0 / 255, blue: 183.0 / 255, opacity: 255.0 / 255)
+    static let statusSuccess400 = Color(.sRGB, red: 52.0 / 255, green: 211.0 / 255, blue: 153.0 / 255, opacity: 255.0 / 255)
+    static let statusSuccess500 = Color(.sRGB, red: 16.0 / 255, green: 185.0 / 255, blue: 129.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning100 = Color(.sRGB, red: 254.0 / 255, green: 243.0 / 255, blue: 199.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning200 = Color(.sRGB, red: 253.0 / 255, green: 230.0 / 255, blue: 138.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning300 = Color(.sRGB, red: 252.0 / 255, green: 211.0 / 255, blue: 77.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning50 = Color(.sRGB, red: 255.0 / 255, green: 251.0 / 255, blue: 235.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning500 = Color(.sRGB, red: 245.0 / 255, green: 158.0 / 255, blue: 11.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning700 = Color(.sRGB, red: 180.0 / 255, green: 83.0 / 255, blue: 9.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning800 = Color(.sRGB, red: 146.0 / 255, green: 64.0 / 255, blue: 14.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning900 = Color(.sRGB, red: 120.0 / 255, green: 53.0 / 255, blue: 15.0 / 255, opacity: 255.0 / 255)
+    static let statusWarning950 = Color(.sRGB, red: 69.0 / 255, green: 26.0 / 255, blue: 3.0 / 255, opacity: 255.0 / 255)
     static let surfaceBase = Color(.sRGB, red: 16.0 / 255, green: 24.0 / 255, blue: 32.0 / 255, opacity: 255.0 / 255)
     static let surfaceBase30 = Color(.sRGB, red: 16.0 / 255, green: 24.0 / 255, blue: 32.0 / 255, opacity: 77.0 / 255)
     static let surfaceBase50 = Color(.sRGB, red: 16.0 / 255, green: 24.0 / 255, blue: 32.0 / 255, opacity: 128.0 / 255)
@@ -165,10 +216,26 @@ enum XertTokens {
         "brand.google-green",
         "brand.google-red",
         "brand.google-yellow",
+        "category.recovery-300",
+        "category.recovery-900",
+        "category.specialty-400",
+        "category.specialty-600",
+        "category.specialty-900",
         "chart.danger",
         "chart.primary",
         "chart.success",
         "chart.warning",
+        "document.neutral-100",
+        "document.neutral-200",
+        "document.neutral-300",
+        "document.neutral-400",
+        "document.neutral-50",
+        "document.neutral-500",
+        "document.neutral-600",
+        "document.neutral-700",
+        "document.neutral-800",
+        "document.neutral-900",
+        "document.neutral-950",
         "focus.ring",
         "qr.background",
         "qr.foreground",
@@ -200,6 +267,41 @@ enum XertTokens {
         "state.warning-10",
         "state.warning-28",
         "state.warning-50",
+        "status.attention-400",
+        "status.attention-600",
+        "status.attention-900",
+        "status.caution-900",
+        "status.confirmed-300",
+        "status.confirmed-400",
+        "status.confirmed-500",
+        "status.confirmed-600",
+        "status.confirmed-700",
+        "status.confirmed-900",
+        "status.danger-100",
+        "status.danger-200",
+        "status.danger-300",
+        "status.danger-400",
+        "status.danger-50",
+        "status.danger-500",
+        "status.danger-600",
+        "status.danger-700",
+        "status.info-400",
+        "status.info-600",
+        "status.info-900",
+        "status.success-100",
+        "status.success-200",
+        "status.success-300",
+        "status.success-400",
+        "status.success-500",
+        "status.warning-100",
+        "status.warning-200",
+        "status.warning-300",
+        "status.warning-50",
+        "status.warning-500",
+        "status.warning-700",
+        "status.warning-800",
+        "status.warning-900",
+        "status.warning-950",
         "surface.base",
         "surface.base-30",
         "surface.base-50",

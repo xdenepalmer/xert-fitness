@@ -3,21 +3,21 @@ import { classSignupState } from '@/lib/classSignup';
 import { gymShortDateLabel, gymTimeLabel } from '@/lib/gymTime';
 
 export const CLASS_COLORS = {
-  'XERT Foundation': 'border-green-600/40 text-green-400',
-  'XERT Strength': 'border-blue-600/40 text-blue-400',
+  'XERT Foundation': 'border-status-confirmed-600/40 text-status-confirmed-400',
+  'XERT Strength': 'border-status-info-600/40 text-status-info-400',
   'XERT Engine': 'border-xert-orange/40 text-xert-orange',
-  'XERT Hybrid': 'border-purple-600/40 text-purple-400',
+  'XERT Hybrid': 'border-category-specialty-600/40 text-category-specialty-400',
   'XERT Event Prep': 'border-xert-red/40 text-xert-red',
-  'XERT Team': 'border-yellow-600/40 text-yellow-400',
+  'XERT Team': 'border-status-attention-600/40 text-status-attention-400',
 };
 
 export const CLASS_DOT_COLORS = {
-  'XERT Foundation': 'bg-green-400',
-  'XERT Strength': 'bg-blue-400',
+  'XERT Foundation': 'bg-status-confirmed-400',
+  'XERT Strength': 'bg-status-info-400',
   'XERT Engine': 'bg-xert-orange',
-  'XERT Hybrid': 'bg-purple-400',
+  'XERT Hybrid': 'bg-category-specialty-400',
   'XERT Event Prep': 'bg-xert-red',
-  'XERT Team': 'bg-yellow-400',
+  'XERT Team': 'bg-status-attention-400',
 };
 
 const actionClasses = 'flex min-h-[52px] w-full items-center justify-center px-5 text-center font-display text-sm uppercase tracking-wide';

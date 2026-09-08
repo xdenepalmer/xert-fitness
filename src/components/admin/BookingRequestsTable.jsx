@@ -17,12 +17,12 @@ import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 const STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
 const STATUS_COLORS = {
   requested: 'bg-xert-steel/20 text-xert-red',
-  confirmed: 'bg-green-900/30 text-green-400',
-  waitlisted: 'bg-yellow-900/30 text-yellow-400',
+  confirmed: 'bg-status-confirmed-900/30 text-status-confirmed-400',
+  waitlisted: 'bg-status-attention-900/30 text-status-attention-400',
   cancelled: 'bg-xert-steel/30 text-xert-concrete/40',
   declined: 'bg-xert-steel/30 text-xert-concrete/40',
-  attended: 'bg-green-700/30 text-green-300',
-  no_show: 'bg-orange-900/30 text-xert-orange',
+  attended: 'bg-status-confirmed-700/30 text-status-confirmed-300',
+  no_show: 'bg-status-caution-900/30 text-xert-orange',
 };
 const PAGE_SIZE = 50;
 
@@ -367,11 +367,11 @@ export default function BookingRequestsTable() {
                   {b.status === 'requested' && (
                     <>
                       <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'confirmed')}
-                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-status-confirmed-600/40 font-body text-xs text-status-confirmed-400 hover:bg-status-confirmed-900/20 transition-colors">
                         Confirm
                       </button>
                       <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'waitlisted')}
-                        className="min-h-11 px-3 py-2.5 border border-yellow-600/40 font-body text-xs text-yellow-400 hover:bg-yellow-900/20 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-status-attention-600/40 font-body text-xs text-status-attention-400 hover:bg-status-attention-900/20 transition-colors">
                         Waitlist
                       </button>
                       <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'declined')}
@@ -386,7 +386,7 @@ export default function BookingRequestsTable() {
                   {b.status === 'confirmed' && classHasStarted(b) && (
                     <>
                       <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'attended')}
-                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-status-confirmed-600/40 font-body text-xs text-status-confirmed-400 transition-colors">
                         Attended
                       </button>
                       <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'no_show')}
@@ -403,7 +403,7 @@ export default function BookingRequestsTable() {
                   {b.status === 'waitlisted' && (
                     <>
                       <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'confirmed')}
-                        className="min-h-11 px-3 py-2.5 border border-green-600/40 font-body text-xs text-green-400 hover:bg-green-900/20 transition-colors">
+                        className="min-h-11 px-3 py-2.5 border border-status-confirmed-600/40 font-body text-xs text-status-confirmed-400 hover:bg-status-confirmed-900/20 transition-colors">
                         Confirm
                       </button>
                       <button disabled={updatingKey === bookingActionKey(b)} onClick={() => handleStatusUpdate(b, 'declined')}

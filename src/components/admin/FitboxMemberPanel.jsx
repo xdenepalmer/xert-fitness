@@ -88,13 +88,13 @@ export default function FitboxMemberPanel({ member }) {
       {loading && !state ? (
         <p className="mt-3 flex items-center gap-2 font-body text-xs text-xert-pale/50"><Loader2 className="size-4 animate-spin" /> Checking FitBox mirror…</p>
       ) : state?.installed === false ? (
-        <p className="mt-3 font-body text-xs text-amber-200">FitBox mirror tables are not installed yet.</p>
+        <p className="mt-3 font-body text-xs text-status-warning-200">FitBox mirror tables are not installed yet.</p>
       ) : user ? (
         <div className="mt-3 space-y-3 font-body text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xert-offwhite">{[user.first_name, user.last_name].filter(Boolean).join(' ') || user.email}</span>
             <span className="rounded-full border border-white/10 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-xert-pale/70">{user.status || 'unknown'}</span>
-            {state.link && <span className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-emerald-200">Linked · {String(state.link.link_method || '').replace(/_/g, ' ')}</span>}
+            {state.link && <span className="rounded-full border border-status-success-300/30 bg-status-success-300/10 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-status-success-200">Linked · {String(state.link.link_method || '').replace(/_/g, ' ')}</span>}
           </div>
           <p className="text-xs text-xert-pale/55">FitBox ID {user.fitbox_user_id} · {user.email || 'no email'} · {user.phone || 'no phone'} · synced {when(user.synced_at)}</p>
           {state.subscriptions.length > 0 ? state.subscriptions.map(row => (
@@ -112,7 +112,7 @@ export default function FitboxMemberPanel({ member }) {
           {checking ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} {checking ? 'Asking FitBox…' : 'Check FitBox now'}
         </button>
       )}
-      {error && <p role="alert" className="mt-3 font-body text-xs text-red-200">{error}</p>}
+      {error && <p role="alert" className="mt-3 font-body text-xs text-status-danger-200">{error}</p>}
     </section>
   );
 }

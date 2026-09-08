@@ -11,7 +11,7 @@ import FormQRCode from '@/components/admin/FormQRCode';
 import { ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
 
 const STATUS_COLORS = {
-  paid: 'text-green-400 border-green-600/40',
+  paid: 'text-status-confirmed-400 border-status-confirmed-600/40',
   pending: 'text-xert-orange border-xert-orange/40',
   failed: 'text-xert-red/60 border-xert-red/30',
   refunded: 'text-xert-concrete/40 border-xert-steel/30',

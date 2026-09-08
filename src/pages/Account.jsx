@@ -925,7 +925,7 @@ export default function Account() {
                   </>
                 )}
                 {readinessError && <p className="font-body text-sm text-state-warning" role="alert">{readinessError}</p>}
-                {readinessSavedMessage && <p className="flex items-center gap-2 font-body text-sm text-green-300" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden="true" />{readinessSavedMessage}</p>}
+                {readinessSavedMessage && <p className="flex items-center gap-2 font-body text-sm text-status-confirmed-300" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden="true" />{readinessSavedMessage}</p>}
               </form>
             )}
           </div>

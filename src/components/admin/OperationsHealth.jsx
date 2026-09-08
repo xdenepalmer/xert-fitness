@@ -270,7 +270,7 @@ export default function OperationsHealth({ onNavigate }) {
       {!loading && !loadError && (
         <section
           aria-labelledby="launch-gate-title"
-          className={`p-5 border ${launchGateIsStaged ? 'bg-xert-steel/10 border-xert-steel/30' : launchGateIsReady ? 'bg-green-400/10 border-green-400/30' : launchGate.state === 'blocked' ? 'bg-red-400/10 border-red-400/30' : 'bg-amber-300/10 border-amber-300/30'}`}
+          className={`p-5 border ${launchGateIsStaged ? 'bg-xert-steel/10 border-xert-steel/30' : launchGateIsReady ? 'bg-status-confirmed-400/10 border-status-confirmed-400/30' : launchGate.state === 'blocked' ? 'bg-status-danger-400/10 border-status-danger-400/30' : 'bg-status-warning-300/10 border-status-warning-300/30'}`}
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -285,7 +285,7 @@ export default function OperationsHealth({ onNavigate }) {
           </div>
           <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-xert-navy/70">
             <div
-              className={`h-full rounded-full transition-[width] ${launchGateIsStaged ? 'bg-xert-steel' : launchGateIsReady ? 'bg-green-400' : launchGate.state === 'blocked' ? 'bg-red-400' : 'bg-amber-300'}`}
+              className={`h-full rounded-full transition-[width] ${launchGateIsStaged ? 'bg-xert-steel' : launchGateIsReady ? 'bg-status-confirmed-400' : launchGate.state === 'blocked' ? 'bg-status-danger-400' : 'bg-status-warning-300'}`}
               style={{ width: `${Math.round((launchGate.completed / launchGate.total) * 100)}%` }}
             />
           </div>
@@ -362,11 +362,11 @@ export default function OperationsHealth({ onNavigate }) {
                 {check.incidents?.length > 0 && (
                   <div className="mt-4 space-y-2" aria-label="Unresolved Stripe webhook incidents">
                     {check.incidents.map(incident => (
-                      <div key={incident.event_id} className="p-3 bg-xert-navy/50 border border-red-400/20">
+                      <div key={incident.event_id} className="p-3 bg-xert-navy/50 border border-status-danger-400/20">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-body text-[10px] font-semibold uppercase tracking-wider text-red-400" >
+                              <span className="font-body text-[10px] font-semibold uppercase tracking-wider text-status-danger-400" >
                                 {incident.status}
                               </span>
                               <span className="font-body text-xs text-xert-pale/70 break-all">{incident.event_type}</span>
@@ -395,7 +395,7 @@ export default function OperationsHealth({ onNavigate }) {
                         </div>
                         {incident.resolution && (
                           <div className="mt-3 space-y-3">
-                            <p className="font-body text-xs leading-relaxed text-amber-300/90" >
+                            <p className="font-body text-xs leading-relaxed text-status-warning-300/90" >
                               {incident.resolution}
                             </p>
                             <button type="button" onClick={() => setPendingResolution(incident)}

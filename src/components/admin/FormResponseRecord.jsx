@@ -49,10 +49,10 @@ function ChoiceAnswer({ question, value }) {
       <div className="xert-response-choices grid gap-2 sm:grid-cols-2">
         {options.map((option, index) => {
           const checked = selected.includes(option);
-          return <div className={`flex min-h-10 items-center gap-3 border px-3 py-2 ${checked ? 'border-slate-600 bg-slate-100' : 'border-slate-200'}`} key={`${option}-${index}`}><span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center border border-slate-500 ${multiple ? '' : 'rounded-full'} ${checked ? 'bg-slate-800 text-white' : ''}`}>{checked && <Check className="h-3.5 w-3.5" />}</span><span className={`min-w-0 break-words ${checked ? 'font-semibold text-slate-950' : 'text-slate-500'}`}>{option}</span></div>;
+          return <div className={`flex min-h-10 items-center gap-3 border px-3 py-2 ${checked ? 'border-document-neutral-600 bg-document-neutral-100' : 'border-document-neutral-200'}`} key={`${option}-${index}`}><span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center border border-document-neutral-500 ${multiple ? '' : 'rounded-full'} ${checked ? 'bg-document-neutral-800 text-white' : ''}`}>{checked && <Check className="h-3.5 w-3.5" />}</span><span className={`min-w-0 break-words ${checked ? 'font-semibold text-document-neutral-950' : 'text-document-neutral-500'}`}>{option}</span></div>;
         })}
       </div>
-      {!selected.length && <p className="mt-2 text-sm italic text-slate-500">Not answered</p>}
+      {!selected.length && <p className="mt-2 text-sm italic text-document-neutral-500">Not answered</p>}
     </div>
   );
 }
@@ -60,15 +60,15 @@ function ChoiceAnswer({ question, value }) {
 function FileAnswer({ value }) {
   const file = responseFileDetails(value);
   if (!file) return <AnswerText value={value} />;
-  return <div className="flex items-start gap-3"><FileText aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" /><div><p className="break-all font-semibold text-slate-950">{file.name}</p><p className="mt-0.5 text-xs text-slate-500">{[file.type, file.sizeLabel].filter(Boolean).join(' · ') || 'File details recorded'}</p><p className="mt-1 text-xs italic text-slate-500">File metadata only — no file was uploaded.</p></div></div>;
+  return <div className="flex items-start gap-3"><FileText aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-document-neutral-500" /><div><p className="break-all font-semibold text-document-neutral-950">{file.name}</p><p className="mt-0.5 text-xs text-document-neutral-500">{[file.type, file.sizeLabel].filter(Boolean).join(' · ') || 'File details recorded'}</p><p className="mt-1 text-xs italic text-document-neutral-500">File metadata only — no file was uploaded.</p></div></div>;
 }
 
 function SignatureAnswer({ value }) {
-  if (!responseAnswerIsPresent(value)) return <p className="text-sm italic text-slate-500">Not answered</p>;
+  if (!responseAnswerIsPresent(value)) return <p className="text-sm italic text-document-neutral-500">Not answered</p>;
   const source = safeResponseSignatureURL(value);
-  if (!source) return <p className="text-sm italic text-slate-500">Signature captured, but its preview is unavailable.</p>;
+  if (!source) return <p className="text-sm italic text-document-neutral-500">Signature captured, but its preview is unavailable.</p>;
   const inkClass = source.startsWith('data:image/png;base64,') ? 'xert-response-signature-image' : '';
-  return <div className="xert-response-signature border-b border-slate-400 pb-2"><img alt="Respondent signature" className={`${inkClass} max-h-36 max-w-full object-contain object-left`} src={source} /></div>;
+  return <div className="xert-response-signature border-b border-document-neutral-400 pb-2"><img alt="Respondent signature" className={`${inkClass} max-h-36 max-w-full object-contain object-left`} src={source} /></div>;
 }
 
 function AnswerText({ value }) {
@@ -78,8 +78,8 @@ function AnswerText({ value }) {
   if (signature) return <SignatureAnswer value={value} />;
   const answer = formatResponseAnswer(value);
   return answer
-    ? <p className="whitespace-pre-wrap break-words text-[15px] leading-6 text-slate-950">{answer}</p>
-    : <p className="text-sm italic text-slate-500">Not answered</p>;
+    ? <p className="whitespace-pre-wrap break-words text-[15px] leading-6 text-document-neutral-950">{answer}</p>
+    : <p className="text-sm italic text-document-neutral-500">Not answered</p>;
 }
 
 function RatingAnswer({ question, value }) {
@@ -87,11 +87,11 @@ function RatingAnswer({ question, value }) {
   if (question.type === 'star_rating') {
     const selected = Number(value); const maximum = Number(question.scale_max ?? 5);
     const safeMaximum = Number.isInteger(maximum) && maximum > 0 && maximum <= 10 ? maximum : 5;
-    return <p className="text-lg font-semibold tracking-widest text-slate-950">{Array.from({ length: safeMaximum }, (_, index) => index < selected ? '★' : '☆').join('')} <span className="ml-2 text-sm font-normal tracking-normal text-slate-600">{value} of {safeMaximum}</span></p>;
+    return <p className="text-lg font-semibold tracking-widest text-document-neutral-950">{Array.from({ length: safeMaximum }, (_, index) => index < selected ? '★' : '☆').join('')} <span className="ml-2 text-sm font-normal tracking-normal text-document-neutral-600">{value} of {safeMaximum}</span></p>;
   }
   const minimum = question.type === 'nps' ? 0 : Number(question.scale_min ?? 1);
   const maximum = question.type === 'nps' ? 10 : Number(question.scale_max ?? 10);
-  return <div><p className="font-semibold text-slate-950">{String(value)} <span className="font-normal text-slate-500">of {maximum}</span></p>{(question.scale_min_label || question.scale_max_label) && <p className="mt-1 text-xs text-slate-500">{question.scale_min_label || minimum} — {question.scale_max_label || maximum}</p>}</div>;
+  return <div><p className="font-semibold text-document-neutral-950">{String(value)} <span className="font-normal text-document-neutral-500">of {maximum}</span></p>{(question.scale_min_label || question.scale_max_label) && <p className="mt-1 text-xs text-document-neutral-500">{question.scale_min_label || minimum} — {question.scale_max_label || maximum}</p>}</div>;
 }
 
 function FieldAnswer({ question }) {
@@ -103,23 +103,23 @@ function FieldAnswer({ question }) {
 }
 
 function ResponseField({ field, number }) {
-  if (field.type === 'section_break') return <div className="xert-response-section mt-8 border-b-2 border-slate-900 pb-2 first:mt-0"><h2 className="text-xl font-bold uppercase tracking-wide text-slate-950">{field.content || 'Untitled section'}</h2>{field.description && <p className="mt-1 whitespace-pre-wrap text-sm normal-case leading-6 tracking-normal text-slate-600">{field.description}</p>}</div>;
-  if (field.type === 'statement') return <div className="xert-response-statement border-l-4 border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"><p className="whitespace-pre-wrap">{field.content || 'Information statement'}</p>{field.description && <p className="mt-2 whitespace-pre-wrap text-xs text-slate-500">{field.description}</p>}</div>;
+  if (field.type === 'section_break') return <div className="xert-response-section mt-8 border-b-2 border-document-neutral-900 pb-2 first:mt-0"><h2 className="text-xl font-bold uppercase tracking-wide text-document-neutral-950">{field.content || 'Untitled section'}</h2>{field.description && <p className="mt-1 whitespace-pre-wrap text-sm normal-case leading-6 tracking-normal text-document-neutral-600">{field.description}</p>}</div>;
+  if (field.type === 'statement') return <div className="xert-response-statement border-l-4 border-document-neutral-300 bg-document-neutral-50 px-4 py-3 text-sm leading-6 text-document-neutral-700"><p className="whitespace-pre-wrap">{field.content || 'Information statement'}</p>{field.description && <p className="mt-2 whitespace-pre-wrap text-xs text-document-neutral-500">{field.description}</p>}</div>;
   const mediaURL = safeResponseMediaURL(field.media_url);
   return (
-    <section className="xert-response-field border border-slate-200 p-4 sm:p-5">
+    <section className="xert-response-field border border-document-neutral-200 p-4 sm:p-5">
       <div className="mb-3 flex items-start gap-3">
-        <span className="mt-0.5 min-w-7 text-xs font-bold uppercase tracking-wider text-slate-400">{number}</span>
-        <div className="min-w-0 flex-1"><h2 className="font-semibold leading-6 text-slate-950">{field.question || 'Untitled field'}{field.required && <span className="ml-1 text-red-700" aria-label="Required">*</span>}</h2>{field.description && <p className="mt-1 text-xs leading-5 text-slate-500">{field.description}</p>}{field.hidden && <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Historical hidden field with stored answer</p>}</div>
+        <span className="mt-0.5 min-w-7 text-xs font-bold uppercase tracking-wider text-document-neutral-400">{number}</span>
+        <div className="min-w-0 flex-1"><h2 className="font-semibold leading-6 text-document-neutral-950">{field.question || 'Untitled field'}{field.required && <span className="ml-1 text-status-danger-700" aria-label="Required">*</span>}</h2>{field.description && <p className="mt-1 text-xs leading-5 text-document-neutral-500">{field.description}</p>}{field.hidden && <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-document-neutral-400">Historical hidden field with stored answer</p>}</div>
       </div>
       <div className="pl-0 sm:pl-10"><FieldAnswer question={field} /></div>
-      {(mediaURL || field.media_caption) && <div className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500"><p className="font-bold uppercase tracking-wider">Configured {field.media_type || 'media'} reference</p>{field.media_caption && <p className="mt-1 whitespace-pre-wrap text-slate-600">{field.media_caption}</p>}{mediaURL && <p className="mt-1 break-all">{mediaURL}</p>}<p className="mt-1 italic">The reference was preserved at submission; content served by this external URL may change.</p></div>}
+      {(mediaURL || field.media_caption) && <div className="mt-4 border-t border-document-neutral-200 pt-3 text-xs leading-5 text-document-neutral-500"><p className="font-bold uppercase tracking-wider">Configured {field.media_type || 'media'} reference</p>{field.media_caption && <p className="mt-1 whitespace-pre-wrap text-document-neutral-600">{field.media_caption}</p>}{mediaURL && <p className="mt-1 break-all">{mediaURL}</p>}<p className="mt-1 italic">The reference was preserved at submission; content served by this external URL may change.</p></div>}
     </section>
   );
 }
 
 function MetadataItem({ label, children, wide = false }) {
-  return <div className={wide ? 'sm:col-span-2' : ''}><dt className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm text-slate-950">{children || 'Not provided'}</dd></div>;
+  return <div className={wide ? 'sm:col-span-2' : ''}><dt className="text-[10px] font-bold uppercase tracking-[0.18em] text-document-neutral-500">{label}</dt><dd className="mt-1 break-words text-sm text-document-neutral-950">{children || 'Not provided'}</dd></div>;
 }
 
 export default function FormResponseRecord({ form, response, responses, onSelect, onBack, onStatusChange, updating = false, error = '' }) {
@@ -161,22 +161,22 @@ export default function FormResponseRecord({ form, response, responses, onSelect
         <p className="text-center text-xs tabular-nums text-xert-pale/50 sm:mr-auto sm:text-left">Response {responseIndex + 1} of {responses.length}</p>
         <button type="button" className={printButton} onClick={printRecord}><Printer className="h-4 w-4" /> Print / Save PDF</button>
       </div>
-      {error && <p role="alert" className="xert-print-controls border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{error}</p>}
+      {error && <p role="alert" className="xert-print-controls border border-status-warning-300/30 bg-status-warning-300/10 p-3 text-sm text-status-warning-100">{error}</p>}
 
-      <article ref={recordRef} className="xert-response-print-record mx-auto max-w-[850px] bg-white text-slate-950 shadow-2xl shadow-black/30" aria-labelledby="response-record-title">
-        <header className="border-b-4 border-slate-950 px-5 py-6 sm:px-10 sm:py-8">
+      <article ref={recordRef} className="xert-response-print-record mx-auto max-w-[850px] bg-white text-document-neutral-950 shadow-2xl shadow-black/30" aria-labelledby="response-record-title">
+        <header className="border-b-4 border-document-neutral-950 px-5 py-6 sm:px-10 sm:py-8">
           <div className="flex items-start justify-between gap-5">
-            <div><p className="text-2xl font-black tracking-[0.18em] text-slate-950">XERT</p><p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">Fitness · Form response</p></div>
-            <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Status</p><p className="mt-1 text-sm font-semibold text-slate-950">{statusLabels[response.status] || 'Unlabelled'}</p></div>
+            <div><p className="text-2xl font-black tracking-[0.18em] text-document-neutral-950">XERT</p><p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-document-neutral-500">Fitness · Form response</p></div>
+            <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-document-neutral-500">Status</p><p className="mt-1 text-sm font-semibold text-document-neutral-950">{statusLabels[response.status] || 'Unlabelled'}</p></div>
           </div>
-          <p className="mt-8 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Completed record</p>
-          <h1 ref={headingRef} tabIndex={-1} id="response-record-title" className="mt-2 break-words text-3xl font-black leading-tight text-slate-950 outline-none sm:text-4xl">{definition.title}</h1>
-          {definition.description && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-slate-600">{definition.description}</p>}
-          {(safeResponseMediaURL(definition.headerMediaURL) || definition.headerMediaCaption) && <div className="mt-4 border border-slate-300 bg-slate-50 p-3 text-xs leading-5 text-slate-600"><p className="font-bold uppercase tracking-wider text-slate-700">Configured {definition.headerMediaType || 'header media'} reference</p>{definition.headerMediaCaption && <p className="mt-1 whitespace-pre-wrap">{definition.headerMediaCaption}</p>}{safeResponseMediaURL(definition.headerMediaURL) && <p className="mt-1 break-all">{safeResponseMediaURL(definition.headerMediaURL)}</p>}<p className="mt-1 italic text-slate-500">The reference was preserved at submission; content served by this external URL may change.</p></div>}
+          <p className="mt-8 text-xs font-bold uppercase tracking-[0.2em] text-document-neutral-500">Completed record</p>
+          <h1 ref={headingRef} tabIndex={-1} id="response-record-title" className="mt-2 break-words text-3xl font-black leading-tight text-document-neutral-950 outline-none sm:text-4xl">{definition.title}</h1>
+          {definition.description && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-document-neutral-600">{definition.description}</p>}
+          {(safeResponseMediaURL(definition.headerMediaURL) || definition.headerMediaCaption) && <div className="mt-4 border border-document-neutral-300 bg-document-neutral-50 p-3 text-xs leading-5 text-document-neutral-600"><p className="font-bold uppercase tracking-wider text-document-neutral-700">Configured {definition.headerMediaType || 'header media'} reference</p>{definition.headerMediaCaption && <p className="mt-1 whitespace-pre-wrap">{definition.headerMediaCaption}</p>}{safeResponseMediaURL(definition.headerMediaURL) && <p className="mt-1 break-all">{safeResponseMediaURL(definition.headerMediaURL)}</p>}<p className="mt-1 italic text-document-neutral-500">The reference was preserved at submission; content served by this external URL may change.</p></div>}
         </header>
 
         <div className="px-5 py-6 sm:px-10 sm:py-8">
-          <section className="xert-response-metadata border border-slate-300 bg-slate-50 p-4 sm:p-5">
+          <section className="xert-response-metadata border border-document-neutral-300 bg-document-neutral-50 p-4 sm:p-5">
             <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
               <MetadataItem label="Respondent">{respondent}</MetadataItem>
               <MetadataItem label="Submitted">{formatSubmittedAt(response.completed_at)}</MetadataItem>
@@ -188,9 +188,9 @@ export default function FormResponseRecord({ form, response, responses, onSelect
             </div>
           </section>
 
-          <div className="xert-print-controls mt-4 flex flex-col gap-2 border border-slate-200 bg-white p-3 sm:flex-row sm:items-center">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor={`response-status-${response.id}`}>Workflow status</label>
-            <select id={`response-status-${response.id}`} className="min-h-11 border border-slate-300 bg-white px-3 text-base text-slate-950 sm:ml-auto sm:min-w-44" value={response.status} disabled={updating} onChange={event => onStatusChange(response, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <div className="xert-print-controls mt-4 flex flex-col gap-2 border border-document-neutral-200 bg-white p-3 sm:flex-row sm:items-center">
+            <label className="text-xs font-bold uppercase tracking-wider text-document-neutral-500" htmlFor={`response-status-${response.id}`}>Workflow status</label>
+            <select id={`response-status-${response.id}`} className="min-h-11 border border-document-neutral-300 bg-white px-3 text-base text-document-neutral-950 sm:ml-auto sm:min-w-44" value={response.status} disabled={updating} onChange={event => onStatusChange(response, event.target.value)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           </div>
 
           <div className="mt-7 space-y-4">
@@ -198,18 +198,18 @@ export default function FormResponseRecord({ form, response, responses, onSelect
               if (!field.isLayout) questionNumber += 1;
               return <ResponseField key={field.recordKey} field={field} number={field.isLayout ? null : questionNumber} />;
             })}
-            {!record.fields.length && <p className="border border-slate-200 p-5 text-sm italic text-slate-500">The original form definition is unavailable for this legacy response.</p>}
+            {!record.fields.length && <p className="border border-document-neutral-200 p-5 text-sm italic text-document-neutral-500">The original form definition is unavailable for this legacy response.</p>}
           </div>
 
-          {record.skippedItems.length > 0 && <aside className="mt-4 border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600"><strong>{record.skippedItems.length} {record.skippedItems.length === 1 ? 'item was' : 'items were'} not presented</strong> because of the respondent’s earlier answers and the form’s branching rules. Omitted questions and statements are not represented as unanswered fields.</aside>}
+          {record.skippedItems.length > 0 && <aside className="mt-4 border border-document-neutral-200 bg-document-neutral-50 p-3 text-xs leading-5 text-document-neutral-600"><strong>{record.skippedItems.length} {record.skippedItems.length === 1 ? 'item was' : 'items were'} not presented</strong> because of the respondent’s earlier answers and the form’s branching rules. Omitted questions and statements are not represented as unanswered fields.</aside>}
 
-          {record.unverifiedLayoutItems.length > 0 && <section className="mt-8 border border-amber-700/30 bg-amber-50 p-4 sm:p-5"><h2 className="text-lg font-bold text-amber-950">Reconstructed form layout — not verified as presented</h2><p className="mt-1 text-xs leading-5 text-amber-900">These information blocks exist in the current form definition, but this legacy submission predates reliable layout capture. They are excluded from the filled-form body and listed here only for context.</p><div className="mt-4 space-y-3">{record.unverifiedLayoutItems.map((item, index) => <div className="border-t border-amber-800/20 pt-3 first:border-0 first:pt-0" key={item.id || index}><p className="text-[10px] font-bold uppercase tracking-wider text-amber-900">{item.type === 'section_break' ? 'Section heading' : 'Information statement'}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-amber-950">{item.content || 'Untitled layout block'}</p>{item.description && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-amber-900">{item.description}</p>}</div>)}</div></section>}
+          {record.unverifiedLayoutItems.length > 0 && <section className="mt-8 border border-status-warning-700/30 bg-status-warning-50 p-4 sm:p-5"><h2 className="text-lg font-bold text-status-warning-950">Reconstructed form layout — not verified as presented</h2><p className="mt-1 text-xs leading-5 text-status-warning-900">These information blocks exist in the current form definition, but this legacy submission predates reliable layout capture. They are excluded from the filled-form body and listed here only for context.</p><div className="mt-4 space-y-3">{record.unverifiedLayoutItems.map((item, index) => <div className="border-t border-status-warning-800/20 pt-3 first:border-0 first:pt-0" key={item.id || index}><p className="text-[10px] font-bold uppercase tracking-wider text-status-warning-900">{item.type === 'section_break' ? 'Section heading' : 'Information statement'}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-status-warning-950">{item.content || 'Untitled layout block'}</p>{item.description && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-status-warning-900">{item.description}</p>}</div>)}</div></section>}
 
-          {record.unmatchedAnswers.length > 0 && <section className="xert-response-unmatched mt-8 border-2 border-dashed border-slate-300 p-4 sm:p-5"><h2 className="text-lg font-bold text-slate-950">Unmatched archived answers</h2><p className="mt-1 text-xs leading-5 text-slate-500">These submitted values no longer match a field in the preserved form definition. They are retained here so the record remains complete.</p><dl className="mt-4 space-y-4">{record.unmatchedAnswers.map(({ id, answer }) => <div className="border-t border-slate-200 pt-3 first:border-0 first:pt-0" key={id}><dt className="break-all font-mono text-xs text-slate-500">Field ID: {id}</dt><dd className="mt-1"><AnswerText value={answer} /></dd></div>)}</dl></section>}
+          {record.unmatchedAnswers.length > 0 && <section className="xert-response-unmatched mt-8 border-2 border-dashed border-document-neutral-300 p-4 sm:p-5"><h2 className="text-lg font-bold text-document-neutral-950">Unmatched archived answers</h2><p className="mt-1 text-xs leading-5 text-document-neutral-500">These submitted values no longer match a field in the preserved form definition. They are retained here so the record remains complete.</p><dl className="mt-4 space-y-4">{record.unmatchedAnswers.map(({ id, answer }) => <div className="border-t border-document-neutral-200 pt-3 first:border-0 first:pt-0" key={id}><dt className="break-all font-mono text-xs text-document-neutral-500">Field ID: {id}</dt><dd className="mt-1"><AnswerText value={answer} /></dd></div>)}</dl></section>}
 
-          {record.administrativeAnswers.length > 0 && <section className="xert-response-administrative mt-8 border border-slate-300 bg-slate-50 p-4 sm:p-5"><h2 className="text-lg font-bold text-slate-950">Administrative archived data</h2><p className="mt-1 text-xs leading-5 text-slate-500">These stored values belong to hidden or branched-away fields. They are retained for record integrity and are not represented as questions the respondent saw or completed.</p><dl className="mt-4 space-y-4">{record.administrativeAnswers.map(({ id, question, answer, reason }) => <div className="border-t border-slate-200 pt-3 first:border-0 first:pt-0" key={id}><dt className="text-xs text-slate-500"><span className="font-semibold text-slate-700">{reason === 'branched' ? 'Branched-away field' : 'Hidden field'}</span><span className="mt-0.5 block break-all font-mono">Field ID: {id}</span>{question.question && <span className="mt-0.5 block">Administrative label: {question.question}</span>}</dt><dd className="mt-1"><AnswerText value={answer} /></dd></div>)}</dl></section>}
+          {record.administrativeAnswers.length > 0 && <section className="xert-response-administrative mt-8 border border-document-neutral-300 bg-document-neutral-50 p-4 sm:p-5"><h2 className="text-lg font-bold text-document-neutral-950">Administrative archived data</h2><p className="mt-1 text-xs leading-5 text-document-neutral-500">These stored values belong to hidden or branched-away fields. They are retained for record integrity and are not represented as questions the respondent saw or completed.</p><dl className="mt-4 space-y-4">{record.administrativeAnswers.map(({ id, question, answer, reason }) => <div className="border-t border-document-neutral-200 pt-3 first:border-0 first:pt-0" key={id}><dt className="text-xs text-document-neutral-500"><span className="font-semibold text-document-neutral-700">{reason === 'branched' ? 'Branched-away field' : 'Hidden field'}</span><span className="mt-0.5 block break-all font-mono">Field ID: {id}</span>{question.question && <span className="mt-0.5 block">Administrative label: {question.question}</span>}</dt><dd className="mt-1"><AnswerText value={answer} /></dd></div>)}</dl></section>}
 
-          <footer className="mt-10 border-t border-slate-300 pt-4 text-[10px] leading-4 text-slate-500"><p><span className="font-semibold">Record details:</span> {definition.usesSubmissionSnapshot ? 'Form definition preserved at submission.' : 'Submitted answers are original; labels and layout were reconstructed from the current form and may not be exact.'}</p><p className="mt-1">Private administrative record · Generated by XERT Fitness</p></footer>
+          <footer className="mt-10 border-t border-document-neutral-300 pt-4 text-[10px] leading-4 text-document-neutral-500"><p><span className="font-semibold">Record details:</span> {definition.usesSubmissionSnapshot ? 'Form definition preserved at submission.' : 'Submitted answers are original; labels and layout were reconstructed from the current form and may not be exact.'}</p><p className="mt-1">Private administrative record · Generated by XERT Fitness</p></footer>
         </div>
       </article>
     </div>

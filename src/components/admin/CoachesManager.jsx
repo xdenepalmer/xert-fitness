@@ -136,7 +136,7 @@ function CoachEditor({ coach, onSave, onCancel, onDirtyChange }) {
               <input id="coach-sort-order" type="number" min="0" step="1" value={form.sort_order ?? 0} onChange={e => set('sort_order', +e.target.value)} className={inputCls} />
             </div>
             <label className="flex min-h-11 items-center gap-2 cursor-pointer pb-2">
-              <input type="checkbox" checked={Boolean(form.published)} onChange={e => set('published', e.target.checked)} className="w-5 h-5 accent-green-500" />
+              <input type="checkbox" checked={Boolean(form.published)} onChange={e => set('published', e.target.checked)} className="w-5 h-5 accent-status-confirmed-500" />
               <span className="font-body text-sm text-xert-concrete/80">Published (visible on site)</span>
             </label>
           </div>
@@ -246,7 +246,7 @@ export default function CoachesManager({ initialAction, onIntentHandled, onDirty
                     {CATEGORIES.find(x => x.value === c.category)?.label || c.category}
                   </span>
                   {c.published
-                    ? <span className="font-body text-xs border border-green-600/40 text-green-400 px-2 py-0.5 uppercase">Published</span>
+                    ? <span className="font-body text-xs border border-status-confirmed-600/40 text-status-confirmed-400 px-2 py-0.5 uppercase">Published</span>
                     : <span className="font-body text-xs border border-xert-steel/30 text-xert-concrete/40 px-2 py-0.5 uppercase">Hidden</span>}
                 </div>
                 <h3 className={ADMIN_TEXT.pageTitle}>{c.name}</h3>

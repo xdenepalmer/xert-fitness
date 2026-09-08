@@ -14,7 +14,7 @@ function when(value) {
 }
 
 function StatusChip({ value }) {
-  const tone = { sent: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200', delivered: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200', queued: 'border-amber-300/35 bg-amber-300/10 text-amber-200', failed: 'border-red-300/35 bg-red-300/10 text-red-200', skipped: 'border-white/10 bg-white/[0.04] text-xert-pale/60' }[value] || 'border-white/10 bg-white/[0.04] text-xert-pale/60';
+  const tone = { sent: 'border-status-success-300/30 bg-status-success-300/10 text-status-success-200', delivered: 'border-status-success-300/30 bg-status-success-300/10 text-status-success-200', queued: 'border-status-warning-300/35 bg-status-warning-300/10 text-status-warning-200', failed: 'border-status-danger-300/35 bg-status-danger-300/10 text-status-danger-200', skipped: 'border-white/10 bg-white/[0.04] text-xert-pale/60' }[value] || 'border-white/10 bg-white/[0.04] text-xert-pale/60';
   return <span className={`inline-flex rounded-full border px-2.5 py-1 font-body text-[10px] uppercase tracking-[0.14em] ${tone}`}>{value || 'unknown'}</span>;
 }
 
@@ -155,9 +155,9 @@ export default function EmailManager({ initialTab = 'send' }) {
       </header>
 
       {error ? <AdminLoadError message={error} onRetry={() => void load()} /> : !installed ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-300/35 bg-amber-300/10 p-4" role="status">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-200" />
-          <p className="font-body text-sm leading-relaxed text-amber-100/80">Email is not installed yet. Apply <code className="font-mono text-xs">supabase/migrations/20260903010000_email_notifications.sql</code>, add the Resend key to Supabase Vault as described in docs/EMAIL_RESEND_SETUP.md, then refresh.</p>
+        <div className="flex items-start gap-3 rounded-2xl border border-status-warning-300/35 bg-status-warning-300/10 p-4" role="status">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-status-warning-200" />
+          <p className="font-body text-sm leading-relaxed text-status-warning-100/80">Email is not installed yet. Apply <code className="font-mono text-xs">supabase/migrations/20260903010000_email_notifications.sql</code>, add the Resend key to Supabase Vault as described in docs/EMAIL_RESEND_SETUP.md, then refresh.</p>
         </div>
       ) : loading || !draft ? (
         <div className={`${ADMIN_PANEL} h-40 animate-pulse`} role="status" aria-label="Loading email settings" />
@@ -177,10 +177,10 @@ export default function EmailManager({ initialTab = 'send' }) {
           {tab === 'automatic' && (<>
           <section className={`${ADMIN_PANEL} p-5`}>
             <div className="flex items-start gap-3">
-              <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${draft.enabled ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}><Mail className="size-5" /></div>
+              <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${draft.enabled ? 'bg-status-success-300/15 text-status-success-200' : 'bg-status-warning-300/15 text-status-warning-200'}`}><Mail className="size-5" /></div>
               <div className="flex-1">
                 <Toggle checked={Boolean(draft.enabled)} onChange={value => setDraft({ ...draft, enabled: value })} label={draft.enabled ? 'Automatic emails are on' : 'Automatic emails are off'} description="Master switch. When off, every email is logged as skipped and nothing leaves XERT." />
-                {!settings?.provider_ready && <p className="mt-1 flex items-center gap-2 font-body text-xs text-amber-200"><TriangleAlert className="size-3.5" /> The Resend key is not in Supabase Vault yet, so sends will be skipped.</p>}
+                {!settings?.provider_ready && <p className="mt-1 flex items-center gap-2 font-body text-xs text-status-warning-200"><TriangleAlert className="size-3.5" /> The Resend key is not in Supabase Vault yet, so sends will be skipped.</p>}
               </div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
