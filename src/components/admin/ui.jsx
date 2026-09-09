@@ -1,4 +1,11 @@
 import React from 'react';
+import './ui/kit.css';
+
+export {AdminDataTable} from './ui/AdminDataTable';
+export {AdminFilterBar} from './ui/AdminFilterBar';
+export {AdminDrawer} from './ui/AdminDrawer';
+export {AdminStatCard, AdminEmptyState, AdminSkeleton, AdminBadge, ADMIN_STATUS_TONES, AdminFormField, AdminSegmented, AdminTimeline} from './ui/primitives';
+export {sortRows, nextSort, toggleSelection, selectionSummary, readFilterValues, writeFilterValues, virtualWindow} from './ui/model.mjs';
 
 // ─── Command Centre UI kit ───────────────────────────────────────────────────
 // The owner workspaces grew one screen at a time: fourteen variants of the
@@ -9,7 +16,7 @@ import React from 'react';
 // raw copies from creeping back.
 
 /** Screen gutters: tighter on phones, the classic 24px on desktop. */
-export const ADMIN_PAGE = 'px-4 py-5 sm:px-8 sm:py-7 mx-auto w-full max-w-6xl';
+export const ADMIN_PAGE = 'px-4 py-5 sm:px-8 sm:py-7 mx-auto w-full max-w-6xl admin-kit-container';
 
 export const ADMIN_TEXT = Object.freeze({
   /** The one page title. Condensed display face, sized for a phone first. */
@@ -28,17 +35,17 @@ export const ADMIN_LABEL = 'block font-body text-xs text-xert-pale/45 uppercase 
 const BUTTON_BASE = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 font-body text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50';
 
 export const ADMIN_BUTTON = Object.freeze({
-  primary: `${BUTTON_BASE} bg-xert-steel text-xert-navy shadow-lg shadow-xert-steel/20 hover:bg-xert-pale`,
+  primary: `${BUTTON_BASE} bg-accent-default text-text-inverse hover:bg-accent-hover`,
   ghost: `${BUTTON_BASE} border border-white/10 bg-white/[0.03] text-xert-pale hover:border-xert-steel/60 hover:bg-white/[0.06] hover:text-xert-offwhite`,
   danger: `${BUTTON_BASE} border border-status-danger-300/40 text-status-danger-200 hover:border-status-danger-300 hover:text-status-danger-100`,
 });
 
 /** Card surface used for panels and list rows. */
-export const ADMIN_PANEL = 'rounded-2xl border border-white/[0.06] bg-white/[0.035] shadow-[0_1px_0_var(--surface-paper-4)_inset]';
+export const ADMIN_PANEL = 'rounded-[var(--nav-radius-card)] border border-border-hairline bg-surface-raised';
 
 export function AdminPageHeader({ eyebrow = 'Command Centre', title, description, children }) {
   return (
-    <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <header className="admin-page-header">
       <div className="min-w-0">
         {eyebrow && <p className={ADMIN_TEXT.sectionHeading}>{eyebrow}</p>}
         <h2 className={`${ADMIN_TEXT.pageTitle} mt-1`}>{title}</h2>

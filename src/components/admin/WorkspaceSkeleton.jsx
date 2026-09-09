@@ -1,9 +1,9 @@
 import React from 'react';
-import { ADMIN_PAGE, ADMIN_PANEL, ADMIN_TEXT } from './ui';
+import { ADMIN_PAGE, ADMIN_PANEL, ADMIN_TEXT, AdminSkeleton } from './ui';
 
 const repeat = (count, render) => Array.from({ length: count }, (_, index) => <React.Fragment key={index}>{render(index)}</React.Fragment>);
-const Line = ({ size = 'long' }) => <span className="admin-skeleton-line" data-size={size} />;
-const Control = () => <span className="admin-skeleton-control" />;
+const Line = ({ size = 'long' }) => <AdminSkeleton size={size} decorative />;
+const Control = () => <AdminSkeleton variant="control" decorative />;
 const Copy = () => <div className="min-w-0 flex-1 space-y-2"><Line size="medium" /><Line /></div>;
 const Toolbar = ({ count = 3 }) => <div className="flex flex-wrap items-center justify-between gap-3"><Line size="title" /><div className="flex flex-wrap gap-2">{repeat(count, () => <Control />)}</div></div>;
 const Field = ({ large = false }) => <div className="space-y-2"><Line size="short" /><div className={`admin-skeleton-field ${large ? 'admin-skeleton-editor' : ''}`} /></div>;

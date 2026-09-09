@@ -6,6 +6,7 @@ const dir = new URL('../src/components/admin/', import.meta.url);
 const sourceDir = new URL('../src/', import.meta.url);
 const read = name => readFile(new URL(name, dir), 'utf8');
 const managers = async () => (await readdir(dir)).filter(name => name.endsWith('.jsx') && name !== 'ui.jsx');
+const kitFiles = async () => (await readdir(new URL('ui/', dir))).filter(name => /\.(jsx|mjs|css)$/.test(name)).map(name => `ui/${name}`);
 const sourceFiles = async () => (await readdir(sourceDir, { recursive: true }))
   .filter(name => /\.(?:[cm]?[jt]sx?|css)$/.test(name));
 
@@ -15,17 +16,19 @@ test('the kit is the single source for buttons, inputs, titles and gutters', asy
     assert.match(kit, new RegExp(`export const ${symbol}`), `${symbol} is exported`);
   }
   assert.match(kit, /ADMIN_INPUT_BARE = 'min-h-11[^']*text-base[^']*sm:text-sm/, 'inputs are 16px on phones so iOS does not zoom');
-  assert.match(kit, /primary: `\$\{BUTTON_BASE\} bg-xert-steel text-xert-navy shadow-lg shadow-xert-steel\/20 hover:bg-xert-pale`/);
+  assert.match(kit, /primary: `\$\{BUTTON_BASE\} bg-accent-default text-text-inverse hover:bg-accent-hover`/);
+  assert.doesNotMatch(kit, /shadow-lg shadow-xert-steel/, 'primary controls have no glow');
+  assert.match(kit, /ADMIN_PANEL = '[^']*border-border-hairline bg-surface-raised'/);
   assert.match(kit, /pageTitle: 'font-display text-3xl tracking-wide text-xert-offwhite sm:text-4xl'/);
   assert.equal(ADMIN_PAGE_IS_PHONE_FIRST(kit), true, 'gutters are px-4 on phones and wider, centred on desktop');
 });
 
 function ADMIN_PAGE_IS_PHONE_FIRST(kit) {
-  return /ADMIN_PAGE = 'px-4 py-5 sm:px-8 sm:py-7 mx-auto w-full max-w-6xl'/.test(kit);
+  return /ADMIN_PAGE = 'px-4 py-5 sm:px-8 sm:py-7 mx-auto w-full max-w-6xl admin-kit-container'/.test(kit);
 }
 
 test('no workspace hand-rolls a primary button, an input class or a page title', async () => {
-  for (const name of await managers()) {
+  for (const name of [...await managers(), ...await kitFiles()]) {
     const source = await read(name);
     assert.doesNotMatch(source, /className="[^"]*bg-xert-steel text-xert-navy[^"]*"/, `${name} uses ADMIN_BUTTON.primary`);
     assert.doesNotMatch(source, /^const (inputCls|inputClass|labelCls) = '/m, `${name} imports its input and label classes from the kit`);
@@ -36,10 +39,11 @@ test('no workspace hand-rolls a primary button, an input class or a page title',
 
 test('brand colours are tokens, never inline hex or rgba literals', async () => {
   const offenders = [];
-  for (const name of await managers()) {
+  for (const name of [...await managers(), ...await kitFiles()]) {
     const source = await read(name);
     for (const match of source.matchAll(/style=\{\{ color: '(#[0-9a-fA-F]{6}|rgba\([^)]*\))' \}\}/g)) offenders.push(`${name}: ${match[1]}`);
     for (const match of source.matchAll(/style=\{\{ backgroundColor: '(#[0-9a-fA-F]{6}|rgba\([^)]*\))' \}\}/g)) offenders.push(`${name}: bg ${match[1]}`);
+    if (name.startsWith('ui/')) for (const match of source.matchAll(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g)) offenders.push(`${name}: ${match[0]}`);
   }
   assert.deepEqual(offenders, [], 'inline colour literals cannot be themed or searched; use text-xert-*/bg-xert-* tokens');
 });

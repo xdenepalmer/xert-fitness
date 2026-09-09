@@ -505,6 +505,17 @@
   --text-secondary-70-alpha: 0.701961;
   --admin-command-max-height: 34rem;
   --admin-command-viewport-height: 68dvh;
+  --admin-kit-breakpoint-columns: 36rem;
+  --admin-kit-breakpoint-table: 48rem;
+  --admin-kit-drawer-width: 36rem;
+  --admin-kit-filter-debounce: 250ms;
+  --admin-kit-skeleton-duration: 1400ms;
+  --admin-kit-skeleton-opacity: 0.45;
+  --admin-kit-table-estimate: 88px;
+  --admin-kit-table-overscan: 4;
+  --admin-kit-table-selection-width: calc(44px + 2 * 0.75rem);
+  --admin-kit-table-threshold: 200;
+  --admin-kit-table-viewport: 34rem;
   --admin-resize-width: 8px;
   --admin-sidebar-default: 288px;
   --admin-sidebar-max: 384px;

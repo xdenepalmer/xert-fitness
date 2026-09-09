@@ -190,6 +190,17 @@ enum XertTokens {
     static let spaceSection: CGFloat = 32
     static let adminCommandMaxHeight: CGFloat = 544
     static let adminCommandViewportHeight = "68dvh"
+    static let adminKitBreakpointColumns: CGFloat = 576
+    static let adminKitBreakpointTable: CGFloat = 768
+    static let adminKitDrawerWidth: CGFloat = 576
+    static let adminKitFilterDebounce: TimeInterval = 0.25
+    static let adminKitSkeletonDuration: TimeInterval = 1.4000000000000001
+    static let adminKitSkeletonOpacity: CGFloat = 0.45
+    static let adminKitTableEstimate: CGFloat = 88
+    static let adminKitTableOverscan: CGFloat = 4
+    static let adminKitTableSelectionWidth = "calc(44px + 2 * 0.75rem)"
+    static let adminKitTableThreshold: CGFloat = 200
+    static let adminKitTableViewport: CGFloat = 544
     static let adminResizeWidth: CGFloat = 8
     static let adminSidebarDefault: CGFloat = 288
     static let adminSidebarMax: CGFloat = 384

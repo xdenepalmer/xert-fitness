@@ -26,8 +26,8 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-/** @type {React.ForwardRefExoticComponent<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & React.RefAttributes<React.ElementRef<typeof DialogPrimitive.Content>>>} */
-const DialogContent = React.forwardRef(({ className, children, ...props }, ref) => (
+/** @type {React.ForwardRefExoticComponent<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {closeHeader?: React.ReactNode} & React.RefAttributes<React.ElementRef<typeof DialogPrimitive.Content>>>} */
+const DialogContent = React.forwardRef(({ className, children, closeHeader, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -37,12 +37,19 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
         className
       )}
       {...props}>
+      {closeHeader && <div className="flex shrink-0 items-start justify-between gap-[var(--space-control)] border-b border-border-hairline p-[var(--space-inline)]">
+        <div className="min-w-0 self-center">{closeHeader}</div>
+        <DialogPrimitive.Close className="flex min-h-[var(--control-height)] min-w-[var(--control-height)] shrink-0 items-center justify-center rounded-[var(--radius-control)] focus-visible:outline focus-visible:outline-focus-ring">
+          <X className="h-4 w-4" /><span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      </div>}
       {children}
+      {!closeHeader &&
       <DialogPrimitive.Close
         className="absolute right-1 top-1 flex h-11 w-11 items-center justify-center rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
+      </DialogPrimitive.Close>}
     </DialogPrimitive.Content>
   </DialogPortal>
 ))
