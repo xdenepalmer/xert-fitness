@@ -6,6 +6,7 @@ import {
   THREE_MONTH_MEMBERSHIP_ACTION, THREE_MONTH_MEMBERSHIP_PRICE_CENTS,
 } from '../src/lib/casualVisit.js';
 import { formPath, returnKeyAfterForm, returnPathAfterForm } from '../src/lib/formPrerequisites.js';
+import * as formPrerequisites from '../src/lib/formPrerequisites.js';
 import { startThreeMonthMembershipCheckout } from '../api/checkout.js';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
@@ -13,7 +14,8 @@ const visitor = { fullName: 'Jane Smith', email: 'jane@example.com', phone: '+61
 const returnURLs = { success: 'https://xertfitness.com.au/3months?paid=1', cancel: 'https://xertfitness.com.au/3months?cancelled=1' };
 
 const responseId = '11111111-1111-4111-8111-111111111111';
-const memberPayload = {action:THREE_MONTH_MEMBERSHIP_ACTION,first_name:'Jane',last_name:'Smith',email:'jane@example.com',phone:'0400000000',questionnaire_response_id:responseId};
+const agreementResponseId = '22222222-2222-4222-8222-222222222222';
+const memberPayload = {action:THREE_MONTH_MEMBERSHIP_ACTION,first_name:'Jane',last_name:'Smith',email:'jane@example.com',phone:'0400000000',questionnaire_response_id:responseId,agreement_response_id:agreementResponseId};
 function membershipDependencies({proof=true, proofError=null, paperwork={questionnaire:true,agreement:true}, paperworkError=null} = {}) {
   const created = [], calls = [];
   const admin = {
@@ -27,7 +29,7 @@ function membershipDependencies({proof=true, proofError=null, paperwork={questio
     },
     async rpc(name, args) {
       calls.push({name,args});
-      if (name === 'xert_visitor_questionnaire_completed') return {data:proof,error:proofError};
+      if (name === 'xert_membership_checkout_paperwork_completed') return {data:proof,error:proofError};
       assert.equal(name,'xert_membership_paperwork_signed');
       return {data:paperwork,error:paperworkError};
     },
@@ -47,6 +49,37 @@ test('already-signed membership retains the deliberate claim policy and fails cl
   const deps = membershipDependencies({paperworkError:{message:'Unavailable'}});
   await assert.rejects(startThreeMonthMembershipCheckout({...deps,payload:{...memberPayload,already_signed:true},origin:'https://xertfitness.com.au'}));
   assert.equal(deps.created.length,0);
+});
+
+test('paperwork completed during purchase is proven by both exact response IDs before Stripe', async () => {
+  const deps = membershipDependencies();
+  await startThreeMonthMembershipCheckout({...deps,payload:memberPayload,origin:'https://xertfitness.com.au'});
+  assert.deepEqual(deps.calls,[{
+    name:'xert_membership_checkout_paperwork_completed',
+    args:{
+      p_questionnaire_response_id:responseId,
+      p_agreement_response_id:agreementResponseId,
+      p_name:'Jane Smith',p_email:'jane@example.com',p_phone:'+61400000000',
+    },
+  }]);
+  assert.equal(deps.created.length,1);
+  assert.equal(deps.created[0].parameters.metadata.xert_paperwork_verified,undefined);
+});
+
+test('paperwork proof rejection is actionable and proof outages fail closed before Stripe', async () => {
+  const rejected = membershipDependencies({proof:false});
+  await assert.rejects(
+    startThreeMonthMembershipCheckout({...rejected,payload:memberPayload,origin:'https://xertfitness.com.au'}),
+    error => error.status === 400 && /questionnaire and membership agreement.*same contact details/i.test(error.message),
+  );
+  assert.equal(rejected.created.length,0);
+
+  const unavailable = membershipDependencies({proofError:{message:'Unavailable'}});
+  await assert.rejects(
+    startThreeMonthMembershipCheckout({...unavailable,payload:memberPayload,origin:'https://xertfitness.com.au'}),
+    error => error.status === 503 && /could not be checked/i.test(error.message),
+  );
+  assert.equal(unavailable.created.length,0);
 });
 
 test('the membership is priced by the club, never by the browser', () => {
@@ -114,6 +147,76 @@ test('the questionnaire hands off to the agreement and still comes back to the p
   assert.equal(formPath('peq', null, 'nowhere-good'), '/forms/peq');
 });
 
+test('membership paperwork resumes the first missing or mismatched document', () => {
+  const peq = {
+    response_id: responseId,
+    name: '  JANE   SMITH ', email: ' JANE@example.com ', phone: '+61 400 000 000',
+  };
+  const agreement = {
+    response_id: agreementResponseId,
+    name: 'jane smith', email: 'jane@example.com', phone: '', agreement_accepted: true,
+  };
+  const purchaser = { first_name: 'Jane', last_name: 'Smith', email: 'jane@example.com', phone: '0400000000' };
+  const status = formPrerequisites.membershipPaperworkStatus;
+
+  assert.deepEqual(status?.(purchaser, null, null), {
+    questionnaireReady: false, agreementReady: false,
+    questionnaireResponseId: '', agreementResponseId: '',
+    nextPath: '/forms/peq?return=3months',
+  });
+  assert.equal(status?.(purchaser, peq, null).nextPath, '/forms/terms-and-conditions?return=3months');
+  assert.equal(status?.({ ...purchaser, email: 'changed@example.com' }, peq, agreement).nextPath, '/forms/peq?return=3months');
+  assert.equal(status?.(purchaser, peq, { ...agreement, name: 'Other Person' }).nextPath, '/forms/terms-and-conditions?return=3months');
+  assert.equal(status?.(purchaser, peq, { ...agreement, email: 'other@example.com' }).nextPath, '/forms/terms-and-conditions?return=3months');
+});
+
+test('only a matching accepted agreement marker makes the membership ready to pay', () => {
+  const peq = { response_id: responseId, name: 'Jane Smith', email: 'jane@example.com', phone: '61400000000' };
+  const agreement = { response_id: agreementResponseId, name: 'Jane Smith', email: 'jane@example.com', agreement_accepted: true };
+  const purchaser = { first_name: ' Jane ', last_name: ' Smith ', email: ' JANE@example.com ', phone: '+61 400 000 000' };
+  const status = formPrerequisites.membershipPaperworkStatus;
+
+  assert.deepEqual(status?.(purchaser, peq, agreement), {
+    questionnaireReady: true, agreementReady: true,
+    questionnaireResponseId: responseId, agreementResponseId,
+    nextPath: null,
+  }, 'an absent optional terms phone does not force re-signing');
+  assert.equal(status?.(purchaser, peq, { ...agreement, agreement_accepted: false }).agreementReady, false);
+  const oldMarker = { ...agreement };
+  delete oldMarker.agreement_accepted;
+  assert.equal(status?.(purchaser, peq, oldMarker).agreementReady, false, 'old markers resume the agreement');
+  assert.equal(status?.(purchaser, peq, { ...agreement, phone: '0400 999 999' }).agreementReady, false);
+});
+
+test('the terms completion marker stores only an acceptance hint beside identity and response ID', () => {
+  const build = formPrerequisites.formCompletionMarker;
+  const contact = { name: 'Jane Smith', email: 'jane@example.com', phone: '' };
+  const declined = build?.('terms-and-conditions', [], {
+    'tc-accept': 'I decline',
+    'tc-signature': 'data:image/png;base64,private-signature-must-not-leak',
+  }, contact, agreementResponseId);
+  assert.deepEqual(declined, {
+    name: 'Jane Smith', email: 'jane@example.com', phone: '', date_of_birth: '',
+    response_id: agreementResponseId, agreement_accepted: false,
+  });
+  assert.equal(build?.('terms-and-conditions', [], {
+    'tc-accept': 'I accept the Terms and Conditions',
+  }, contact, agreementResponseId).agreement_accepted, true);
+});
+
+test('a prerequisite redirect keeps the allowlisted membership return key', () => {
+  const storage = { getItem: () => null };
+  const terms = { slug: 'terms-and-conditions', prerequisite_slug: 'peq' };
+  assert.equal(
+    formPrerequisites.prerequisiteRedirect(terms, { storage, returnKey: '3months' }),
+    '/forms/peq?next=terms-and-conditions&return=3months',
+  );
+  assert.equal(
+    formPrerequisites.prerequisiteRedirect(terms, { storage, returnKey: 'https://evil.example' }),
+    '/forms/peq?next=terms-and-conditions',
+  );
+});
+
 test('the page asks for the paperwork before Stripe, and offers an already-signed route', async () => {
   const page = await read('../src/pages/CasualVisit.jsx');
   const app = await read('../src/App.jsx');
@@ -121,7 +224,6 @@ test('the page asks for the paperwork before Stripe, and offers an already-signe
 
   assert.match(app, /path="\/3months" element=\{<CasualVisit key="three-month-membership" threeMonth \/>\}/);
   assert.match(page, /const MEMBER_PEQ_SLUG = 'peq'/, 'a membership signs the member questionnaire, not the casual one');
-  assert.match(page, /navigate\(`\/forms\/\$\{MEMBER_PEQ_SLUG\}\?return=3months`\)/);
   assert.match(page, /I have already signed both/);
   assert.match(page, /'Sign the questionnaire and agreement first'/);
 

@@ -10,10 +10,11 @@ import {
   THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, THREE_MONTH_MEMBERSHIP_ACTION,
   THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId, visitorPassPricing,
 } from '@/lib/casualVisit';
-import { readFormCompletion } from '@/lib/formPrerequisites';
+import { formPath, membershipPaperworkStatus, readFormCompletion } from '@/lib/formPrerequisites';
 
 const CASUAL_PEQ_SLUG = 'peq-casual';
 const MEMBER_PEQ_SLUG = 'peq';
+const MEMBERSHIP_TERMS_SLUG = 'terms-and-conditions';
 
 // A membership is not a drop-in, so it takes the member questionnaire, which
 // hands off to the membership agreement before returning here to pay.
@@ -44,6 +45,9 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // server checks whether they really did and tells staff either way.
   const [alreadySigned, setAlreadySigned] = useState(false);
   const [questionnaireResponseId, setQuestionnaireResponseId] = useState('');
+  const [membershipQuestionnaire, setMembershipQuestionnaire] = useState(null);
+  const [membershipAgreement, setMembershipAgreement] = useState(null);
+  const [paperworkRecoveryPath, setPaperworkRecoveryPath] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const paid = params.get('paid') === '1';
@@ -53,6 +57,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // details are waiting, and the questionnaire answer is already known.
   useEffect(() => {
     const completed = readFormCompletion(threeMonth ? MEMBER_PEQ_SLUG : CASUAL_PEQ_SLUG);
+    const agreement = threeMonth ? readFormCompletion(MEMBERSHIP_TERMS_SLUG) : null;
     const remembered = recallCasualVisitor();
     const carried = { ...(remembered || {}) };
     if (completed) {
@@ -70,6 +75,8 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
     }));
     if (completed) setQuestionnaire('done');
     if (completed?.response_id) setQuestionnaireResponseId(completed.response_id);
+    setMembershipQuestionnaire(threeMonth ? completed : null);
+    setMembershipAgreement(agreement);
   }, [threeMonth]);
 
   useEffect(() => {
@@ -95,14 +102,17 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   const validation = casualVisitValidationError(visitor);
   const needsThreeDayQuestionnaire = threeDayPass
     && (!validQuestionnaireResponseId(questionnaireResponseId) || questionnaire !== 'done');
+  const membershipPaperwork = membershipPaperworkStatus(
+    visitor, membershipQuestionnaire, membershipAgreement,
+  );
   // Signing here means signing on this device now; saying you already signed
   // sends nothing to verify, so the server looks the records up instead.
-  const needsMembershipPaperwork = threeMonth && !alreadySigned
-    && (!validQuestionnaireResponseId(questionnaireResponseId) || questionnaire !== 'done');
+  const needsMembershipPaperwork = threeMonth && !alreadySigned && Boolean(membershipPaperwork.nextPath);
 
   const pay = async event => {
     event.preventDefault();
     setError('');
+    setPaperworkRecoveryPath('');
     if (validation) { setError(validation); return; }
     if (!threeMonth && !questionnaire) { setError('Tell us whether you have completed the pre-exercise questionnaire.'); return; }
     if (threeMonth && !alreadySigned && !questionnaire) {
@@ -111,7 +121,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
     }
     if (needsMembershipPaperwork) {
       rememberCasualVisitor(visitor);
-      navigate(`/forms/${MEMBER_PEQ_SLUG}?return=3months`);
+      navigate(membershipPaperwork.nextPath);
       return;
     }
     if (needsThreeDayQuestionnaire) {
@@ -135,14 +145,24 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
           ? {
             action: THREE_MONTH_MEMBERSHIP_ACTION, ...visitor,
             already_signed: alreadySigned,
-            ...(alreadySigned ? {} : { questionnaire_response_id: questionnaireResponseId }),
+            ...(alreadySigned ? {} : {
+              questionnaire_response_id: membershipPaperwork.questionnaireResponseId,
+              agreement_response_id: membershipPaperwork.agreementResponseId,
+            }),
           }
           : threeDayPass
             ? { action: THREE_DAY_PASS_ACTION, ...visitor, questionnaire_response_id: questionnaireResponseId }
             : { action: CASUAL_VISIT_ACTION, ...visitor }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok || !body.url) throw new Error(body.error || 'The payment page could not be opened. Please try again.');
+      if (!response.ok || !body.url) {
+        if (threeMonth && !alreadySigned && response.status === 400) {
+          setMembershipQuestionnaire(null);
+          setMembershipAgreement(null);
+          setPaperworkRecoveryPath(formPath(MEMBER_PEQ_SLUG, null, '3months'));
+        }
+        throw new Error(body.error || 'The payment page could not be opened. Please try again.');
+      }
       window.location.assign(body.url);
     } catch (paymentError) {
       setError(paymentError.message);
@@ -238,6 +258,11 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
                               onChange={() => {
                                 setAlreadySigned(value === 'signed');
                                 setQuestionnaire(value === 'signed' ? 'done' : 'not-done');
+                                if (value === 'not-done') {
+                                  setMembershipQuestionnaire(null);
+                                  setMembershipAgreement(null);
+                                }
+                                setPaperworkRecoveryPath('');
                                 setError('');
                               }} className="peer sr-only" />
                             <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 ${chosen ? 'border-xert-steel bg-xert-steel text-xert-navy' : 'border-xert-steel/40'} peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite`}>
@@ -288,7 +313,13 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
                 </fieldset>
                 )}
 
-                {error && <p role="alert" className="border border-status-danger-300/30 bg-status-danger-300/10 p-3 font-body text-sm text-status-danger-100">{error}</p>}
+                {error && <div role="alert" className="border border-status-danger-300/30 bg-status-danger-300/10 p-3 font-body text-sm text-status-danger-100">
+                  <p>{error}</p>
+                  {paperworkRecoveryPath && <Link to={paperworkRecoveryPath}
+                    onClick={() => rememberCasualVisitor(visitor)} className="mt-2 inline-block font-semibold underline">
+                    Re-complete the questionnaire and agreement
+                  </Link>}
+                </div>}
 
                 <button type="submit" disabled={sending}
                   className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 bg-xert-steel px-5 font-display text-sm uppercase tracking-wide text-xert-navy transition-colors hover:bg-xert-pale disabled:opacity-50">

@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Check, ExternalLink, FileUp, LoaderCircle, Star 
 import { answerIsPresent, loadPublicForm, submitPublicForm } from '@/lib/xertForms';
 import { buildPublicFormSteps } from '@/lib/formBranching';
 import {
-  completionIdentity, formPath, minorStatus, nextFormSlug, prerequisiteRedirect, readFormCompletion,
+  formCompletionMarker, formPath, minorStatus, nextFormSlug, prerequisiteRedirect, readFormCompletion,
   returnKeyAfterForm, returnPathAfterForm, writeFormCompletion,
 } from '@/lib/formPrerequisites';
 import { answerValidationMessage, firstInvalidAnswer } from '@/lib/formAnswerValidation';
@@ -239,7 +239,7 @@ export default function PublicForm() {
     return () => { active = false; };
   }, [slug]);
   // Gated forms send a first-time visitor to their prerequisite first.
-  const gatePath = form ? prerequisiteRedirect(form) : null;
+  const gatePath = form ? prerequisiteRedirect(form, { returnKey: returnKeyAfterForm(search) }) : null;
   useEffect(() => { if (gatePath) navigate(gatePath, { replace: true }); }, [gatePath, navigate]);
   // Skip destinations are indexed against the complete builder sequence, so
   // layout blocks must stay in this calculation even though they do not hold
@@ -304,7 +304,9 @@ export default function PublicForm() {
     setSubmitting(true);
     try {
       const responseID = await submitPublicForm({ slug, formUpdatedAt: form.updated_at, answers: kept, name, email, phone, elapsedSeconds: Math.round((Date.now() - startedAt.current) / 1000), sourceURL: window.location.href });
-      writeFormCompletion(slug, { ...completionIdentity(formItems, kept, { name, email, phone }), response_id: responseID });
+      writeFormCompletion(slug, formCompletionMarker(
+        slug, formItems, kept, { name, email, phone }, responseID,
+      ));
       // Either the form that sent them here, or the form that names this one as
       // its prerequisite: opening the questionnaire directly must still lead to
       // the agreement, and a questionnaire with nothing after it must not.

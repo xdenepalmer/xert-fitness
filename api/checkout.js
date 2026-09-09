@@ -862,7 +862,10 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
   try { visitor = normalizeCasualVisitor(payload); } catch (error) { fail(error.message, 400); }
 
   const declaredSigned = payload.already_signed === true;
-  if (!declaredSigned && !validQuestionnaireResponseId(payload.questionnaire_response_id)) {
+  if (!declaredSigned && (
+    !validQuestionnaireResponseId(payload.questionnaire_response_id)
+    || !validQuestionnaireResponseId(payload.agreement_response_id)
+  )) {
     fail('Complete the pre-exercise questionnaire and membership agreement before paying.', 400);
   }
 
@@ -881,12 +884,15 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
     if (signedError) fail('Your paperwork could not be checked. Please try again.', 503);
     paperworkVerified = signed?.questionnaire === true && signed?.agreement === true;
   } else {
-    const { data: proven, error: proofError } = await admin.rpc('xert_visitor_questionnaire_completed', {
-      p_response_id: payload.questionnaire_response_id,
+    const { data: proven, error: proofError } = await admin.rpc('xert_membership_checkout_paperwork_completed', {
+      p_questionnaire_response_id: payload.questionnaire_response_id,
+      p_agreement_response_id: payload.agreement_response_id,
       p_name: visitor.fullName, p_email: visitor.email, p_phone: visitor.phone,
     });
-    if (proofError) fail('The questionnaire could not be checked. Please try again.', 503);
-    if (proven !== true) fail('Complete and sign the questionnaire using these same contact details, then return to pay.', 400);
+    if (proofError) fail('Your questionnaire and membership agreement could not be checked. Please try again.', 503);
+    if (proven !== true) {
+      fail('Complete and sign the questionnaire and membership agreement using these same contact details, then return to pay.', 400);
+    }
   }
 
   // Keep expiry and every other parameter stable for a retry in this minute.

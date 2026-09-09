@@ -8,10 +8,13 @@
 // person in one sitting: a shared phone or a new browser session starts again,
 // and a marker older than the window below is ignored.
 
+import { normalizeVisitorPhone } from './casualVisit.js';
+
 export const FORM_COMPLETION_PREFIX = 'xert-form-complete:';
 export const FORM_COMPLETION_TTL_MS = 12 * 60 * 60 * 1000;
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const RESPONSE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function safeStorage() {
   try {
@@ -67,6 +70,66 @@ export function completionIdentity(questions, answers = {}, contact = {}) {
     email: text(contact.email).toLowerCase() || text(firstAnswer('email')).toLowerCase(),
     phone: text(contact.phone) || text(firstAnswer('phone')),
     date_of_birth: birthday ? text(answers[birthday.id]) : '',
+  };
+}
+
+/** The privacy-minimised completion marker written after a public form saves. */
+export function formCompletionMarker(slug, questions, answers, contact, responseID) {
+  return {
+    ...completionIdentity(questions, answers, contact),
+    response_id: responseID,
+    ...(slug === 'terms-and-conditions'
+      ? { agreement_accepted: answers?.['tc-accept'] === 'I accept the Terms and Conditions' }
+      : {}),
+  };
+}
+
+function normalizedName(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizedEmail(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function visitorName(visitor) {
+  return visitor?.fullName ?? `${visitor?.first_name ?? visitor?.firstName ?? ''} ${visitor?.last_name ?? visitor?.lastName ?? ''}`;
+}
+
+function completionMatchesVisitor(completion, visitor, { phoneOptional = false } = {}) {
+  if (!completion || !visitor) return false;
+  const expectedName = normalizedName(visitorName(visitor));
+  const expectedEmail = normalizedEmail(visitor.email);
+  const expectedPhone = normalizeVisitorPhone(visitor.phone);
+  const completedName = normalizedName(completion.name);
+  const completedEmail = normalizedEmail(completion.email);
+  const rawCompletedPhone = String(completion.phone ?? '').trim();
+  const completedPhone = normalizeVisitorPhone(rawCompletedPhone);
+  return Boolean(
+    expectedName && expectedEmail && expectedPhone
+    && completedName === expectedName
+    && completedEmail === expectedEmail
+    && (phoneOptional && !rawCompletedPhone
+      ? true
+      : Boolean(completedPhone) && completedPhone === expectedPhone),
+  );
+}
+
+/** Which signed membership document must be completed next, if any. */
+export function membershipPaperworkStatus(visitor, questionnaire, agreement) {
+  const questionnaireReady = RESPONSE_ID_PATTERN.test(String(questionnaire?.response_id || ''))
+    && completionMatchesVisitor(questionnaire, visitor);
+  const agreementReady = RESPONSE_ID_PATTERN.test(String(agreement?.response_id || ''))
+    && agreement?.agreement_accepted === true
+    && completionMatchesVisitor(agreement, visitor, { phoneOptional: true });
+  return {
+    questionnaireReady,
+    agreementReady,
+    questionnaireResponseId: questionnaireReady ? questionnaire.response_id : '',
+    agreementResponseId: agreementReady ? agreement.response_id : '',
+    nextPath: !questionnaireReady
+      ? formPath('peq', null, '3months')
+      : !agreementReady ? formPath('terms-and-conditions', null, '3months') : null,
   };
 }
 
@@ -131,9 +194,9 @@ export function formPath(slug, nextSlug = null, returnKey = null) {
  * Decides where a visitor should be sent when they open a gated form.
  * Returns null when they may stay.
  */
-export function prerequisiteRedirect(form, { storage = safeStorage(), now = Date.now() } = {}) {
+export function prerequisiteRedirect(form, { storage = safeStorage(), now = Date.now(), returnKey = null } = {}) {
   const prerequisite = String(form?.prerequisite_slug || '');
   if (!SLUG_PATTERN.test(prerequisite) || prerequisite === form?.slug) return null;
   if (readFormCompletion(prerequisite, { storage, now })) return null;
-  return formPath(prerequisite, form.slug);
+  return formPath(prerequisite, form.slug, returnKey);
 }

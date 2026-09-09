@@ -204,7 +204,6 @@ test('the published agreement and the signed agreement come from one module', as
 
 test('the public form page enforces the gate, hands over and carries details across', async () => {
   const source = await read('../src/pages/PublicForm.jsx');
-  assert.match(source, /prerequisiteRedirect\(form\)/);
   assert.match(source, /if \(gatePath\) navigate\(gatePath, \{ replace: true \}\)/);
   const storage = fakeStorage();
   writeFormCompletion('peq-casual', { ...completionIdentity([], {}, { name: 'Casey Example', email: 'casey@example.test' }), response_id: '11111111-1111-4111-8111-111111111111' }, { storage });
