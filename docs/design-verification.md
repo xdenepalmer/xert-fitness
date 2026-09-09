@@ -81,7 +81,9 @@ explicit in-memory fixture for five reviewed command flows: confirmation,
 attendee addition, attendance correction/Undo, form publication and SMS preview.
 Only that fixture can simulate successful writes; all real destinations remain
 blocked, including the SMS endpoint. Failure/retry and duplicate-submit checks
-assert exact fixture receipts. The command review is also checked at 200% text.
+assert exact fixture receipts. Add attendee checks both confirmed and waitlisted
+receipts; missing or unknown outcomes must show an error, never success, and keep
+the same request ID on retry. The command review is also checked at 200% text.
 `--recovery` deliberately fails one local workspace chunk download and verifies
 that the shell survives and explicitly chosen reload recovery preserves URL
 parameters. A browser-cached module failure needs a fresh document, distinct
@@ -179,6 +181,8 @@ control; bounding rectangles alone can miss an overlapping sticky header.
 keep-or-discard protection, rejected-write retention, a held notice submission,
 stale-record mutation blocking, stable credit-grant retry IDs, narrow compact
 layout and an off-page member intent that preserves filters and unrelated context.
+It also focuses real native drawer and nested confirmation buttons and verifies
+that Ctrl-K, shortcut help and navigation sequences stay paused inside them.
 `--member-filters` isolates immediate search/role/credit changes with actual RPC
 payload diagnostics. `--members-loading` holds the directory, activation metrics,
 both queues and member-detail reads to inspect composed placeholders and each

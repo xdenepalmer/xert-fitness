@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import { assertReachableControl } from './control-geometry.mjs';
 
+async function assertDrawerPausesShortcuts(page, drawer, focusTarget) {
+  const url = page.url();
+  await focusTarget.focus();
+  await page.keyboard.press('Control+k');
+  assert.equal(await page.getByRole('dialog', { name: 'Find an owner task', exact: true, includeHidden: true }).count(), 0, 'A native modal must not open the command palette behind its inert background');
+  await page.keyboard.press('?');
+  assert.equal(await page.getByRole('dialog', { name: 'Keyboard shortcuts', exact: true, includeHidden: true }).count(), 0, 'A native modal must not open shortcut help');
+  await page.keyboard.press('g');
+  await page.keyboard.press('c');
+  assert.equal(page.url(), url, 'Navigation shortcuts pause on native drawer buttons');
+  assert.equal(await drawer.isVisible(), true, 'Shortcut keys never dismiss a native drawer');
+  assert.equal(await drawer.evaluate(element => element.contains(document.activeElement)), true, 'Modal shortcut attempts preserve drawer focus');
+}
+
 export async function checkAdminMembers(page, { origin, failures, capture = async () => {}, baseline = true, geometry = false, noteGuard = false }) {
   await page.goto(origin + '/admin/gym-members?source=member-proof', { waitUntil: 'networkidle' });
   const memberName = 'Directory Member 001';
@@ -24,6 +38,7 @@ export async function checkAdminMembers(page, { origin, failures, capture = asyn
   await detail.getByText('Fictional Foundation Strength', { exact: true }).waitFor();
   await detail.getByText('Fictional three-month membership', { exact: true }).waitFor();
   if (!baseline) {
+    await assertDrawerPausesShortcuts(page, detail, detail.getByRole('button', { name: 'Close member detail', exact: true }));
     for (let index = 0; index < 32; index++) {
       await page.keyboard.press('Tab');
       assert.equal(await detail.evaluate(element => element.contains(document.activeElement)), true, 'Member drawer contains keyboard focus');
@@ -43,6 +58,7 @@ export async function checkAdminMembers(page, { origin, failures, capture = asyn
   await detail.getByRole('textbox', { name: 'Private notice message', exact: true }).fill('Keep this unsent notice while staff reviews it.');
   await detail.getByRole('button', { name: 'Close member detail', exact: true }).click();
   const discard = page.getByRole('alertdialog', { name: 'Discard private notice draft?', exact: true });
+  if (!baseline) await assertDrawerPausesShortcuts(page, discard, discard.getByRole('button', { name: 'Keep writing', exact: true }));
   await discard.getByRole('button', { name: 'Keep writing', exact: true }).click();
   assert.equal(await detail.getByRole('textbox', { name: 'Private notice title', exact: true }).inputValue(), 'Fictional reminder draft');
   if (baseline) {

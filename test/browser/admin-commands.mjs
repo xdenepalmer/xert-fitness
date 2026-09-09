@@ -58,6 +58,56 @@ export async function checkAdminCommands(page, { mutations, failures, requests, 
   assert.equal(writes('admin_book_member_into_class')[0].body.p_member_id, commandIds.reese);
   await close();
 
+  await open('Add attendee');
+  await palette.getByRole('button', { name: /^Full Strength/ }).click();
+  await palette.getByLabel('Find member', { exact: true }).fill('Reese');
+  await palette.getByRole('button', { name: 'Reese Taylor · Member', exact: true }).click();
+  await palette.getByRole('button', { name: 'Confirm reviewed booking', exact: true }).click();
+  const waitlistResult = palette.getByRole('status');
+  await waitlistResult.waitFor();
+  assert.match(await waitlistResult.innerText(), /waitlist/i, 'A waitlisted server receipt must not claim a confirmed class place');
+  assert.doesNotMatch(await waitlistResult.innerText(), /Booking confirmed/i);
+  assert.equal(writes('admin_book_member_into_class').length, 2);
+  assert.equal(writes('admin_book_member_into_class')[1].body.p_session_id, commandIds.fullClass);
+  await capture('waitlisted-attendee');
+  await close();
+
+  // Transport-only substitutes keep the real receipt validation and UI running.
+  // A missing or unknown outcome must not become a successfully confirmed place.
+  for (const bookingStatus of [undefined, 'cancelled']) {
+    const attempted = [];
+    const malformedReceipt = async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      const body = route.request().postDataJSON();
+      attempted.push(body);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        request_id: body.p_request_id, session_id: body.p_session_id, member_id: body.p_member_id,
+        booking_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', booking_status: bookingStatus,
+        credit_batch_id: null, announcement_id: null, created_at: '2026-01-01T00:00:00Z',
+      }) });
+    };
+    const endpoint = '**/rest/v1/rpc/admin_book_member_into_class';
+    await page.route(endpoint, malformedReceipt);
+    try {
+      await open('Add attendee');
+      await palette.getByRole('button', { name: /^Full Strength/ }).click();
+      await palette.getByLabel('Find member', { exact: true }).fill('Reese');
+      await palette.getByRole('button', { name: 'Reese Taylor · Member', exact: true }).click();
+      await palette.getByRole('button', { name: 'Confirm reviewed booking', exact: true }).click();
+      await palette.getByRole('alert').waitFor();
+      assert.equal(await palette.getByRole('status').count(), 0, 'An unverifiable booking outcome never reports completion');
+      assert.ok((await palette.getByRole('alert').innerText()).trim(), 'Staff can see why the receipt was rejected');
+      await palette.getByRole('button', { name: 'Confirm reviewed booking', exact: true }).click();
+      await palette.getByRole('alert').waitFor();
+      assert.equal(attempted.length, 2);
+      assert.ok(attempted[0].p_request_id);
+      assert.equal(attempted[1].p_request_id, attempted[0].p_request_id, 'An uncertain receipt retry keeps its idempotency key');
+      await close();
+    } finally {
+      await page.unroute(endpoint, malformedReceipt);
+    }
+  }
+
   await open('Mark attendance');
   await past().click();
   const attendance = palette.getByRole('combobox', { name: /Reese Taylor/ });
