@@ -1,0 +1,8 @@
+/* Fixture framing only; the production components own their actual styling. */
+.kit-fixture { min-height: 100vh; padding: 1rem; background: var(--surface-base); color: var(--text-primary); }
+.kit-fixture h1 { font-family: var(--font-display); font-size: 2rem; overflow-wrap: anywhere; }
+.kit-fixture-tools { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: 1rem; }
+.kit-fixture-column { container-type: inline-size; width: 100%; max-width: 72rem; display: grid; gap: 1rem; }
+.kit-fixture-column[data-narrow="true"] { max-width: 24rem; }
+.kit-fixture output { display: block; overflow-wrap: anywhere; margin-block: .5rem; }
+.kit-fixture p { overflow-wrap: anywhere; }

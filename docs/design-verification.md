@@ -36,6 +36,8 @@ node scripts/verify-design.mjs --tag=nav --routes=/ --navigation --announcement
 node scripts/verify-design.mjs --tag=motion --motion=default --quick
 node scripts/verify-design.mjs --tag=panels --routes=/admin,/admin/calendar,/admin/forms
 node scripts/verify-design.mjs --tag=owner --routes=/admin --shell --commands --recovery
+node scripts/verify-design.mjs --tag=kit --kit-only
+node scripts/verify-design.mjs --tag=kit-motion --kit-only --motion=default --quick
 ```
 
 The full matrix uses 390×844, 768×1024, 1440×900 and 1920×1080. It captures resting,
@@ -61,6 +63,16 @@ assert exact fixture receipts. The command review is also checked at 200% text.
 that the shell survives and explicitly chosen reload recovery preserves URL
 parameters. A browser-cached module failure needs a fresh document, distinct
 from the local region retry offered for ordinary render errors.
+`--kit` adds an isolated entry that imports the real shared Command Centre controls;
+`--kit-only` runs just that entry. Its 320 fictional records exercise measured
+virtualization, whole-filter selection, outside-filter selection retention,
+numeric sorting, URL filters and browser Back/Forward, full-results keyboard
+access, focus preservation during recycling, density changes and 200% text.
+At desktop width the fixture also narrows its containing column without resizing
+the viewport. Drawer checks cover modal focus, Escape/restore and field
+label/helper/error/ref/event composition. Loading, error/retry, empty states,
+segmented keyboard controls, timeline dates and reduced-motion skeletons are
+checked separately. This fixture is not a production route or an auth bypass.
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine

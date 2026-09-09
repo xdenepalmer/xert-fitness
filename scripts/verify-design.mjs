@@ -11,10 +11,12 @@ import { checkPublicNavigation } from '../test/browser/public-navigation.mjs';
 import { checkAdminShell } from '../test/browser/admin-shell.mjs';
 import { checkAdminCommands } from '../test/browser/admin-commands.mjs';
 import { checkAdminRecovery } from '../test/browser/admin-recovery.mjs';
+import { checkAdminKit } from '../test/browser/admin-kit.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
-const routes = option('routes', '/,/admin').split(',');
+const kitOnly = process.argv.includes('--kit-only');
+const routes = kitOnly ? [] : option('routes', '/,/admin').split(',');
 const reducedMotion = option('motion', 'reduce') === 'reduce' ? 'reduce' : 'no-preference';
 const output = resolve('.superpowers', 'design-proof', tag);
 await mkdir(output, { recursive: true });
@@ -47,7 +49,7 @@ try {
   const sizes = process.argv.includes('--quick') ? [[390, 844], [1440, 900]]
     : [[390, 844], [768, 1024], [1440, 900], [1920, 1080]];
   for (const [width, height] of sizes) {
-    for (const signedIn of [false, true]) {
+    for (const signedIn of kitOnly ? [true] : [false, true]) {
       const requests = [];
       const failures = {};
       const mutations = [];
@@ -200,6 +202,14 @@ try {
           results.push({ prefix: `${width}-workspace-recovery`, passed: true });
         } catch (error) {
           results.push({ prefix: `${width}-workspace-recovery`, passed: false, error: error.message });
+        }
+      }
+      if (signedIn && (kitOnly || process.argv.includes('--kit'))) {
+        try {
+          await checkAdminKit(context, { origin, width, capture: (targetPage, name) => targetPage.screenshot({ path: resolve(output, `${width}-${name}.png`) }) });
+          results.push({ prefix: `${width}-admin-kit`, passed: true });
+        } catch (error) {
+          results.push({ prefix: `${width}-admin-kit`, passed: false, error: error.message });
         }
       }
       await writeFile(resolve(output, `${width}-${signedIn ? 'signed-in' : 'signed-out'}-requests.json`), JSON.stringify(requests, null, 2));
