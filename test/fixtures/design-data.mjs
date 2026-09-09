@@ -4,6 +4,8 @@ import { installCalendarData } from './admin-calendar-data.mjs';
 import { installLeadData } from './admin-lead-data.mjs';
 import { installFormData } from './admin-form-data.mjs';
 import { installMemberData } from './admin-member-data.mjs';
+import { installOrderData } from './admin-order-data.mjs';
+import { installTodayData } from './admin-today-data.mjs';
 
 export const fixtureUser = {
   id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', role: 'authenticated',
@@ -60,16 +62,21 @@ const readRPCs = new Set([
 // Network-level isolation: keep real auth/router/components, intercept only I/O.
 // External data destinations are fulfilled here or aborted. Only unauthenticated
 // Google Fonts reads pass through so typography matches the real product.
-export async function installDesignFixtures(context, { origin, signedIn = false, requests = [], failures = {}, announcement = false, commands = false, calendar = false, leads = false, forms = false, members = false, mutations = [] }) {
+export async function installDesignFixtures(context, { origin, signedIn = false, requests = [], failures = {}, announcement = false, commands = false, calendar = false, leads = false, forms = false, members = false, orders = false, today = false, mutations = [] }) {
   const data = designData();
   if (commands && calendar) throw new Error('Use separate contexts for command mutation and read-only calendar fixtures.');
   if (commands && forms) throw new Error('Use separate contexts for command mutation and read-only form fixtures.');
   if (commands && members) throw new Error('Use separate contexts for command mutation and read-only member fixtures.');
+  if (commands && orders) throw new Error('Use separate contexts for command mutation and read-only order fixtures.');
+  if (members && orders) throw new Error('Use separate contexts for member history and full order fixtures.');
+  if (today && (commands || calendar || leads || forms || members || orders)) throw new Error('Use a separate context for the read-only Today fixture.');
   const commandData = commands ? installCommandData(data, { mutations }) : null;
   const calendarData = calendar ? installCalendarData(data) : null;
   const leadData = leads ? installLeadData() : null;
   const formData = forms ? installFormData() : null;
   const memberData = members ? installMemberData() : null;
+  const orderData = orders ? installOrderData() : null;
+  const todayData = today ? installTodayData() : null;
   if (announcement) Object.assign(data.admin_settings[0], {
     announcement_banner_enabled: true,
     announcement_banner_text: 'Welcome to XERT. Our coached training sessions are open for booking. Please arrive ten minutes early so your coach can help you get ready.',
@@ -100,7 +107,7 @@ export async function installDesignFixtures(context, { origin, signedIn = false,
       const memberPage = memberData?.read(name, args, url);
       if (rpc && !readRPCs.has(name) && !memberPage) return respond({ message: 'Mutation or unconfigured RPC blocked by local design fixture.' }, 501);
       if (!rpc && !['GET', 'HEAD', 'OPTIONS'].includes(method)) return respond({ message: 'Writes blocked by local design fixture.' }, 403);
-      const fixturePage = leadData?.read(name, url) ?? formData?.read(name, url) ?? memberPage;
+      const fixturePage = leadData?.read(name, url) ?? formData?.read(name, url) ?? memberPage ?? orderData?.read(name, url) ?? todayData?.read(name, url);
       if (fixturePage) {
         const single = request.headers().accept?.includes('vnd.pgrst.object');
         return respond(single ? fixturePage.rows[0] ?? null : fixturePage.rows, 200, { 'content-range': fixturePage.rows.length

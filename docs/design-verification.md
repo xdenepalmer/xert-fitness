@@ -133,6 +133,9 @@ reachable controls at200% text. Printable A4 PDFs are saved alongside screen
 captures after checking paper color and hidden interactive controls. Inspect
 the rendered PDF separately; producing a file alone is not print-layout approval.
 `--forms-before` records preserved legacy flows without asserting new-kit behavior.
+`--forms-loading` holds real list/analytics/full-record reads at the isolated
+network boundary. It inspects composed placeholders, no fake controls and each
+fragment's actual bounds inside a384px column at200% text.
 
 `--qr` checks the existing QR component on the requested route, including an
 actual PNG download with a1024px square image, opaque white canvas corner and
@@ -149,6 +152,17 @@ read RPCs are fulfilled; no roles, credits, notes or notices are changed. Do not
 combine this read-only dataset with `--commands` mutation fixtures.
 `--member-geometry` adds an actual center-hit check for the enlarged notice Send
 control; bounding rectangles alone can miss an overlapping sticky header.
+
+`--order-data --orders-before` supplies503 fictional orders through500+3-row
+server reads and61 separate visitor sales. It checks mixed-currency suppression,
+pagination, immutable purchased terms, all503 CSV records, filters and rejected
+local refund/reconciliation requests. `--orders-error` adds the requirement that
+a visitor-ledger read outage must appear visibly rather than look like no sales.
+It never approves or reaches a real financial endpoint. Member and order datasets
+are intentionally separate, as are read-only orders and command mutation fixtures.
+`--today-data` supplies separate fictional public/member booking counts, the
+ordered decision queues and two classes through the normal read interfaces.
+This standalone dataset cannot be combined with the other rich fixtures.
 
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone

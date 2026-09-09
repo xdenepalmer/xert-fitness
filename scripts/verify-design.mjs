@@ -18,6 +18,8 @@ import { checkAdminHeaderLayout } from '../test/browser/admin-header.mjs';
 import { checkAdminForms } from '../test/browser/admin-forms.mjs';
 import { checkAdminMembers } from '../test/browser/admin-members.mjs';
 import { checkAdminQR } from '../test/browser/admin-qr.mjs';
+import { checkAdminFormsLoading } from '../test/browser/admin-forms-loading.mjs';
+import { checkAdminOrders } from '../test/browser/admin-orders.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -60,7 +62,7 @@ try {
       const failures = {};
       const mutations = [];
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion, hasTouch: true, serviceWorkers: 'block' });
-      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), calendar: process.argv.includes('--calendar-data'), leads: process.argv.includes('--lead-data'), forms: process.argv.includes('--form-data'), members: process.argv.includes('--member-data'), mutations });
+      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), calendar: process.argv.includes('--calendar-data'), leads: process.argv.includes('--lead-data'), forms: process.argv.includes('--form-data'), members: process.argv.includes('--member-data'), orders: process.argv.includes('--order-data'), today: process.argv.includes('--today-data'), mutations });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -226,6 +228,26 @@ try {
           } catch (error) {
             await page.screenshot({ path: resolve(output, `${prefix}-forms-failure.png`) });
             results.push({ prefix: `${prefix}-form-flows`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/forms' && signedIn && process.argv.includes('--forms-loading')) {
+          try {
+            await checkAdminFormsLoading(page, { origin, capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'Forms loading has no runtime errors');
+            results.push({ prefix: `${prefix}-loading`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-loading-failure.png`) });
+            results.push({ prefix: `${prefix}-loading`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/orders' && signedIn && (process.argv.includes('--orders-before') || process.argv.includes('--orders'))) {
+          try {
+            await checkAdminOrders(page, { origin, failures, baseline: process.argv.includes('--orders-before'), visitError: process.argv.includes('--orders-error') || process.argv.includes('--orders'), capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'Order workflows have no runtime errors');
+            results.push({ prefix: `${prefix}-order-flows`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-order-flows-failure.png`) });
+            results.push({ prefix: `${prefix}-order-flows`, passed: false, error: error.message, browserErrors: errors });
           }
         }
         if (process.argv.includes('--qr') && signedIn) {
