@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SessionEditor, RepeatModal } from './ClassCalendarEditors';
 import WaitlistDesk from './ClassCalendarWaitlist';
+import { calendarListWithSelectedSession } from './calendarModel.mjs';
 import './calendar.css';
 import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
@@ -697,6 +698,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const cancelledInTimeFilter = sessionsInTimeFilter.filter(s => s.status === 'cancelled');
   const activeSessions = sessions.filter(s => s.status !== 'cancelled');
   const filtered = sessionsInTimeFilter.filter(s => (showCancelled || s.status !== 'cancelled') && matchesSearch(s));
+  const { rows: visibleListSessions, selectedOutsideFilters } = calendarListWithSelectedSession(filtered, sessions, expandedBookings);
   const visibleCalendarSessions = sessions.filter(s => (showCancelled || s.status !== 'cancelled') && matchesSearch(s));
   const upcomingCount = activeSessions.filter(s => !s.start_time || new Date(s.start_time).getTime() >= now).length;
   const pastCount = activeSessions.length - upcomingCount;
@@ -780,13 +782,14 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           duplicatingSessionId={duplicatingSessionId}
           savingToBankId={savingToBankId}
         />
-      ) : filtered.length === 0 ? (
+      ) : visibleListSessions.length === 0 ? (
         <AdminEmptyState title={sessions.length === 0 ? 'No classes yet' : `No ${timeFilter === 'all' ? '' : timeFilter} classes`}
           description={sessions.length === 0 ? 'Create your first class session.' : !showCancelled && cancelledInTimeFilter.length > 0 ? `${cancelledInTimeFilter.length} cancelled classes are hidden. Show cancelled to review the retained record.` : 'Try another filter or create a new class.'}
           action={<button type="button" className="admin-kit-button" onClick={() => { setEditingSession(null); setShowEditor(true); }}>New Class</button>} />
       ) : (
         <div className="space-y-2">
-          {filtered.map(s => {
+          <p className="admin-kit-label" role="status">{filtered.length} matching {filtered.length === 1 ? 'class' : 'classes'}{selectedOutsideFilters ? ' · Selected class shown separately' : ''}</p>
+          {visibleListSessions.map(s => {
             const sessionBlackouts = blackoutsOverlappingSession(s, blackouts);
             const activeRosterCount = roster.filter(member => ['requested', 'confirmed'].includes(member.status)).length;
             const waitlistedRoster = roster.filter(member => member.status === 'waitlisted');
@@ -800,6 +803,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             return (
             <div id={`class-session-${s.id}`} key={s.id} className="calendar-session-card">
               <div className="p-4">
+                {selectedOutsideFilters === s.id && <p className="admin-kit-label mb-3">Selected class — outside current filters</p>}
                 <div className="calendar-session-heading">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -821,7 +825,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                     )}
                   </div>
                   <div className="calendar-session-actions">
-                    <button onClick={() => loadBookings(s.id)}
+                    <button aria-expanded={expandedBookings === s.id} onClick={() => loadBookings(s.id)}
                       className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                       Bookings
                     </button>
