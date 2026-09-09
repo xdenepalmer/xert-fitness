@@ -152,12 +152,25 @@ read RPCs are fulfilled; no roles, credits, notes or notices are changed. Do not
 combine this read-only dataset with `--commands` mutation fixtures.
 `--member-geometry` adds an actual center-hit check for the enlarged notice Send
 control; bounding rectangles alone can miss an overlapping sticky header.
+`--members` adds native drawer keyboard containment, note/notice/grant/follow-up
+keep-or-discard protection, rejected-write retention, a held notice submission,
+stale-record mutation blocking, stable credit-grant retry IDs, narrow compact
+layout and an off-page member intent that preserves filters and unrelated context.
+`--member-filters` isolates immediate search/role/credit changes with actual RPC
+payload diagnostics. `--members-loading` holds the directory, activation metrics,
+both queues and member-detail reads to inspect composed placeholders and each
+fragment's bounds at384px/200% text. All mutation attempts remain locally rejected.
 
 `--order-data --orders-before` supplies503 fictional orders through500+3-row
 server reads and61 separate visitor sales. It checks mixed-currency suppression,
 pagination, immutable purchased terms, all503 CSV records, filters and rejected
 local refund/reconciliation requests. `--orders-error` adds the requirement that
 a visitor-ledger read outage must appear visibly rather than look like no sales.
+`--today-data --today-before` supplies two fictional classes with separate public
+and member occupancy and five nonempty decision queues. It verifies the real
+five queue destinations and four quick-action routes. `--today-error` asserts
+that unavailable metric reads never become a false caught-up state; `--today`
+adds that requirement plus enlarged-control checks to the final conversion run.
 It never approves or reaches a real financial endpoint. Member and order datasets
 are intentionally separate, as are read-only orders and command mutation fixtures.
 `--today-data` supplies separate fictional public/member booking counts, the
