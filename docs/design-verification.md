@@ -76,6 +76,34 @@ The existing **XERT iOS Verify** Codemagic workflow can be manually run against
 the Xcode project and runs the Swift unit tests on a Mac simulator. This workflow
 does not publish a TestFlight build. Keep its build URL and exact SHA as evidence.
 
+Use **XERT iOS Verify**, not **XERT iOS TestFlight**, for design checks. The manual
+build dialog selects the branch and workflow separately; confirm both and then
+confirm the resulting build overview names the intended SHA. Keep SSH/VNC off.
+
+The verification workflow opts into XCTest attachment export. Its artifacts
+include `build/test-results.xcresult` and exported PNG/JSON files under
+`build/test-attachments/`. The test runner preserves Xcode's original result even
+if attachment export fails. A successful build with no images is compilation/test
+evidence only, not visual approval. A failed compile means the new tests did not
+run, even when the workflow still produces a result bundle.
+
+For each native change, record the following separately:
+
+1. Exact commit and successful Xcode build/test result.
+2. The real test fixture or workspace rendered, text size and simulator/device.
+3. Retrieved screenshots inspected for wrapping, clipping, contrast and hierarchy.
+4. Interaction checks for touch targets, selection, disabled/loading states and
+   focus. A larger outer frame or a taller screenshot does not prove a hit area.
+5. VoiceOver reading order, labels, values and actions on an actual simulator or
+   device, plus Reduce Motion and Reduce Transparency behavior.
+
+Native design-kit fixtures run inside the test target with fictional state and
+no production screen, account or network requests. Their screenshots cover the
+primitives, not owner workspaces that have not yet been converted. Never add an
+authentication bypass to production screens to obtain screenshots. If a browser
+blocks an artifact download, do not bypass its protections; report the missing
+evidence and request the artifact through the normal user download flow.
+
 Native visual evidence must cover the converted screens at default and
 accessibility text sizes. A separate VoiceOver pass remains necessary; neither
 source-pattern tests nor a compile-only result establishes that pass.
