@@ -27,6 +27,7 @@ workflows:
         IOS_DIRECTORY: ios/XertFitnessApp
         XCODE_PROJECT: XertFitness.xcodeproj
         XCODE_SCHEME: XertFitness
+        EXPORT_TEST_ATTACHMENTS: "true"
     scripts:
       - name: Write XERT runtime configuration
         script: |
@@ -63,6 +64,8 @@ workflows:
           bash ci/run-swift-tests.sh
     artifacts:
       - ios/XertFitnessApp/build/test-results.xcresult
+      - ios/XertFitnessApp/build/test-attachments/**/*.png
+      - ios/XertFitnessApp/build/test-attachments/**/*.json
       - /tmp/xcodebuild_logs/*.log
 
   ios-testflight:

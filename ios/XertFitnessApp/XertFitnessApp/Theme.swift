@@ -170,33 +170,7 @@ extension View {
     /// Brand card: ink surface with a hairline steel border and softly rounded
     /// corners, matching the redesigned web Command Centre panels.
     func xertCardStyle() -> some View {
-        background(
-            LinearGradient(
-                colors: [
-                    Color.xertDeep.opacity(0.38),
-                    Color.xertCard.opacity(0.97),
-                    Color.xertInk.opacity(0.98),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.clear, Color.xertSteel.opacity(0.34), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(height: 1)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.xertSteel.opacity(0.24), lineWidth: 1)
-            )
+        modifier(XertSurfaceModifier())
     }
 }
 
@@ -300,63 +274,15 @@ extension View {
 
 /// Solid steel call-to-action, navy label, sharp corners — the site's primary button.
 struct XertPrimaryButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.bold))
-            .textCase(.uppercase)
-            .tracking(1.2)
-            .foregroundStyle(Color.xertNavy)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(
-                LinearGradient(
-                    colors: configuration.isPressed
-                        ? [Color.xertPale, Color.xertSteel]
-                        : [Color.xertPale, Color.xertSteel, Color.xertSteel],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(alignment: .top) {
-                Rectangle().fill(Color.white.opacity(0.28)).frame(height: 1)
-            }
-            .opacity(isEnabled ? 1 : 0.46)
-            .shadow(
-                color: Color.black.opacity(isEnabled ? (configuration.isPressed ? 0.1 : 0.24) : 0),
-                radius: 8,
-                y: 4
-            )
-            .scaleEffect(!reduceMotion && isEnabled && configuration.isPressed ? 0.985 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+        XertControlButtonStyle(variant: .primary, expands: true).makeBody(configuration: configuration)
     }
 }
 
 /// Outlined secondary action matching the site's ghost buttons.
 struct XertGhostButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.bold))
-            .textCase(.uppercase)
-            .tracking(1.2)
-            .foregroundStyle(configuration.isPressed ? Color.xertPale : Color.xertSteel)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(Color.xertSteel.opacity(configuration.isPressed ? 0.12 : 0.035))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.xertSteel.opacity(configuration.isPressed ? 1 : 0.6), lineWidth: 1)
-            )
-            .opacity(isEnabled ? 1 : 0.42)
-            .scaleEffect(!reduceMotion && isEnabled && configuration.isPressed ? 0.985 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+        XertControlButtonStyle(variant: .ghost, expands: true).makeBody(configuration: configuration)
     }
 }
 

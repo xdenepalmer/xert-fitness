@@ -60,7 +60,10 @@ test('native chrome uses advanced surfaces without rebuilding decorative navigat
 
   assert.match(theme, /backgroundEffect = UIBlurEffect\(style: \.systemChromeMaterialDark\)/);
   assert.match(theme, /Canvas\(opaque: false, colorMode: \.linear, rendersAsynchronously: true\)/);
-  assert.match(theme, /func xertCardStyle\(\)[\s\S]*LinearGradient/);
+  assert.match(theme, /func xertCardStyle\(\)[\s\S]*modifier\(XertSurfaceModifier\(\)\)/);
+  const kit = await read('../ios/XertFitnessApp/XertFitnessApp/AdminDesignSystem.swift');
+  assert.match(kit, /case \.raised: return XertTokens.surfaceRaised/);
+  assert.match(kit, /strokeBorder\(XertTokens.borderHairline/);
   assert.match(root, /private struct XertNavigationDock: View[\s\S]*RoundedRectangle\(cornerRadius: 18, style: \.continuous\)/);
   assert.match(root, /matchedGeometryEffect\(id: "primary-navigation-selection"/);
   assert.doesNotMatch(root, /let width = size\.width \/ CGFloat\(items\.count\)/);
@@ -68,10 +71,12 @@ test('native chrome uses advanced surfaces without rebuilding decorative navigat
 
 test('shared native controls expose disabled state and honor Reduce Motion', async () => {
   const theme = await read('../ios/XertFitnessApp/XertFitnessApp/Theme.swift');
-
-  assert.ok((theme.match(/@Environment\(\\\.isEnabled\) private var isEnabled/g) || []).length >= 2);
-  assert.ok((theme.match(/@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/g) || []).length >= 2);
-  assert.match(theme, /\.opacity\(isEnabled \? 1 : 0\.46\)/);
-  assert.match(theme, /scaleEffect\(!reduceMotion && isEnabled && configuration\.isPressed/);
-  assert.match(theme, /animation\(reduceMotion \? nil : \.easeOut/);
+  const controls = await read('../ios/XertFitnessApp/XertFitnessApp/XertDesignControls.swift');
+  const kit = await read('../ios/XertFitnessApp/XertFitnessApp/AdminDesignSystem.swift');
+  for (const variant of ['primary', 'ghost']) assert.match(theme, new RegExp(`XertControlButtonStyle\\(variant: \\.${variant}, expands: true\\)`));
+  assert.match(controls, /@Environment\(\\\.isEnabled\) private var isEnabled/);
+  assert.match(controls, /@Environment\(\\\.accessibilityReduceMotion\) private var reduceMotion/);
+  assert.match(controls, /\.opacity\(isEnabled \? 1 : Double\(XertTokens.nativeOpacityDisabled\)\)/);
+  assert.match(controls, /pressScale\(pressed: pressed && isEnabled, reduceMotion: reduceMotion\)/);
+  assert.match(kit, /reduceMotion \? nil : \.spring/);
 });

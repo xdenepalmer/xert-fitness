@@ -361,7 +361,8 @@ test('native owner dashboard consolidates live priorities into actionable worksp
   // adminHeading now delegates to the shared owner design system, so the
   // accessibility trait is asserted where it is actually implemented.
   assert.match(view, /private func adminHeading\(_ title: String\)[\s\S]*XertOwnerHeading\(title\)/);
-  assert.match(design, /struct XertOwnerHeading: View[\s\S]*accessibilityAddTraits\(\.isHeader\)/);
+  assert.match(design, /struct XertOwnerHeading: View[\s\S]*XertSectionHeading\(title\)/);
+  assert.match(design, /struct XertSectionHeading: View[\s\S]*accessibilityAddTraits\(\.isHeader\)/);
 });
 
 test('native owner priorities open the exact protected task when one workload is affected', async () => {

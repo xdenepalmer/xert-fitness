@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { resolveTokens } from '../scripts/build-tokens.mjs';
 
 const app = path => new URL(`../ios/XertFitnessApp/XertFitnessApp/${path}`, import.meta.url);
 const read = path => readFile(app(path), 'utf8');
@@ -29,13 +30,31 @@ test('the owner design system defines one spacing scale and the shared primitive
   for (const step of ['hairline', 'xs', 'sm', 'md', 'lg', 'xl', 'section']) {
     assert.match(design, new RegExp(`static let ${step}: CGFloat`), `${step} must be on the scale`);
   }
-  assert.match(design, /static let lg: CGFloat = 16/, '16 is the card and gutter workhorse');
+  assert.match(design, /static let lg: CGFloat = XertTokens.spaceRowComfortable/, 'gutters consume the generated scale');
+  const tokens = resolveTokens(JSON.parse(await readFile(new URL('../design/tokens.json', import.meta.url), 'utf8')));
+  assert.equal(tokens['semantics.space.row-comfortable'], '1rem', '16pt remains the generated card and gutter workhorse');
+  assert.match(await read('Generated/XertTokens.swift'), /static let spaceRowComfortable: CGFloat = 16/);
   for (const primitive of ['XertOwnerHeading', 'XertOwnerRow', 'XertOwnerEmptyState']) {
     assert.match(design, new RegExp(`struct ${primitive}: View`));
   }
   for (const modifier of ['xertOwnerScreen', 'xertOwnerContentPadding', 'xertOwnerCard']) {
     assert.match(design, new RegExp(`func ${modifier}\\(`));
   }
+});
+
+test('native vocabulary uses semantic controls, adaptive type and existing haptic service', async () => {
+  const design = await read('AdminDesignSystem.swift');
+  const controls = await read('XertDesignControls.swift');
+  for (const primitive of ['XertCard', 'XertSurface', 'XertHairline', 'XertBadge', 'XertStat', 'XertEmptyState', 'XertSkeleton', 'XertInlineError']) assert.match(design, new RegExp(`struct ${primitive}(?:<|:)`));
+  for (const control of ['XertButton', 'XertField', 'XertSegmented', 'XertToggleRow', 'XertMenuField']) assert.match(controls, new RegExp(`struct ${control}(?:<|:)`));
+  assert.match(design, /@ScaledMetric/);
+  assert.match(design, /accessibilityReduceMotion/);
+  assert.match(design, /accessibilityReduceTransparency/);
+  assert.match(controls, /Picker\(/);
+  assert.match(controls, /Toggle\(/);
+  assert.match(controls, /XertHaptics.play/);
+  assert.doesNotMatch(design + controls, /Color\(red:|\.shadow\(|\.frame\(height: 44\)|\.lineLimit\(1\)/);
+  assert.match(design, /XertOwnerHeading[\s\S]*XertSectionHeading\(title\)/);
 });
 
 test('every owner screen sits on the shared backdrop instead of flat navy', async () => {

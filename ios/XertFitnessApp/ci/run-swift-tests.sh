@@ -51,8 +51,7 @@ if ! run_with_timeout 600 xcrun simctl bootstatus "$SIMULATOR_ID" -b; then
   echo "::warning:: Simulator did not report a completed boot in time; continuing and letting xcodebuild wait for the destination."
 fi
 
-set +e
-run_with_timeout 720 xcodebuild test \
+if run_with_timeout 720 xcodebuild test \
   -project "$XCODE_PROJECT" \
   -scheme "$XCODE_SCHEME" \
   -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
@@ -63,11 +62,33 @@ run_with_timeout 720 xcodebuild test \
   -default-test-execution-time-allowance 60 \
   -maximum-test-execution-time-allowance 120 \
   -resultBundlePath build/test-results.xcresult \
-  CODE_SIGNING_ALLOWED=NO
-TEST_STATUS=$?
-set -e
+  CODE_SIGNING_ALLOWED=NO; then
+  TEST_STATUS=0
+else
+  TEST_STATUS=$?
+fi
+
+# Verification-only evidence. Export errors must never replace xcodebuild's result.
+if [[ "${EXPORT_TEST_ATTACHMENTS:-false}" == "true" ]]; then
+  if mkdir -p build/test-attachments; then
+    if xcrun xcresulttool export attachments --help > build/test-attachments/export-help.txt 2>&1; then
+      if ! xcrun xcresulttool export attachments --path build/test-results.xcresult --output-path build/test-attachments; then
+        echo "::warning:: XCTest attachment export failed; visual proof is unavailable. Original test status: ${TEST_STATUS}."
+      fi
+    else
+      echo "::warning:: This Xcode cannot export XCTest attachments; inspect xcresulttool command help. Visual proof is unavailable."
+    fi
+    ATTACHMENT_IMAGE="$(find build/test-attachments -type f -iname '*.png' -print -quit 2>/dev/null || true)"
+    if [[ -z "$ATTACHMENT_IMAGE" ]]; then
+      echo "::warning:: No PNG XCTest attachments were exported. Do not treat the test result as visual verification."
+    fi
+  else
+    echo "::warning:: Could not create attachment output directory; visual proof is unavailable."
+  fi
+fi
 
 if [[ "$TEST_STATUS" -ne 0 ]]; then
   echo "::error:: Swift unit tests failed (exit ${TEST_STATUS})."
   exit "$TEST_STATUS"
 fi
+exit "$TEST_STATUS"

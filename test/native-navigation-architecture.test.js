@@ -426,7 +426,10 @@ test('owner favorites are account-scoped and every overview shortcut uses the ce
   assert.match(ownerView, /pinned\.contains\(workspace\) \? "pin\.fill" : "pin"/);
   assert.match(ownerView, /accessibilityHint\("Updates your owner workspace shortcuts"\)/);
   assert.match(ownerView, /private struct AdminDestinationRow: View[\s\S]*let onOpen: \(\) -> Void[\s\S]*XertOwnerRow\(title: title, detail: detail, icon: icon, onOpen: onOpen\)/);
-  assert.match(design, /struct XertOwnerRow: View[\s\S]*var onOpen: \(\) -> Void[\s\S]*Button\(action: onOpen\)/);
+  assert.match(design, /struct XertOwnerRow: View[\s\S]*var onOpen: \(\) -> Void[\s\S]*XertNavigationRow\(title: title, detail: detail, icon: icon, onOpen: onOpen\)/);
+  const controls = await readFile(new URL('../ios/XertFitnessApp/XertFitnessApp/XertDesignControls.swift', import.meta.url), 'utf8');
+  assert.match(controls, /struct XertNavigationRow: View[\s\S]*Button \{[\s\S]*onOpen\(\)/);
+  assert.doesNotMatch(controls, /NavigationLink\(/, 'the kit delegates navigation to the existing central router');
   assert.doesNotMatch(ownerView, /NavigationLink\(value: workspace\)/);
   assert.match(ownerView, /AdminDestinationRow\([\s\S]*onOpen: \{ openWorkspaceWithFeedback\(workspace\) \}/);
   assert.match(modelsTests, /testOwnerWorkspacePinsAreBoundedStrictAndAccountScoped/);
