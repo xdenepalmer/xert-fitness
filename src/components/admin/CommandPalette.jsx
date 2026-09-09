@@ -24,7 +24,7 @@ function Highlight({ label, indices }) {
   return <span>{[...label].map((letter, index) => indices.includes(index) ? <mark key={index}>{letter}</mark> : <React.Fragment key={index}>{letter}</React.Fragment>)}</span>;
 }
 
-export default function CommandPalette({ open, onOpenChange, onNavigate }) {
+export default function CommandPalette({ open, onOpenChange, onNavigate, onReload }) {
   const [query, setQuery] = useState('');
   const [members, setMembers] = useState([]);
   const [memberSearchLoading, setMemberSearchLoading] = useState(false);
@@ -65,9 +65,9 @@ export default function CommandPalette({ open, onOpenChange, onNavigate }) {
   const memberSearchTerm = query.replace(/^member\s+/i, '').trim();
   const commands = memberSearchRequested ? [] : rankCommands(COMMANDS, query, history);
   return <CommandDialog open={open} onOpenChange={value => { if (!busy.current) onOpenChange(value); }} title="Find an owner task" commandProps={{ shouldFilter: false }} plain={Boolean(action)}>
-    {action ? <AdminWorkspaceBoundary key={action.id}><Suspense fallback={<div className="admin-command-stage" role="status">Loading command options…</div>}><AdminCommandActions command={action} onBack={() => setAction(null)} onComplete={remember} onBusyChange={value => { busy.current = value; }} /></Suspense></AdminWorkspaceBoundary> : <>
+    {action ? <AdminWorkspaceBoundary key={action.id} onReload={onReload}><Suspense fallback={<div className="admin-command-stage" role="status">Loading command options…</div>}><AdminCommandActions command={action} onBack={() => setAction(null)} onComplete={remember} onBusyChange={value => { busy.current = value; }} /></Suspense></AdminWorkspaceBoundary> : <>
       <CommandInput value={query} onValueChange={setQuery} placeholder="Find a task, or type member + name…" inputMode="search" enterKeyHint="search" />
-      <CommandList className="max-h-[min(68dvh,34rem)] overscroll-contain">
+      <CommandList className="admin-command-list overscroll-contain">
         {commands.length > 0 && <CommandGroup heading={query ? 'Matching tasks' : 'Owner tasks'}>{commands.map(command => <CommandItem key={command.id} value={command.id} onSelect={() => {
           if (ACTIONS.some(item => item.id === command.id)) setAction(command);
           else if (run(command.key, command.params) !== false) remember(command.id);

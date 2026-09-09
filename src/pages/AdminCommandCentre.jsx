@@ -154,7 +154,7 @@ export default function AdminCommandCentre() {
   return (
     <>
       <AdminLayout activeSection={section} onSectionChange={setSection} hasUnsavedChanges={hasUnsavedChanges} onConfirmLeave={confirmLeaveAdmin}>
-        <AdminWorkspaceBoundary key={section}>
+        <AdminWorkspaceBoundary key={section} onReload={() => { if (confirmLeaveAdmin(() => window.location.reload())) window.location.reload(); }}>
         <Suspense fallback={<WorkspaceSkeleton section={section} />}>
           {renderSection()}
         </Suspense>

@@ -68,11 +68,18 @@ export { navDesktopMediaQuery };
 
 export function WorkspaceTabs({ items, activeSection, navigateTo, badges }) {
   const ref = useRef(null);
+  const [focusedTab, setFocusedTab] = useState(activeSection);
+  useEffect(() => { setFocusedTab(activeSection); }, [activeSection, items]);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
   const [edges, setEdges] = useState({ left: false, right: false });
   useEffect(() => {
     const element = ref.current;
     const measure = () => {
-      element.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const selected = element.querySelector('[aria-selected="true"]');
+      if (selected) {
+        setIndicator({ left: selected.offsetLeft, width: selected.offsetWidth });
+        selected.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
       sync();
     };
     const sync = () => setEdges({ left: element.scrollLeft > 1, right: element.scrollWidth - element.clientWidth - element.scrollLeft > 1 });
@@ -89,10 +96,11 @@ export function WorkspaceTabs({ items, activeSection, navigateTo, badges }) {
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
       buttons[next].focus(); buttons[next].scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }}>
-      {items.map(item => <button type="button" role="tab" key={item.key} tabIndex={activeSection === item.key ? 0 : -1}
+      {items.map(item => <button type="button" role="tab" key={item.key} tabIndex={focusedTab === item.key ? 0 : -1} onFocus={() => setFocusedTab(item.key)}
         aria-selected={activeSection === item.key} onClick={() => navigateTo(item)}>
         {item.label}{badges[item.key] > 0 && <span>{badges[item.key]}</span>}
       </button>)}
+      <span aria-hidden="true" className="admin-tab-indicator" style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }} />
     </div>
   </div>;
 }

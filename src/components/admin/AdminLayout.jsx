@@ -361,7 +361,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
         </nav>
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onNavigate={onSectionChange} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onNavigate={onSectionChange} onReload={() => { if (onConfirmLeave(() => window.location.reload())) window.location.reload(); }} />
       <KeyboardShortcuts open={shell.shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
     </div>
   );

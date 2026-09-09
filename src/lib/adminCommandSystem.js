@@ -25,25 +25,45 @@ export function fuzzyMatch(label, query) {
 export function readPreferences(storage) {
   try {
     const value = JSON.parse((storage || window.localStorage).getItem(STORAGE_KEY) || '{}');
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return normalizePreferences(value);
   } catch { return {}; }
 }
 export function savePreferences(storage, patch) {
-  try { (storage || window.localStorage).setItem(STORAGE_KEY, JSON.stringify({ ...readPreferences(storage), ...patch })); } catch { /* Private browsing and quota must never block navigation. */ }
+  try { (storage || window.localStorage).setItem(STORAGE_KEY, JSON.stringify(normalizePreferences({ ...readPreferences(storage), ...patch }))); } catch { /* Private browsing and quota must never block navigation. */ }
+}
+function normalizeHistory(history) {
+  const seen = new Set();
+  return (Array.isArray(history) ? history : []).filter(row => {
+    if (!row || typeof row.id !== 'string' || !row.id || row.id.length >= 80 || !Number.isFinite(row.count) || row.count < 1 || !Number.isFinite(row.at) || row.at < 0 || seen.has(row.id)) return false;
+    seen.add(row.id); return true;
+  }).slice(0, 20).map(row => ({ id: row.id, count: Math.min(100, Math.floor(row.count)), at: row.at }));
+}
+function normalizePreferences(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return {
+    ...(['comfortable', 'compact'].includes(value.density) ? { density: value.density } : {}),
+    ...(typeof value.collapsed === 'boolean' ? { collapsed: value.collapsed } : {}),
+    ...(Number.isFinite(value.width) && value.width > 0 ? { width: value.width } : {}),
+    ...('history' in value ? { history: normalizeHistory(value.history) } : {}),
+  };
 }
 export function recordCommand(history, id, now = Date.now()) {
-  const safe = (Array.isArray(history) ? history : []).filter(row => typeof row?.id === 'string' && row.id.length < 80)
-    .map(row => ({ id: row.id, count: Math.min(100, Math.max(1, Number(row.count) || 1)), at: Number(row.at) || 0 }));
+  const safe = normalizeHistory(history);
   return [{ id, count: Math.min(100, (safe.find(row => row.id === id)?.count || 0) + 1), at: now }, ...safe.filter(row => row.id !== id)].slice(0, 20);
 }
 export function rankCommands(commands, query, history = []) {
+  const safe = normalizeHistory(history);
   return commands.flatMap(command => {
     const match = fuzzyMatch(command.label, query);
     if (!match) return [];
-    const recent = Array.isArray(history) ? history.find(row => row.id === command.id) : null;
+    const recent = safe.find(row => row.id === command.id);
     const weight = recent ? Math.min(6, Math.log2((Number(recent.count) || 0) + 1)) + Math.max(0, 4 - (Date.now() - recent.at) / 86400000) : 0;
     return [{ ...command, ...match, score: match.score + weight }];
   }).sort((a, b) => b.score - a.score);
+}
+
+export function workspaceRecoveryKind(error) {
+  return /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|loading (?:css )?chunk .+ failed/i.test(error?.message || '') ? 'reload' : 'retry';
 }
 export const NAV_SHORTCUTS = { t: 'overview', c: 'calendar', p: 'gym-members', m: 'sms', w: 'forms', b: 'orders' };
 export function matchShortcut(event, { typing = false, modal = false, prefix = false } = {}) {

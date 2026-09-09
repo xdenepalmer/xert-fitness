@@ -1,6 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fuzzyMatch, readPreferences, savePreferences, recordCommand, rankCommands, matchShortcut, createMutationGate, reviewedAttendance, reversibleAttendance } from '../src/lib/adminCommandSystem.js';
+import { fuzzyMatch, readPreferences, savePreferences, recordCommand, rankCommands, matchShortcut, createMutationGate, reviewedAttendance, reversibleAttendance, workspaceRecoveryKind } from '../src/lib/adminCommandSystem.js';
+
+test('malformed stored history is normalized before consumers rank or save it', () => {
+  let saved;
+  const storage = { getItem: () => JSON.stringify({ history: [null, 2, {}, { id: 'go-calendar', count: 3, at: 10, email: 'private' }, { id: 'bad', count: 'oops', at: -4 }], width: 'bad', density: 'fake', secret: 'private' }), setItem: (_, value) => { saved = JSON.parse(value); } };
+  const preferences = readPreferences(storage);
+  assert.deepEqual(preferences, { history: [{ id: 'go-calendar', count: 3, at: 10 }] });
+  assert.doesNotThrow(() => rankCommands([{ id: 'go-calendar', label: 'Calendar' }], '', [null]));
+  savePreferences(storage, { collapsed: true, history: [null] });
+  assert.deepEqual(saved, { history: [], collapsed: true });
+});
+
+test('failed module downloads require explicit document recovery; render errors remain regional', () => {
+  assert.equal(workspaceRecoveryKind(new TypeError('Failed to fetch dynamically imported module: /assets/Workout.js')), 'reload');
+  assert.equal(workspaceRecoveryKind(new TypeError('error loading dynamically imported module')), 'reload');
+  assert.equal(workspaceRecoveryKind(new Error('Loading chunk 5 failed.')), 'reload');
+  assert.equal(workspaceRecoveryKind(new Error('Cannot read properties of undefined')), 'retry');
+});
 
 test('fuzzy subsequence highlights punctuation and empty query safely', () => {
   assert.deepEqual(fuzzyMatch('Mark attendance', 'mat').indices, [0, 5, 6]);
