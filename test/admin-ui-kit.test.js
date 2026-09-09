@@ -27,6 +27,14 @@ function ADMIN_PAGE_IS_PHONE_FIRST(kit) {
   return /ADMIN_PAGE = 'px-4 py-5 sm:px-8 sm:py-7 mx-auto w-full max-w-6xl admin-kit-container'/.test(kit);
 }
 
+test('kit text emphasis remains themeable through shared weight tokens', async () => {
+  for (const name of (await kitFiles()).filter(name => name.endsWith('.css'))) {
+    const source = await read(name);
+    const weights = [...source.matchAll(/font-weight:\s*([^;}]+)/g)].map(match => match[1].trim());
+    assert.deepEqual(weights.filter(value => !/^var\(--[\w-]+\)$/.test(value)), [], `${name} must consume weight tokens rather than private numeric weights`);
+  }
+});
+
 test('no workspace hand-rolls a primary button, an input class or a page title', async () => {
   for (const name of [...await managers(), ...await kitFiles()]) {
     const source = await read(name);

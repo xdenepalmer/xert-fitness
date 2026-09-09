@@ -1,11 +1,11 @@
 @import '../../../styles/admin-kit-queries.css';
 
 .admin-kit-container { container: admin-kit / inline-size; min-width: 0; }
-.admin-kit-button, .admin-table-sort, .admin-segmented button { min-height: var(--control-height); border-radius: var(--radius-control); padding: var(--space-inline) var(--space-control); font: inherit; color: var(--text-secondary); background: var(--surface-overlay); border: var(--nav-line-width) solid var(--border-strong); transition: background var(--duration-quick) var(--nav-easing-standard); white-space: normal; overflow-wrap: anywhere; }
+.admin-kit-button, .admin-table-sort, .admin-segmented button { min-height: var(--control-height); min-width: var(--control-height); border-radius: var(--radius-control); padding: var(--space-inline) var(--space-control); font: inherit; color: var(--text-secondary); background: var(--surface-overlay); border: var(--nav-line-width) solid var(--border-strong); transition: background var(--duration-quick) var(--nav-easing-standard); white-space: normal; overflow-wrap: anywhere; }
 .admin-kit-button:hover, .admin-table-sort:hover, .admin-segmented button:hover { background: var(--surface-secondary); }
 .admin-kit-button:disabled, .admin-segmented button:disabled { opacity: var(--native-opacity-disabled); cursor: not-allowed; }
 .admin-kit-container :focus-visible, .admin-form-field :focus-visible, .admin-drawer :focus-visible, .admin-segmented :focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: var(--focus-offset); }
-.admin-kit-label { display: block; font-size: var(--font-size-label); font-weight: 600; color: var(--text-secondary); overflow-wrap: anywhere; }
+.admin-kit-label { display: block; font-size: var(--font-size-label); font-weight: var(--admin-kit-font-weight-emphasis); color: var(--text-secondary); overflow-wrap: anywhere; }
 .admin-form-field { display: grid; gap: var(--space-label); min-width: 0; }
 .admin-kit-input { min-width: 0; width: 100%; min-height: var(--control-height); padding: var(--space-inline) var(--space-control); border: var(--nav-line-width) solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); font: inherit; font-size: max(16px, 1em); }
 .admin-kit-input[aria-invalid="true"] { border-color: var(--state-danger-text); }
@@ -37,7 +37,7 @@
 .admin-timeline { display: grid; gap: var(--space-group); list-style: decimal; padding-inline-start: var(--space-group); }
 .admin-timeline li { padding-inline-start: var(--space-control); border-inline-start: var(--nav-line-width) solid var(--border-strong); overflow-wrap: anywhere; }
 .admin-timeline li > * + * { margin-block-start: var(--space-label); }
-.admin-timeline h3 { font-weight: 600; }
+.admin-timeline h3 { font-weight: var(--admin-kit-font-weight-emphasis); }
 .admin-drawer { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(100%, var(--admin-kit-drawer-width)); max-width: 100%; height: 100dvh; max-height: 100dvh; padding: 0; border: var(--nav-line-width) solid var(--border-strong); color: var(--text-primary); background: var(--surface-base); overflow: hidden; }
 .admin-drawer[open] { display: flex; flex-direction: column; }
 .admin-drawer::backdrop { background: var(--surface-scrim-80); }
@@ -57,12 +57,12 @@
 .admin-data-table thead, .admin-data-table tbody, .admin-data-table tr { display: block; }
 .admin-data-table thead { background: var(--surface-overlay); }
 .admin-data-table thead tr { display: flex; flex-wrap: wrap; align-items: center; }
-.admin-data-table th { display: block; text-align: start; font-weight: 600; }
+.admin-data-table th { display: block; text-align: start; font-weight: var(--admin-kit-font-weight-emphasis); }
 .admin-data-table th, .admin-data-table td { padding: var(--space-row) var(--space-control); overflow-wrap: anywhere; vertical-align: top; border-bottom: var(--nav-line-width) solid var(--border-hairline); }
 .admin-data-table tbody tr { background: var(--surface-raised); border-bottom: var(--nav-line-width) solid var(--border-strong); }
 .admin-data-table tbody tr[aria-selected="true"] { background: var(--surface-overlay); }
 .admin-data-table td { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-label); min-width: 0; }
-.admin-cell-label { color: var(--text-secondary); font-size: var(--font-size-label); font-weight: 600; }
+.admin-cell-label { color: var(--text-secondary); font-size: var(--font-size-label); font-weight: var(--admin-kit-font-weight-emphasis); }
 .admin-cell-value { min-width: 0; }
 .admin-cell-value button, .admin-cell-value a, .admin-cell-value select { min-height: var(--control-height); min-width: var(--control-height); white-space: normal; }
 .admin-table-sort { text-align: start; width: 100%; background: transparent; border-color: transparent; }

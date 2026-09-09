@@ -194,6 +194,7 @@ enum XertTokens {
     static let adminKitBreakpointTable: CGFloat = 768
     static let adminKitDrawerWidth: CGFloat = 576
     static let adminKitFilterDebounce: TimeInterval = 0.25
+    static let adminKitFontWeightEmphasis: CGFloat = 600
     static let adminKitSkeletonDuration: TimeInterval = 1.4000000000000001
     static let adminKitSkeletonOpacity: CGFloat = 0.45
     static let adminKitTableEstimate: CGFloat = 88
