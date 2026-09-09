@@ -18,6 +18,9 @@
 .forms-workspace .forms-option-breakdown { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; text-align: start; background: transparent; border-color: transparent; }
 .forms-option-breakdown > span:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
 .forms-contact { display: grid; gap: var(--space-label); }
+.forms-written-table { display: none; min-width: 0; max-width: 100%; overflow: auto; }
+.forms-written-table :is(th, td) { padding: var(--space-row) var(--space-control); overflow-wrap: anywhere; }
+.forms-written-table thead th { font-size: var(--font-size-label); }
 .forms-card { width: 100%; text-align: start; padding: var(--space-group); }
 .forms-card:hover { border-color: var(--border-strong); }
 .forms-loading-stack { display: grid; gap: var(--space-group); }

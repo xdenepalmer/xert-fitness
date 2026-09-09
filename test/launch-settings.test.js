@@ -27,7 +27,17 @@ test('normalizes every live platform control, including the server payment switc
     class_credits_enabled: false,
     // The casual door fee is a live control too, defaulting to on at $15.60.
     casual_payments_enabled: true,
+    // All three visitor prices are the club's to set, each with its own
+    // discount that is off until somebody sets a price and switches it on.
     casual_visit_price_cents: 1560,
+    casual_visit_discount_cents: null,
+    casual_visit_discount_enabled: false,
+    three_day_pass_price_cents: 3500,
+    three_day_pass_discount_cents: null,
+    three_day_pass_discount_enabled: false,
+    three_month_price_cents: 43000,
+    three_month_discount_cents: null,
+    three_month_discount_enabled: false,
   });
 });
 
@@ -89,4 +99,29 @@ test('tracks only live launch fields against the last saved snapshot', () => {
   assert.equal(launchSettingsChanged({ ...saved, announcement_banner_text: '' }, saved), false);
   assert.equal(launchSettingsChanged({ ...saved, fitbox_enabled: true }, saved), true);
   assert.equal(launchSettingsChanged({ ...saved, fitbox_booking_url: 'https://portal.fitboxcorp.com/xert' }, saved), true);
+});
+
+test('a visitor discount must be set, and cheaper, before it can run', async () => {
+  const { normalizeVisitorPricing } = await import('../src/lib/launchSettings.js');
+
+  const running = normalizeVisitorPricing({
+    three_month_price_cents: 43000, three_month_discount_cents: 39000, three_month_discount_enabled: true,
+  });
+  assert.equal(running.three_month_discount_cents, 39000);
+  assert.equal(running.three_month_discount_enabled, true);
+
+  // Switching one on with nothing behind it, or with a price that is not a
+  // discount, is refused here rather than charged to somebody.
+  assert.throws(() => normalizeVisitorPricing({ three_day_pass_discount_enabled: true }),
+    /Set a three day pass discount price/i);
+  assert.throws(() => normalizeVisitorPricing({
+    casual_visit_price_cents: 1560, casual_visit_discount_cents: 2000, casual_visit_discount_enabled: true,
+  }), /must be cheaper/i);
+
+  // A discount left set but switched off is kept, so it can be run again.
+  const parked = normalizeVisitorPricing({
+    casual_visit_price_cents: 1560, casual_visit_discount_cents: 1000, casual_visit_discount_enabled: false,
+  });
+  assert.equal(parked.casual_visit_discount_cents, 1000);
+  assert.equal(parked.casual_visit_discount_enabled, false);
 });

@@ -8,13 +8,60 @@ export const CASUAL_VISIT_ACTION = 'casual_visit';
 export const CASUAL_VISIT_METADATA_FLAG = 'xert_casual_visit';
 export const THREE_DAY_PASS_ACTION = 'three_day_pass';
 export const THREE_DAY_PASS_PRICE_CENTS = 3500;
+export const THREE_MONTH_MEMBERSHIP_ACTION = 'three_month_membership';
+export const THREE_MONTH_MEMBERSHIP_PRICE_CENTS = 43000;
+
+/**
+ * Everything sold on a visitor page. A casual visit is priced by the club in
+ * settings; the passes carry a fixed price here so the browser can never move
+ * one, and the server checks the amount again on the way back from Stripe.
+ */
+export const VISITOR_PASSES = Object.freeze({
+  casual: Object.freeze({
+    label: 'Casual visit',
+    priceCents: null,
+    priceField: 'casual_visit_price_cents',
+    discountField: 'casual_visit_discount_cents',
+    discountEnabledField: 'casual_visit_discount_enabled',
+    defaultPriceCents: 1560,
+    productName: 'XERT Fitness casual visit',
+    productDescription: 'Entry and one class for a single visit.',
+    needsSignedQuestionnaire: false,
+  }),
+  [THREE_DAY_PASS_ACTION]: Object.freeze({
+    label: 'Three Day Pass',
+    priceCents: THREE_DAY_PASS_PRICE_CENTS,
+    priceField: 'three_day_pass_price_cents',
+    discountField: 'three_day_pass_discount_cents',
+    discountEnabledField: 'three_day_pass_discount_enabled',
+    defaultPriceCents: THREE_DAY_PASS_PRICE_CENTS,
+    productName: 'XERT Fitness Three Day Pass',
+    productDescription: 'Three Day Pass — show your receipt to the XERT team.',
+    needsSignedQuestionnaire: true,
+  }),
+  [THREE_MONTH_MEMBERSHIP_ACTION]: Object.freeze({
+    label: 'Three month membership',
+    priceCents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS,
+    priceField: 'three_month_price_cents',
+    discountField: 'three_month_discount_cents',
+    discountEnabledField: 'three_month_discount_enabled',
+    defaultPriceCents: THREE_MONTH_MEMBERSHIP_PRICE_CENTS,
+    productName: 'XERT Fitness three month membership',
+    productDescription: 'Three months of training, paid in full.',
+    needsSignedQuestionnaire: false,
+  }),
+});
+
+export function visitorPass(kind = 'casual') {
+  const pass = VISITOR_PASSES[kind];
+  if (!pass) throw new Error('This visitor pass is not available.');
+  return pass;
+}
 
 const RESPONSE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function visitorPassLabel(kind = 'casual') {
-  if (kind === 'casual') return 'Casual visit';
-  if (kind === THREE_DAY_PASS_ACTION) return 'Three Day Pass';
-  throw new Error('This visitor pass is not available.');
+  return visitorPass(kind).label;
 }
 
 export function validQuestionnaireResponseId(value) {
@@ -83,18 +130,41 @@ export function normalizeCasualVisitPriceCents(value, fallback = 1560) {
 }
 
 /**
+ * What a pass costs right now, read from the club's settings.
+ *
+ * A discount is stored as the price actually charged while it runs, so there
+ * is no percentage arithmetic to get wrong: `charge` is what the visitor pays
+ * and `full` is what to show struck through beside it. A discount that is not
+ * cheaper than the full price is ignored rather than trusted, so a bad row can
+ * never raise anyone's bill.
+ */
+export function visitorPassPricing(passKind, settings = {}) {
+  const pass = visitorPass(passKind);
+  const full = normalizeCasualVisitPriceCents(settings?.[pass.priceField], pass.defaultPriceCents);
+  const discount = normalizeCasualVisitPriceCents(settings?.[pass.discountField], NaN);
+  const running = settings?.[pass.discountEnabledField] === true
+    && Number.isInteger(discount) && discount < full;
+  return { full, charge: running ? discount : full, discounted: running };
+}
+
+/**
  * The Stripe Checkout Session for one casual visit. The amount comes from the
  * database, never from the browser, and the visitor's own details are carried
  * in so they never retype them at the card screen.
  */
-export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 'aud', returnURLs, now = Date.now(), passKind = 'casual', questionnaireResponseId = '' }) {
-  const label = visitorPassLabel(passKind);
-  const threeDay = passKind === THREE_DAY_PASS_ACTION;
-  if (threeDay && !validQuestionnaireResponseId(questionnaireResponseId)) {
+export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 'aud', returnURLs, now = Date.now(), passKind = 'casual', questionnaireResponseId = '', paperworkVerified = null }) {
+  const pass = visitorPass(passKind);
+  const label = pass.label;
+  if (pass.needsSignedQuestionnaire && !validQuestionnaireResponseId(questionnaireResponseId)) {
     throw new Error('Complete and sign the pre-exercise questionnaire before buying this pass.');
   }
-  const amount = threeDay ? THREE_DAY_PASS_PRICE_CENTS : normalizeCasualVisitPriceCents(priceCents, NaN);
-  const passMetadata = threeDay ? { xert_pass_kind: THREE_DAY_PASS_ACTION, questionnaire_response_id: questionnaireResponseId } : {};
+  const amount = normalizeCasualVisitPriceCents(priceCents, NaN);
+  const passMetadata = {
+    xert_amount_cents: String(amount),
+    ...(passKind === 'casual' ? {} : { xert_pass_kind: passKind }),
+    ...(pass.needsSignedQuestionnaire ? { questionnaire_response_id: questionnaireResponseId } : {}),
+    ...(paperworkVerified === null ? {} : { xert_paperwork_verified: paperworkVerified ? 'true' : 'false' }),
+  };
   if (!Number.isInteger(amount)) throw new Error('The casual visit price is not set correctly.');
   for (const value of [returnURLs?.success, returnURLs?.cancel]) {
     let url;
@@ -120,11 +190,11 @@ export function casualVisitCheckoutParameters({ visitor, priceCents, currency = 
     line_items: [{
       quantity: 1,
       price_data: {
-        currency: threeDay ? 'aud' : String(currency || 'aud').toLowerCase(),
+        currency: String(currency || 'aud').toLowerCase(),
         unit_amount: amount,
         product_data: {
-          name: threeDay ? 'XERT Fitness Three Day Pass' : 'XERT Fitness casual visit',
-          description: threeDay ? 'Three Day Pass — show your receipt to the XERT team.' : 'Entry and one class for a single visit.',
+          name: pass.productName,
+          description: pass.productDescription,
         },
       },
     }],
@@ -154,24 +224,35 @@ export function casualVisitPaymentFromCheckout(checkout) {
   if (String(metadata[CASUAL_VISIT_METADATA_FLAG] || '') !== 'true') return null;
   if (String(checkout?.payment_status || '') !== 'paid') return null;
   const passKind = metadata.xert_pass_kind || 'casual';
-  visitorPassLabel(passKind);
-  const threeDay = passKind === THREE_DAY_PASS_ACTION;
-  // Stripe's payer email can be edited at Checkout. The signed questionnaire
-  // belongs to the participant verified by our server, not that cardholder.
+  const pass = visitorPass(passKind);
+  const isPass = passKind !== 'casual';
+  // Prices are set by the club and can change, so the amount to expect is the
+  // one this server put in the session rather than a constant. Stripe signs
+  // the webhook, so metadata is ours; a session charging anything else did not
+  // come from us.
+  const approvedAmount = Number.parseInt(String(metadata.xert_amount_cents ?? ''), 10);
+  // Stripe's payer email can be edited at Checkout. A pass belongs to the
+  // participant our server verified, not to whoever's card was used.
   const participantEmail = clean(metadata.casual_visit_email).toLowerCase();
-  if (threeDay && (
-    checkout.mode !== 'payment' || checkout.amount_total !== THREE_DAY_PASS_PRICE_CENTS
-    || checkout.currency !== 'aud' || !validQuestionnaireResponseId(metadata.questionnaire_response_id)
+  if (isPass && (
+    checkout.mode !== 'payment' || !Number.isInteger(approvedAmount)
+    || checkout.amount_total !== approvedAmount
+    || checkout.currency !== 'aud'
+    || (pass.needsSignedQuestionnaire && !validQuestionnaireResponseId(metadata.questionnaire_response_id))
     || !/^cs_[a-zA-Z0-9_]+$/.test(checkout.id || '')
     || !EMAIL_PATTERN.test(participantEmail) || participantEmail.length > 320
-  )) throw new Error('Three Day Pass payment does not match the approved pass or questionnaire.');
-  const email = threeDay ? participantEmail : clean(checkout?.customer_details?.email || checkout?.customer_email || metadata.casual_visit_email).toLowerCase();
+  )) throw new Error(`${pass.label} payment does not match the approved pass or questionnaire.`);
+  const email = isPass ? participantEmail : clean(checkout?.customer_details?.email || checkout?.customer_email || metadata.casual_visit_email).toLowerCase();
   const fullName = clean(metadata.casual_visit_name || checkout?.customer_details?.name);
   const sessionID = clean(checkout?.id);
   if (!EMAIL_PATTERN.test(email) || !fullName || !sessionID) return null;
   const amount = Number(checkout?.amount_total);
   return {
-    ...(threeDay ? { pass_kind: THREE_DAY_PASS_ACTION } : {}),
+    ...(passKind === 'casual' ? {} : { pass_kind: passKind }),
+    // Only a declared "already signed" carries this, so null means they signed
+    // as part of the purchase and there is nothing for staff to check.
+    ...(metadata.xert_paperwork_verified === undefined || metadata.xert_paperwork_verified === ''
+      ? {} : { paperwork_verified: metadata.xert_paperwork_verified === 'true' }),
     full_name: fullName.slice(0, 120),
     email,
     phone: normalizeVisitorPhone(metadata.casual_visit_phone || checkout?.customer_details?.phone) || null,

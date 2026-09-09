@@ -6,7 +6,7 @@ import { answerIsPresent, loadPublicForm, submitPublicForm } from '@/lib/xertFor
 import { buildPublicFormSteps } from '@/lib/formBranching';
 import {
   completionIdentity, formPath, minorStatus, nextFormSlug, prerequisiteRedirect, readFormCompletion,
-  returnPathAfterForm, writeFormCompletion,
+  returnKeyAfterForm, returnPathAfterForm, writeFormCompletion,
 } from '@/lib/formPrerequisites';
 import { answerValidationMessage, firstInvalidAnswer } from '@/lib/formAnswerValidation';
 
@@ -309,7 +309,7 @@ export default function PublicForm() {
       // its prerequisite: opening the questionnaire directly must still lead to
       // the agreement, and a questionnaire with nothing after it must not.
       const handoff = nextFormSlug(search) || form.follow_on_slug || null;
-      if (handoff && handoff !== slug) { setHandingOver(true); navigate(formPath(handoff), { replace: true }); return; }
+      if (handoff && handoff !== slug) { setHandingOver(true); navigate(formPath(handoff, null, returnKeyAfterForm(search)), { replace: true }); return; }
       // Someone sent here mid-way through paying goes back to finish paying.
       const returnPath = returnPathAfterForm(search);
       if (returnPath) { setHandingOver(true); navigate(returnPath, { replace: true }); return; }

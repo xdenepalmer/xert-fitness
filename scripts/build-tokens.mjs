@@ -181,6 +181,8 @@ ${durationNames}
 }
 @container admin-kit (min-width: ${resolved['components.admin.kit.breakpoint.table']}) {
   .forms-workspace .forms-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .forms-workspace .forms-written-cards { display: none; }
+  .forms-workspace .forms-written-table { display: block; }
 }
 @media screen {
   @container form-record (min-width: ${resolved['components.admin.kit.breakpoint.columns']}) {

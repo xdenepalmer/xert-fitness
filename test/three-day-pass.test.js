@@ -20,7 +20,7 @@ function paidSession(overrides = {}) {
     amount_total: 3500, currency: 'aud', customer_email: visitor.email,
     payment_intent: 'pi_test_three_day',
     metadata: {
-      xert_casual_visit: 'true', xert_pass_kind: 'three_day_pass',
+      xert_casual_visit: 'true', xert_pass_kind: 'three_day_pass', xert_amount_cents: '3500',
       casual_visit_name: 'Casey Example', casual_visit_email: visitor.email,
       casual_visit_phone: '+61400111222', questionnaire_response_id: responseID,
     },
@@ -28,12 +28,14 @@ function paidSession(overrides = {}) {
   };
 }
 
-test('three-day checkout always charges AUD 35 and describes the purchased pass', () => {
+test('three-day checkout charges the club\'s price in AUD and describes the purchased pass', () => {
   const parameters = visits.casualVisitCheckoutParameters({
     visitor: visits.normalizeCasualVisitor(visitor), passKind: 'three_day_pass',
-    priceCents: 1560, currency: 'usd', questionnaireResponseId: responseID, returnURLs,
+    priceCents: 3500, currency: 'aud', questionnaireResponseId: responseID, returnURLs,
   });
   assert.equal(parameters.line_items[0].price_data.unit_amount, 3500);
+  // The approved amount travels with the session so the webhook can check it.
+  assert.equal(parameters.metadata.xert_amount_cents, '3500');
   assert.equal(parameters.line_items[0].price_data.currency, 'aud');
   assert.equal(parameters.line_items[0].price_data.product_data.name, 'XERT Fitness Three Day Pass');
   assert.equal(parameters.line_items[0].price_data.product_data.description, 'Three Day Pass — show your receipt to the XERT team.');

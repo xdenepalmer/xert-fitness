@@ -8,15 +8,32 @@ import {StaticRouter} from 'react-router-dom/server.js';
 
 // Expose the real editor at the test boundary; no production test-only API.
 const server = await createServer({configFile:false, resolve:{alias:{'@':fileURLToPath(new URL('../src', import.meta.url))}},
-  plugins:[{name:'forms-render-boundary',transform(code,id){if (id.endsWith('/FormsSurveysManager.jsx')) return `${code}\nexport {FormEditor, Analytics};`;}}],
+  plugins:[{name:'forms-render-boundary',transform(code,id){if (id.endsWith('/FormsSurveysManager.jsx')) return `${code}\nexport {FormEditor, Analytics, WrittenAnswers};`;}}],
   define:{'import.meta.env.VITE_SUPABASE_URL':JSON.stringify('https://ugmkwoapjcpiucsrxwzt.supabase.co'),'import.meta.env.VITE_SUPABASE_ANON_KEY':JSON.stringify('sb_publishable_fixture_render_key_not_real')},
   optimizeDeps:{noDiscovery:true,include:[]}, server:{middlewareMode:true,watch:null}, appType:'custom'});
 after(() => server.close());
-const {default: FormsSurveysManager, FormEditor, Analytics} = await server.ssrLoadModule('/src/components/admin/FormsSurveysManager.jsx');
+const {default: FormsSurveysManager, FormEditor, Analytics, WrittenAnswers} = await server.ssrLoadModule('/src/components/admin/FormsSurveysManager.jsx');
 const recordModule = await server.ssrLoadModule('/src/components/admin/FormResponseRecord.jsx');
 const {default: FormResponseRecord} = recordModule;
 const draft = {title:'Survey',questions:[{id:'one',type:'single_choice',question:'Preferred time?',options:['Morning','Evening']}]};
 const render = props => renderToStaticMarkup(React.createElement(FormEditor, {draft,setDraft:()=>{},onSave:()=>{},onCancel:()=>{},...props}));
+
+test('written answer cards and table retain every person with their own answer beyond twenty rows', () => {
+  const responses = Array.from({length:22}, (_,index) => ({id:`person-${index + 1}`,respondent_name:`Person ${index + 1}`,answers:{notes:`Written answer ${index + 1}`}}));
+  const html = renderToStaticMarkup(React.createElement(WrittenAnswers, {responses,questions:[{id:'notes',question:'Notes'}]}));
+  const cards = [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)];
+  const tableRows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].slice(1);
+  assert.equal(cards.length, 22);
+  assert.equal(tableRows.length, 22);
+  for (const rows of [cards,tableRows]) {
+    assert.match(rows[0][1], /Person 1<\//);
+    assert.match(rows[0][1], /Written answer 1<\//);
+    assert.match(rows[21][1], /Person 22<\//);
+    assert.match(rows[21][1], /Written answer 22<\//);
+  }
+  assert.match(html, /<caption[^>]*>Written answers, one row per person<\/caption>/);
+  assert.match(html, /role="region" aria-label="Written answers table"/);
+});
 
 test('builder names each question, type and option and disambiguates duplicate/remove controls', () => {
   const html = render({});

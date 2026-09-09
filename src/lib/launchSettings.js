@@ -81,8 +81,54 @@ export function normalizeLaunchSettings(settings = {}) {
     // back on. Off means booking never looks for one.
     class_credits_enabled: Boolean(settings.class_credits_enabled),
     casual_payments_enabled: settings.casual_payments_enabled !== false,
-    casual_visit_price_cents: normalizeCasualPrice(settings.casual_visit_price_cents),
+    ...normalizeVisitorPricing(settings),
   };
+}
+
+/**
+ * The three visitor prices and their discounts. A discount is the price
+ * actually charged while it runs, so a club types what a visitor pays rather
+ * than a percentage — and a discount cannot be switched on unless it is set
+ * and genuinely cheaper, which is the same rule the database enforces.
+ */
+export const VISITOR_PRICE_FIELDS = Object.freeze([
+  Object.freeze({
+    key: 'casual', label: 'Casual visit',
+    price: 'casual_visit_price_cents', discount: 'casual_visit_discount_cents',
+    enabled: 'casual_visit_discount_enabled', fallback: 1560,
+  }),
+  Object.freeze({
+    key: 'three-day', label: 'Three Day Pass',
+    price: 'three_day_pass_price_cents', discount: 'three_day_pass_discount_cents',
+    enabled: 'three_day_pass_discount_enabled', fallback: 3500,
+  }),
+  Object.freeze({
+    key: 'three-month', label: 'Three month membership',
+    price: 'three_month_price_cents', discount: 'three_month_discount_cents',
+    enabled: 'three_month_discount_enabled', fallback: 43000,
+  }),
+]);
+
+export function normalizeVisitorPricing(settings = {}) {
+  const normalized = {};
+  for (const field of VISITOR_PRICE_FIELDS) {
+    const price = normalizeCasualPrice(settings[field.price], field.fallback);
+    const raw = settings[field.discount];
+    const discount = raw === '' || raw === null || raw === undefined
+      ? null
+      : normalizeCasualPrice(raw, field.fallback);
+    const enabled = settings[field.enabled] === true;
+    if (enabled && discount === null) {
+      throw new Error(`Set a ${field.label.toLowerCase()} discount price before switching the discount on.`);
+    }
+    if (enabled && discount >= price) {
+      throw new Error(`The ${field.label.toLowerCase()} discount must be cheaper than its full price.`);
+    }
+    normalized[field.price] = price;
+    normalized[field.discount] = discount;
+    normalized[field.enabled] = enabled;
+  }
+  return normalized;
 }
 
 /**
@@ -111,6 +157,14 @@ export function launchSettingsChanged(current = {}, saved = {}) {
     'class_credits_enabled',
     'casual_payments_enabled',
     'casual_visit_price_cents',
+    'casual_visit_discount_cents',
+    'casual_visit_discount_enabled',
+    'three_day_pass_price_cents',
+    'three_day_pass_discount_cents',
+    'three_day_pass_discount_enabled',
+    'three_month_price_cents',
+    'three_month_discount_cents',
+    'three_month_discount_enabled',
   ];
   return fields.some(field => String(current[field] ?? '') !== String(saved[field] ?? ''));
 }

@@ -66,10 +66,25 @@ export default function OrdersManager() {
     return () => { active = false; };
   }, []);
   const casualSummary = useMemo(() => summarizeCasualVisits(casualVisits.rows), [casualVisits.rows]);
-  const casualVisitURL = useMemo(
-    () => new URL('/casual', window.location.origin).toString(),
-    [],
-  );
+  // One code per thing somebody can buy at the door. Each is printed
+  // separately, so the front desk hands over the right one.
+  const visitorCodes = useMemo(() => [
+    {
+      slug: 'casual-visit', path: '/casual', title: 'Casual visit',
+      qrTitle: 'Casual visit QR',
+      description: "Print it for the front desk. A walk-in scans it and pays for today's visit on their own phone.",
+    },
+    {
+      slug: 'three-day-pass', path: '/3daypass', title: 'Three Day Pass',
+      qrTitle: 'Three Day Pass QR',
+      description: 'They sign the questionnaire on their own phone, then pay for three days of training.',
+    },
+    {
+      slug: 'three-month-membership', path: '/3months', title: 'Three month membership',
+      qrTitle: 'Three month membership QR',
+      description: 'Three months paid up front. They sign the questionnaire and agreement first, or say they already have.',
+    },
+  ].map(code => ({ ...code, url: new URL(code.path, window.location.origin).toString() })), []);
 
   const currencies = useMemo(() => [...new Set(orders.map(order => String(order.currency || 'aud').toLowerCase()))].sort(), [orders]);
   const filteredOrders = useMemo(() => filterOrders(orders, { search, status: statusFilter, currency: currencyFilter, days: daysFilter }), [currencyFilter, daysFilter, orders, search, statusFilter]);
@@ -214,13 +229,18 @@ export default function OrdersManager() {
       {/* Front-desk QR for the casual visit payment page */}
       {casualVisits.installed && (
         <div className="mb-8 grid gap-4 lg:grid-cols-[minmax(0,22rem)_1fr]">
-          <FormQRCode
-            form={{ slug: 'casual-visit', title: 'Casual visit' }}
-            publicURL={casualVisitURL}
-            title="Casual visit QR"
-            description="Print it for the front desk. A walk-in scans it and pays for today's visit on their own phone."
-            onNotice={message => toast({ title: message })}
-          />
+          <div className="space-y-4">
+            {visitorCodes.map(code => (
+              <FormQRCode
+                key={code.slug}
+                form={{ slug: code.slug, title: code.title }}
+                publicURL={code.url}
+                title={code.qrTitle}
+                description={code.description}
+                onNotice={message => toast({ title: message })}
+              />
+            ))}
+          </div>
           <div className="border border-xert-steel/20 bg-xert-ink p-5">
             <h3 className="font-display text-sm uppercase tracking-wider text-xert-offwhite">How a casual visit works</h3>
             <ol className="mt-3 space-y-2 font-body text-sm leading-relaxed text-xert-concrete/60">
@@ -230,8 +250,9 @@ export default function OrdersManager() {
               <li>4. First time in? Send them to the casual questionnaire before they train.</li>
             </ol>
             <p className="mt-4 font-body text-xs text-xert-concrete/40">
-              The price and the on/off switch live in Business → Settings. Nothing here grants a session credit:
-              a casual visit is entry paid for, not a pack.
+              Every price, and the switch that turns all three pages on or off, lives in Business → Settings —
+              including a discount you can run on any of them. Nothing here grants a session credit: these are
+              entry paid for, not packs.
             </p>
           </div>
         </div>

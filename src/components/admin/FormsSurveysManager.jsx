@@ -5,7 +5,7 @@ import {
   LoaderCircle, Pause, Pencil, Play, Plus, Search, Trash2, X,
 } from 'lucide-react';
 import { activeQuestions, archiveFormResponse, archiveOwnerForm, CHARTABLE_TYPES, CHOICE_TYPES, createField, createFormDraft, FIELD_TYPES, FORM_TYPES, getFormResponse, listFormResponses, listOwnerForms, publicFormURL, responseCSV, saveOwnerForm, slugifyFormTitle, updateFormResponseStatus, validateFormDraft } from '@/lib/xertForms';
-import { numberedAnswers } from '@/lib/formAnswers';
+import { answerTable } from '@/lib/formAnswers';
 import AdminConfirmDialog from './AdminConfirmDialog';
 import FormQRCode from './FormQRCode';
 import FormResponseRecord, { FormRecordLoading } from './FormResponseRecord';
@@ -235,9 +235,11 @@ function Analytics({ form, onBack }) {
     <div className="forms-grid forms-stats">{[['Responses',responses.length],['New',responses.filter(item => item.status === 'new').length],['Avg. time',responses.length ? `${Math.round(responses.reduce((sum,item) => sum + (item.time_taken_seconds || 0), 0) / responses.length)}s` : '—'],['Fields',questions.length]].map(([label,value]) => <AdminStatCard key={label} label={label} value={loading ? '—' : value} />)}</div>
     <AdminSegmented label="Analytics view" options={[{value:'overview',label:'Overview'},{value:'responses',label:'Responses'},{value:'trends',label:'Trends'}]} value={tab} onValueChange={setTab} />
     {error && <p role="alert" className="border border-status-warning-300/30 bg-status-warning-300/10 p-3 text-sm text-status-warning-100">{error}</p>}
-    {tab !== 'responses' && loading ? <AnalyticsLoading questions={questions} view={tab} /> : tab !== 'responses' && listError ? <div role="alert"><AdminEmptyState title="Unable to load responses" description={listError} action={<button type="button" className={button} onClick={() => setListAttempt(value => value + 1)}>Retry</button>} /></div> : tab === 'overview' ? <div className="forms-grid forms-grid-two">{questions.map(question => {
+    {tab !== 'responses' && loading ? <AnalyticsLoading questions={questions} view={tab} /> : tab !== 'responses' && listError ? <div role="alert"><AdminEmptyState title="Unable to load responses" description={listError} action={<button type="button" className={button} onClick={() => setListAttempt(value => value + 1)}>Retry</button>} /></div> : tab === 'overview' ? <div className="space-y-4">
+    <WrittenAnswers responses={responses} questions={questions.filter(question => !CHARTABLE_TYPES.has(question.type))} />
+    <div className="forms-grid forms-grid-two">{questions.filter(question => CHARTABLE_TYPES.has(question.type)).map(question => {
       const values = responses.map(item => item.answers?.[question.id]).filter(value => value !== undefined && value !== null && value !== '');
-      if (CHARTABLE_TYPES.has(question.type)) {
+      {
         const flattened = values.flatMap(value => Array.isArray(value) ? value : [value]).map(String);
         const labels = question.type === 'yes_no' ? ['Yes','No'] : question.type === 'star_rating' ? ['1','2','3','4','5'] : question.type === 'nps' ? Array.from({length:11},(_,i) => String(i)) : question.options || [...new Set(flattened)];
         // Keep the respondents behind each option, not just the tally, so staff
@@ -253,17 +255,68 @@ function Analytics({ form, onBack }) {
         const maximum = Math.max(1, ...rows.map(row => row.count));
         return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-text-primary">{question.question}</h2><p className="mb-4 text-xs text-text-secondary">{values.length} answers · select an option to see who</p><div className="space-y-1">{rows.map(row => <OptionBreakdown key={row.label} {...row} total={values.length} maximum={maximum} isOpen={openOption === `${question.id}:${row.label}`} onToggle={() => setOpenOption(current => current === `${question.id}:${row.label}` ? null : `${question.id}:${row.label}`)} />)}</div></section>;
       }
-      // Numbered by respondent, so the same number is the same person on every
-      // card and staff can read across name, mobile and email.
-      const answers = numberedAnswers(responses, question.id);
-      return <section className={`${panel} p-5`} key={question.id}><h2 className="font-semibold text-text-primary">{question.question}</h2><p className="mb-3 text-xs text-text-secondary">{answers.length} answers</p><ol tabIndex={0} aria-label={`Numbered answers for ${question.question}`} className="max-h-56 space-y-2 overflow-y-auto">{answers.map(answer => <li key={answer.id} className="flex gap-2.5 border-l-2 border-border-hairline pl-3 text-sm text-text-secondary"><span aria-hidden="true" className="w-6 shrink-0 text-right font-mono text-xs tabular-nums text-text-secondary">{answer.number}</span><span className="min-w-0 flex-1">{answer.text}</span></li>)}</ol></section>;
-    })}</div> : tab === 'responses' ? <div className="space-y-4">
+    })}</div></div> : tab === 'responses' ? <div className="space-y-4">
       <div className="forms-grid forms-grid-two"><label className="relative"><span className="sr-only">Search respondents</span><Search className="absolute left-3 top-3.5 h-4 w-4 text-text-secondary" /><input className={`${control} pl-10`} value={responseQuery} onChange={event => setResponseQuery(event.target.value)} placeholder="Search name, email or phone" /></label><select aria-label="Filter responses by status" className={control} value={responseStatus} onChange={event => setResponseStatus(event.target.value)}><option value="all">All statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="followed_up">Followed up</option><option value="closed">Closed</option></select></div>
       <AdminDataTable rows={filteredResponses} columns={responseColumns} label="Form responses" getRowLabel={respondentLabel} loading={loading} error={listError} onRetry={() => setListAttempt(value => value + 1)} emptyTitle={responses.length ? 'No matching responses' : 'No responses yet'} emptyDescription={responses.length ? 'Clear the search or status filter to see other submissions.' : 'Share the live link to start collecting responses.'} />
     </div> : <section className={`${panel} p-5`}><h2 className="mb-5 font-display text-2xl uppercase text-text-primary">Last 14 days</h2><ol className="forms-trends">{days.map(day => { const max = Math.max(1,...days.map(item => item.count)); return <li key={day.key}><span>{day.label}</span><span className="forms-trend-track" aria-hidden="true"><span style={{width:`${day.count/max*100}%`}} /></span><span>{day.count}</span></li>; })}</ol></section>}
     <AdminConfirmDialog open={Boolean(responseToArchive)} onOpenChange={open => !open && setResponseToArchive(null)} title="Archive this response?" description="It will be removed from analytics and the response list. The underlying record remains recoverable in the database." warning={undefined} cancelLabel="Keep response" confirmLabel="Archive response" busy={updatingResponseID === responseToArchive?.id} onConfirm={archive} />
   </div>;
 }
+/**
+ * Every written answer in one table: a row per person, a column per question.
+ * Reading a name against its own phone number was the whole problem with the
+ * old side-by-side lists, so the name is frozen in the first column and the
+ * questions scroll under it. On a phone there is no room for that, so each
+ * person becomes a card instead.
+ */
+function WrittenAnswers({ responses, questions }) {
+  const { columns, rows } = answerTable(responses, questions);
+  if (!columns.length || !rows.length) return null;
+
+  return <section aria-label="Written answers" className={`${panel} p-5`}>
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+      <h2 className="font-semibold text-text-primary">Written answers</h2>
+      <p className="text-xs text-text-secondary">{rows.length} {rows.length === 1 ? 'person' : 'people'} · {columns.length} {columns.length === 1 ? 'question' : 'questions'}{columns.length > 2 ? ' · scroll sideways for more' : ''}</p>
+    </div>
+
+    {/* Phones: one card per person. */}
+    <ul className="forms-written-cards space-y-3">
+      {rows.map(row => <li key={row.id} className="border-l-2 border-border-hairline pl-3">
+        <p className="flex gap-2 text-sm font-semibold text-text-primary"><span aria-hidden="true" className="shrink-0 whitespace-nowrap font-mono text-xs tabular-nums text-text-secondary">{row.number}</span>{row.person}</p>
+        <dl className="mt-1 space-y-0.5">
+          {columns.filter(column => row.cells[column.id]).map(column => <div key={column.id} className="flex flex-wrap gap-x-2 text-sm">
+            <dt className="text-text-secondary">{column.label}</dt>
+            <dd className="text-text-secondary">{row.cells[column.id]}</dd>
+          </div>)}
+        </dl>
+      </li>)}
+    </ul>
+
+    {/* Everything wider: a real table, name column pinned. */}
+    <div tabIndex={0} role="region" aria-label="Written answers table" className="forms-written-table">
+      <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">Written answers, one row per person</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="sticky left-0 top-0 z-20 border-b border-border-hairline bg-surface-raised px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-secondary">Person</th>
+            {columns.map(column => <th key={column.id} scope="col" className="sticky top-0 z-10 whitespace-nowrap border-b border-border-hairline bg-surface-raised px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-secondary">{column.label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => <tr key={row.id} className="align-top">
+            <th scope="row" className="sticky left-0 z-10 border-b border-border-hairline bg-surface-raised px-3 py-2 text-left font-medium text-text-primary">
+              <span aria-hidden="true" className="mr-2 font-mono text-xs tabular-nums text-text-secondary">{row.number}</span>{row.person}
+            </th>
+            {columns.map(column => <td key={column.id} className="border-b border-border-hairline px-3 py-2 text-text-secondary">
+              {row.cells[column.id] || <span className="text-text-secondary">—</span>}
+            </td>)}
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </section>;
+}
+
 function Empty({ title, detail }) { return <AdminEmptyState title={title} description={detail} />; }
 
 export default function FormsSurveysManager({ initialAction = null, onIntentHandled = () => {}, onDirtyChange = (_dirty) => {} }) {
