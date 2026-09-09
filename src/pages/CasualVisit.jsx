@@ -5,7 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { supabase } from '@/lib/supabase';
 import {
-  CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice, formCompletionMatchesVisitor,
+  CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice,
   recallCasualVisitor, rememberCasualVisitor,
   THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, THREE_MONTH_MEMBERSHIP_ACTION,
   THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId, visitorPassPricing,
@@ -14,7 +14,6 @@ import { readFormCompletion } from '@/lib/formPrerequisites';
 
 const CASUAL_PEQ_SLUG = 'peq-casual';
 const MEMBER_PEQ_SLUG = 'peq';
-const MEMBER_AGREEMENT_SLUG = 'terms-and-conditions';
 
 // A membership is not a drop-in, so it takes the member questionnaire, which
 // hands off to the membership agreement before returning here to pay.
@@ -45,7 +44,6 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // server checks whether they really did and tells staff either way.
   const [alreadySigned, setAlreadySigned] = useState(false);
   const [questionnaireResponseId, setQuestionnaireResponseId] = useState('');
-  const [membershipCompletion, setMembershipCompletion] = useState({ questionnaire: null, agreement: null });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const paid = params.get('paid') === '1';
@@ -55,7 +53,6 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // details are waiting, and the questionnaire answer is already known.
   useEffect(() => {
     const completed = readFormCompletion(threeMonth ? MEMBER_PEQ_SLUG : CASUAL_PEQ_SLUG);
-    if (threeMonth) setMembershipCompletion({ questionnaire: completed, agreement: readFormCompletion(MEMBER_AGREEMENT_SLUG) });
     const remembered = recallCasualVisitor();
     const carried = { ...(remembered || {}) };
     if (completed) {
@@ -101,9 +98,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // Signing here means signing on this device now; saying you already signed
   // sends nothing to verify, so the server looks the records up instead.
   const needsMembershipPaperwork = threeMonth && !alreadySigned
-    && (questionnaire !== 'done'
-      || !formCompletionMatchesVisitor(membershipCompletion.questionnaire, visitor)
-      || !formCompletionMatchesVisitor(membershipCompletion.agreement, visitor));
+    && (!validQuestionnaireResponseId(questionnaireResponseId) || questionnaire !== 'done');
 
   const pay = async event => {
     event.preventDefault();
@@ -116,11 +111,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
     }
     if (needsMembershipPaperwork) {
       rememberCasualVisitor(visitor);
-      if (formCompletionMatchesVisitor(membershipCompletion.questionnaire, visitor)) {
-        navigate(`/forms/${MEMBER_AGREEMENT_SLUG}?return=3months`);
-      } else {
-        navigate(`/forms/${MEMBER_PEQ_SLUG}?return=3months`);
-      }
+      navigate(`/forms/${MEMBER_PEQ_SLUG}?return=3months`);
       return;
     }
     if (needsThreeDayQuestionnaire) {

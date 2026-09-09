@@ -115,19 +115,6 @@ export function casualVisitValidationError(input) {
   }
 }
 
-/** Device markers guide the form handoff only; the server proves saved records. */
-export function formCompletionMatchesVisitor(completion, input) {
-  if (!validQuestionnaireResponseId(completion?.response_id)) return false;
-  try {
-    const visitor = normalizeCasualVisitor(input);
-    return clean(completion.name).toLowerCase() === visitor.fullName.toLowerCase()
-      && clean(completion.email).toLowerCase() === visitor.email
-      && normalizeVisitorPhone(completion.phone) === visitor.phone;
-  } catch {
-    return false;
-  }
-}
-
 export function formatCasualVisitPrice(cents, currency = 'aud') {
   const amount = Number(cents);
   if (!Number.isFinite(amount)) return '';

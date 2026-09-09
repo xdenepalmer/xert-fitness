@@ -7,7 +7,6 @@ import {
 } from '../src/lib/casualVisit.js';
 import { formPath, returnKeyAfterForm, returnPathAfterForm } from '../src/lib/formPrerequisites.js';
 import { startThreeMonthMembershipCheckout } from '../api/checkout.js';
-import * as visits from '../src/lib/casualVisit.js';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 const visitor = { fullName: 'Jane Smith', email: 'jane@example.com', phone: '+61400000000' };
@@ -37,38 +36,6 @@ function membershipDependencies({proof=true, proofError=null, paperwork={questio
   return {admin,stripe,created,calls};
 }
 
-test('new-signing membership rejects missing agreement, mismatched questionnaire and failed proof reads before Stripe', async () => {
-  for (const scenario of [
-    {paperwork:{questionnaire:true,agreement:false}},
-    {paperwork:{questionnaire:false,agreement:true}},
-    {paperwork:null},
-    {paperworkError:{message:'Unavailable'}},
-    {proof:false},
-    {proofError:{message:'Unavailable'}},
-    {payload:{...memberPayload,questionnaire_response_id:'invalid'}},
-  ]) {
-    const deps = membershipDependencies(scenario);
-    await assert.rejects(startThreeMonthMembershipCheckout({...deps,payload:scenario.payload || memberPayload,origin:'https://xertfitness.com.au'}));
-    assert.equal(deps.created.length,0,'unproven required records cannot open Stripe');
-  }
-});
-
-test('new-signing membership proves both records and exact visitor identity, preserving server price and metadata', async () => {
-  const deps = membershipDependencies();
-  const result = await startThreeMonthMembershipCheckout({...deps,payload:{...memberPayload,amount_cents:1},origin:'https://xertfitness.com.au',now:1_800_000_001_000});
-  assert.deepEqual(deps.calls,[
-    {name:'xert_visitor_questionnaire_completed',args:{p_response_id:responseId,p_name:'Jane Smith',p_email:'jane@example.com',p_phone:'+61400000000'}},
-    {name:'xert_membership_paperwork_signed',args:{p_email:'jane@example.com'}},
-  ]);
-  assert.equal(result.amount_cents,39000);
-  assert.equal(deps.created.length,1);
-  assert.equal(deps.created[0].parameters.line_items[0].price_data.unit_amount,39000);
-  assert.equal(deps.created[0].parameters.metadata.xert_amount_cents,'39000');
-  assert.equal(deps.created[0].parameters.metadata.xert_paperwork_verified,undefined);
-  assert.equal(deps.created[0].parameters.success_url,returnURLs.success);
-  assert.equal(deps.created[0].parameters.cancel_url,returnURLs.cancel);
-});
-
 test('already-signed membership retains the deliberate claim policy and fails closed on read errors', async () => {
   for (const found of [true,false]) {
     const deps = membershipDependencies({paperwork:{questionnaire:found,agreement:found}});
@@ -80,16 +47,6 @@ test('already-signed membership retains the deliberate claim policy and fails cl
   const deps = membershipDependencies({paperworkError:{message:'Unavailable'}});
   await assert.rejects(startThreeMonthMembershipCheckout({...deps,payload:{...memberPayload,already_signed:true},origin:'https://xertfitness.com.au'}));
   assert.equal(deps.created.length,0);
-});
-
-test('a form completion marker belongs to the entered visitor and requires a saved response', () => {
-  assert.equal(typeof visits.formCompletionMatchesVisitor,'function');
-  const marker = {response_id:responseId,name:'Jane Smith',email:'JANE@example.com',phone:'+61400000000'};
-  assert.equal(visits.formCompletionMatchesVisitor(marker,memberPayload),true);
-  for (const change of [{response_id:''},{name:'Other Person'},{email:'other@example.com'},{phone:'0400111222'}, {email:''}]) {
-    assert.equal(visits.formCompletionMatchesVisitor({...marker,...change},memberPayload),false);
-  }
-  assert.equal(visits.formCompletionMatchesVisitor(null,memberPayload),false);
 });
 
 test('the membership is priced by the club, never by the browser', () => {

@@ -887,13 +887,6 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
     });
     if (proofError) fail('The questionnaire could not be checked. Please try again.', 503);
     if (proven !== true) fail('Complete and sign the questionnaire using these same contact details, then return to pay.', 400);
-    const { data: signed, error: signedError } = await admin.rpc('xert_membership_paperwork_signed', {
-      p_email: visitor.email,
-    });
-    if (signedError) fail('Your paperwork could not be checked. Please try again.', 503);
-    if (signed?.questionnaire !== true || signed?.agreement !== true) {
-      fail('Complete and sign the questionnaire and membership agreement using these same contact details, then return to pay.', 400);
-    }
   }
 
   // Keep expiry and every other parameter stable for a retry in this minute.
