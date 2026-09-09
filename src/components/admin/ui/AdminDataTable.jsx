@@ -30,11 +30,31 @@ function MeasuredRow({rowKey, measure, generation, children, ...props}) {
   return <tr ref={ref} role="row" data-row-key={rowKey} {...props}>{children}</tr>;
 }
 
+function TableSkeleton({columns, selectable}) {
+  const selection = <span className="admin-table-check" data-skeleton-selection=""><AdminSkeleton decorative className="admin-table-skeleton-check" /></span>;
+  return <div data-table-loading="" className="admin-table-scroll" aria-hidden="true">
+    <table className="admin-data-table">
+      <thead className="admin-table-head"><tr>
+        {selectable && <th className="admin-selection-heading">{selection}</th>}
+        {columns.map(column => <th key={column.key}>{column.header}</th>)}
+      </tr></thead>
+      <tbody>{[0,1,2].map(index => <tr key={index} data-skeleton-row="">
+        {selectable && <td className="admin-selection-cell">{selection}</td>}
+        {columns.map(column => <td key={column.key} data-skeleton-cell={column.key}>
+          <span className="admin-cell-label">{column.header}</span>
+          <div className="admin-cell-value">{column.renderSkeleton ? column.renderSkeleton() : <AdminSkeleton decorative />}</div>
+        </td>)}
+      </tr>)}</tbody>
+    </table>
+  </div>;
+}
+
 /**
  * Header selection covers the supplied rows. Server-paged consumers must name that scope with selectAllLabel.
  * selectedKeys/sort undefined => local state; supplied Set/null => controlled.
  * Large lists measure mounted rows and retain the focused stable-key node.
  * Full-results mode exposes every action in normal document tab order.
+ * Optional column.renderSkeleton matches richer cells during loading; the default retains column geometry.
  */
 export function AdminDataTable({rows = EMPTY, columns = EMPTY, getRowKey = getId, getRowLabel = getLabel, label = 'Records',
   selectable = false, selectedKeys = undefined, defaultSelectedKeys = EMPTY, onSelectionChange = undefined,
@@ -137,10 +157,10 @@ export function AdminDataTable({rows = EMPTY, columns = EMPTY, getRowKey = getId
   return <section ref={containerRef} className="admin-kit-container admin-table-container" data-admin-table="" data-virtualized={virtualized} aria-label={label} aria-busy={loading}>
     <span ref={textMeasureRef} aria-hidden="true" className="admin-table-text-measure" />
     <div className="admin-table-toolbar">
-      <p role="status" aria-live="polite">{selectable ? `${summary.total} selected (${summary.outside} outside current results)` : `${rows.length} results`}</p>
+      <p role="status" aria-live="polite">{loading ? `Loading ${label.toLowerCase()}…` : selectable ? `${summary.total} selected (${summary.outside} outside current results)` : `${rows.length} results`}</p>
       {rows.length > threshold && <button type="button" className="admin-kit-button" aria-pressed={fullResults} onClick={() => setFullResults(value => !value)}>{fullResults ? 'Use virtual scrolling' : `Show all ${rows.length} results for keyboard navigation`}</button>}
     </div>
-    {loading ? <div className="admin-table-loading"><AdminSkeleton variant="control" /><AdminSkeleton /><AdminSkeleton /><AdminSkeleton /></div>
+    {loading ? <TableSkeleton columns={columns} selectable={selectable} />
       : error ? <div role="alert"><AdminEmptyState title="Unable to load records" description={typeof error === 'string' ? error : error.message || 'Please try again.'} action={onRetry && <button type="button" className="admin-kit-button" onClick={onRetry}>Retry</button>} /></div>
       : rows.length === 0 ? <AdminEmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
       : <div ref={scrollRef} data-table-scroll="" className="admin-table-scroll" tabIndex={0} aria-label={`${label} scroll area`} onScroll={readViewport}

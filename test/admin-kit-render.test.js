@@ -50,6 +50,25 @@ test('table selection names its loaded-page scope and locks every checkbox durin
   assert.ok((defaultHtml.match(/<input[^>]*type="checkbox"[^>]*>/g)).every(input => !input.includes('disabled')));
 });
 
+test('table loading retains column and selection geometry with optional content-shaped placeholders', () => {
+  const props = {loading:true,selectable:true,columns:[
+    {key:'contact',header:'Contact',renderSkeleton:()=>React.createElement('div', {'data-contact-skeleton':''}, React.createElement(kit.AdminSkeleton, {decorative:true,variant:'control'}), React.createElement(kit.AdminSkeleton, {decorative:true}))},
+    {key:'submitted',header:'Submitted'},
+  ]};
+  const html = render(kit.AdminDataTable, props);
+  assert.match(html, /data-table-loading=""/);
+  assert.match(html, /class="admin-data-table"/);
+  assert.equal((html.match(/data-skeleton-row=""/g) || []).length, 3);
+  assert.equal((html.match(/data-skeleton-selection=""/g) || []).length, 4, 'selection heading and each placeholder row retain their width');
+  assert.equal((html.match(/data-contact-skeleton=""/g) || []).length, 3);
+  assert.equal((html.match(/data-skeleton-cell="submitted"/g) || []).length, 3, 'columns without custom placeholders keep a default shared skeleton');
+  assert.equal((html.match(/class="admin-cell-label"/g) || []).length, 6, 'narrow cards retain all column labels');
+  assert.doesNotMatch(html, /<input|<button/, 'loading placeholders introduce no pretend selectable records');
+  const loaded = render(kit.AdminDataTable, {...props,loading:false,rows:[{id:'real',contact:'Real contact',submitted:'Today'}]});
+  assert.match(loaded, /Real contact/);
+  assert.doesNotMatch(loaded, /data-skeleton-row|data-contact-skeleton/);
+});
+
 test('unknown statuses remain readable and neutral, segmented items expose one selected radio', () => {
   assert.equal(typeof kit.AdminBadge, 'function');
   assert.match(render(kit.AdminBadge, {status:'future-status'}), /data-tone="neutral"/);

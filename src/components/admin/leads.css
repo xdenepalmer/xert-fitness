@@ -1,6 +1,8 @@
 .lead-pipeline { color: var(--text-primary); }
 .lead-filter-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-.lead-contact { display: grid; gap: var(--space-label); min-width: 0; }
+.lead-contact { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-label); min-width: 0; }
+.admin-kit-skeleton.lead-name-skeleton { width: var(--admin-skeleton-medium-width); }
+.admin-kit-skeleton.lead-status-skeleton { width: var(--admin-skeleton-short-width); height: calc(var(--font-size-label) + var(--space-label) * 2); border-radius: var(--radius-pill); }
 .lead-secondary, .lead-detail-fields dt { color: var(--text-secondary); }
 .lead-open { display: block; width: 100%; text-align: start; color: var(--text-primary); font-weight: var(--admin-kit-font-weight-emphasis); overflow-wrap: anywhere; }
 .lead-open:hover { text-decoration: underline; }

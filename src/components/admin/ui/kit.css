@@ -71,5 +71,5 @@
 .admin-data-table .admin-table-spacer { background: transparent; border: 0; }
 .admin-data-table .admin-table-spacer td { padding: 0; border: 0; }
 .admin-table-text-measure { position: absolute; visibility: hidden; pointer-events: none; height: 1em; width: 1em; }
-.admin-table-loading { display: grid; gap: var(--space-group); padding: var(--space-group); }
+.admin-kit-skeleton.admin-table-skeleton-check { width: var(--space-row-comfortable); height: var(--space-row-comfortable); }
 .admin-page-header { display: flex; flex-direction: column; gap: var(--space-row-comfortable); margin-bottom: var(--space-group); }

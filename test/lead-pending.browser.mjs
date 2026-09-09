@@ -11,7 +11,7 @@ const server = await createServer({ server: { host: '127.0.0.1', port: 0 }, defi
   'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://ugmkwoapjcpiucsrxwzt.supabase.co'),
   'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('sb_publishable_LOCAL_DESIGN_FIXTURE_NOT_A_REAL_KEY'),
 } });
-let browser, releaseBulk;
+let browser, releaseBulk, releaseRead;
 try {
   await server.listen();
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
@@ -40,6 +40,46 @@ try {
     await page.getByRole('button', { name: 'Lead Member 001', exact: true }).waitFor();
     assert.equal(await spacing(), compact, 'Lead rows inherit the persisted shell density after remount');
     console.log('PASS: Shell density changes lead row spacing and survives remount.');
+  } else if (process.argv.includes('--loading-bounds')) {
+    const readWait = new Promise(resolve => { releaseRead = resolve; });
+    await context.route('**/rest/v1/member_interest?*', async route => {
+      await readWait;
+      return route.fallback();
+    });
+    await page.getByRole('button', { name:'Refresh leads', exact:true }).click();
+    const loading = page.locator('[data-table-loading]');
+    await loading.waitFor();
+    const overflow = await loading.evaluate(element => Array.from(element.querySelectorAll('[data-skeleton-cell]')).flatMap(cell => {
+      const bounds = cell.getBoundingClientRect();
+      return Array.from(cell.querySelectorAll('.admin-kit-skeleton')).filter(skeleton => skeleton.getBoundingClientRect().right > bounds.right + 1).map(() => cell.getAttribute('data-skeleton-cell'));
+    }));
+    assert.deepEqual(overflow, [], 'Every skeleton must stay inside its own column footprint');
+    releaseRead();
+    await page.getByRole('button', { name:'Lead Member 001', exact:true }).waitFor();
+    console.log('PASS: Held-read skeletons stay within their actual column bounds.');
+  } else if (process.argv.includes('--save-selection')) {
+    const saves = [];
+    await context.route('**/rest/v1/rpc/admin_update_lead', async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      saves.push(route.request().postDataJSON());
+      await route.fulfill({ status:200, contentType:'application/json', headers:{'access-control-allow-origin':'*'}, body:'1' });
+    });
+    await page.getByRole('button', { name:'Next lead page', exact:true }).click();
+    await page.getByRole('button', { name:'Lead Member 051', exact:true }).waitFor();
+    await page.getByLabel('Select Lead Member 051', { exact:true }).check();
+    await page.getByLabel('Move selected leads to', { exact:true }).selectOption('contacted');
+    await page.getByRole('button', { name:'Lead Member 051', exact:true }).click();
+    const detail = page.getByRole('dialog', { name:'Lead Detail', exact:true });
+    await detail.getByLabel('Admin notes', { exact:true }).fill('Local successful-save selection proof');
+    await detail.getByRole('button', { name:'Save changes', exact:true }).click();
+    await detail.waitFor({ state:'hidden' });
+    await page.getByRole('button', { name:'Lead Member 001', exact:true }).waitFor();
+    assert.deepEqual(saves, [{p_lead_type:'member_interest',p_lead_id:'fixture-member-lead-051',p_status:'joined',p_admin_notes:'Local successful-save selection proof'}]);
+    assert.equal(await page.getByText(/1 selected \(1 outside current results\)/).count(), 0, 'Successful detail-save reload must not retain an invisible page2 selection');
+    assert.equal(await page.getByLabel('Move selected leads to', { exact:true }).count(), 0, 'Bulk actions disappear when the refreshed page clears selection');
+    await page.getByLabel('Select Lead Member 001', { exact:true }).check();
+    assert.equal(await page.getByLabel('Move selected leads to', { exact:true }).inputValue(), '', 'A subsequent selection must not inherit the previous bulk status');
+    console.log('PASS: Successful page2 detail-save clears selection and bulk status before refreshing page1.');
   } else {
     await page.getByLabel('Select Lead Member 001', { exact: true }).check();
     await page.getByLabel('Move selected leads to', { exact: true }).selectOption('contacted');
@@ -70,6 +110,7 @@ try {
   }
 } finally {
   releaseBulk?.();
+  releaseRead?.();
   await browser?.close();
   await server.close();
 }
