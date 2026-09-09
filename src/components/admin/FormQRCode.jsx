@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, LoaderCircle, QrCode, Share2 } from 'lucide-react';
+import { ADMIN_PANEL } from './ui';
 import { formQRFilename, qrCanvasBlob, renderBrandedFormQR } from '@/lib/brandedFormQR';
 
-const action = 'inline-flex min-h-11 items-center justify-center gap-2 border border-xert-steel/25 px-4 text-sm font-semibold text-xert-pale transition-colors hover:border-xert-steel hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
+const action = 'admin-kit-button inline-flex items-center justify-center gap-2';
 
 export default function FormQRCode({
   form,
@@ -76,8 +77,8 @@ export default function FormQRCode({
   };
 
   return (
-    <section className="border border-xert-steel/20 bg-xert-ink p-5">
-      <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center bg-xert-steel/10 text-xert-steel"><QrCode className="h-5 w-5" /></span><div><h2 className="font-display text-2xl uppercase text-white">{title}</h2><p className="mt-1 text-sm text-xert-pale/50">{description}</p></div></div>
+    <section className={`${ADMIN_PANEL} p-5`}>
+      <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center bg-surface-overlay text-accent-default"><QrCode className="h-5 w-5" /></span><div><h2 className="font-display text-2xl uppercase text-text-primary">{title}</h2><p className="mt-1 text-sm text-text-secondary">{description}</p></div></div>
       <div className="mx-auto mt-5 max-w-72 bg-white p-3">
         <div className="relative aspect-square w-full">
           <canvas ref={canvasRef} aria-label={`QR code for ${form.title || title}`} className={`h-full w-full transition-opacity ${ready ? 'opacity-100' : 'opacity-0'}`} />
@@ -85,8 +86,8 @@ export default function FormQRCode({
         </div>
       </div>
       {error && <p role="alert" className="mt-3 border border-status-warning-300/25 bg-status-warning-300/10 p-3 text-sm text-status-warning-100">{error}</p>}
-      <div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" className={action} disabled={!ready || busy} onClick={download}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Download PNG</button>{canShareFile && <button type="button" className={action} disabled={!ready || busy} onClick={share}><Share2 className="h-4 w-4" /> Share QR image</button>}</div>
-      <p className="mt-3 break-all text-xs text-xert-pale/40">{publicURL}</p>
+      <div className="mt-4 grid gap-2"><button type="button" className={action} disabled={!ready || busy} onClick={download}>{busy ? <LoaderCircle className="h-4 w-4" /> : <Download className="h-4 w-4" />} Download PNG</button>{canShareFile && <button type="button" className={action} disabled={!ready || busy} onClick={share}><Share2 className="h-4 w-4" /> Share QR image</button>}</div>
+      <p className="mt-3 break-all text-xs text-text-secondary">{publicURL}</p>
     </section>
   );
 }

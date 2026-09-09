@@ -129,7 +129,7 @@ test('the owner sees door takings beside orders, counted only when actually paid
   assert.match(orders, /slug: 'casual-visit'/, 'the download is named for what it is');
   const qr = await read('../src/components/admin/FormQRCode.jsx');
   assert.match(qr, /title = 'Branded QR code'/, 'the form screens keep their wording');
-  assert.match(qr, /<h2 className="font-display text-2xl uppercase text-white">\{title\}<\/h2>/);
+  assert.match(qr, /<h2 className="font-display text-2xl uppercase text-text-primary">\{title\}<\/h2>/);
 });
 
 test('the club owns the door fee: price and switch live in Settings', async () => {

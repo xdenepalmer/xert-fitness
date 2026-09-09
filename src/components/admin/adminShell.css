@@ -11,7 +11,7 @@
 .admin-shell[data-collapsed="true"] #admin-navigation nav button { justify-content: center; padding-inline: 0; }
 .admin-shell #admin-navigation nav button { border-radius: var(--nav-radius-control); padding-block: var(--space-row); }
 .admin-shell #admin-navigation nav button[aria-current="page"], .admin-shell #admin-navigation nav button[aria-expanded="true"] { background: var(--surface-overlay); }
-.admin-shell header { background: var(--surface-base); border-color: var(--border-hairline); }
+.admin-shell [data-admin-workspace] > header { background: var(--surface-base); border-color: var(--border-hairline); }
 .admin-shell h1 { font-family: var(--font-display); font-size: var(--nav-font-title); }
 .admin-shell-toolbar { flex-wrap: wrap; }
 .admin-shell-identity { flex: 1 1 calc(var(--control-height) * 3); }
