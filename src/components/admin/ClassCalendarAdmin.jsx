@@ -1,30 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertTriangle, BellRing, CalendarDays, CheckCheck, ClipboardCheck, Copy, Download, List, Mail, Phone, RotateCcw, UserCheck, X } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { SessionEditor, RepeatModal } from './ClassCalendarEditors';
+import WaitlistDesk from './ClassCalendarWaitlist';
+import './calendar.css';
+import { AlertTriangle, BellRing, CheckCheck, ClipboardCheck, Copy, Download, Mail, Phone, RotateCcw, UserCheck } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getClassSessions, createClassSession, createClassSessions, updateClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminClassCapacity, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, adminSearchMembers, staffBookMemberIntoClass, getBlackoutPeriods, getClassTemplates, createClassTemplate, getSoftLaunchSettings } from '@/lib/adminData';
+import { getClassSessions, createClassSession, cancelClassSession, notifyClassCancellation, duplicateClassSession, getClassBookings, updateBookingStatus, adminSessionRoster, adminClassCapacity, adminWaitlistOverview, adminSetBookingStatus, adminPromoteNextWaitlisted, adminRecordSessionAttendance, adminSearchMembers, staffBookMemberIntoClass, getBlackoutPeriods, getClassTemplates, createClassTemplate, getSoftLaunchSettings } from '@/lib/adminData';
 import { downloadCsv } from '@/lib/csv';
-import { blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionValidationError, repeatedClassSessionCopies } from '@/lib/scheduling';
+import { blackoutsOverlappingSession } from '@/lib/scheduling';
 import { classSessionFromTemplate, classSessionSeedForDate, classTemplateFromSession } from '@/lib/classCalendar';
-import { BOOKING_MODE_LABELS } from '@/lib/classSignup';
 import { gymDateKey, gymDateTimeLabel, gymDayLabel, gymTimeLabel } from '@/lib/gymTime';
 import { buildClassCancellationMailto, buildClassCancellationMessage, collectClassCancellationContacts } from '@/lib/classCommunications';
 import { attendanceRoll, attendanceRowId, blankAttendanceDraft, createAttendanceDraft, markAllAttendance, summarizeAttendanceDraft } from '@/lib/attendanceDraft';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import ClassCalendarBoard from '@/components/admin/ClassCalendarBoard';
 import ClassBankManager from '@/components/admin/ClassBankManager';
-import { ADMIN_BUTTON, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
+import { ADMIN_BUTTON, AdminPageHeader, AdminFilterBar, AdminSegmented, AdminBadge, AdminSkeleton, AdminEmptyState, AdminDrawer } from '@/components/admin/ui';
 
 const CLASS_TYPES = ['XERT Foundation', 'XERT Strength', 'XERT Engine', 'XERT Hybrid', 'XERT Event Prep', 'XERT Team'];
-const BOOKING_MODES = ['interest_only', 'request_to_book', 'instant_book'];
-const INTENSITY = ['Low', 'Moderate', 'High', 'Very high'];
 const BOOKING_STATUSES = ['requested', 'confirmed', 'waitlisted', 'cancelled', 'declined', 'attended', 'no_show'];
-
-function classEditorStatuses(session) {
-  if (!session?.id) return ['draft', 'published'];
-  if (session.status === 'full') return ['full', 'published'];
-  if (['cancelled', 'completed'].includes(session.status)) return [session.status];
-  return ['draft', 'published'];
-}
 
 function rosterStatusOptions(status, sessionStatus, hasWaitlist = false) {
   // A class marked full is still a live class: its roster is exactly the one
@@ -39,75 +33,6 @@ function rosterStatusOptions(status, sessionStatus, hasWaitlist = false) {
     return [status, 'requested', 'confirmed'];
   }
   return ['confirmed', 'attended', 'no_show', 'cancelled'];
-}
-
-function WaitlistDesk({ rows, available, error, loading, promotingSessionId, onRetry, onOpen, onPromote }) {
-  return (
-    <section aria-labelledby="waitlist-desk-title" className="mb-6 border-y border-xert-steel/20 py-4">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div>
-          <h3 id="waitlist-desk-title" className="flex items-center gap-2 font-display text-sm text-xert-offwhite uppercase">
-            <UserCheck className="w-4 h-4 text-xert-steel" /> Waitlist desk
-            {!loading && available && <span className="font-body text-xs text-xert-concrete/40">({rows.length})</span>}
-          </h3>
-          <p className="font-body text-xs text-xert-concrete/40 mt-1">Future class queues, ordered with open places first.</p>
-        </div>
-      </div>
-      {loading ? (
-        <div className="h-16 bg-xert-ink animate-pulse" />
-      ) : error ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p role="alert" className="font-body text-xs text-xert-red">{error}</p>
-          <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
-        </div>
-      ) : !available ? (
-        <p className="font-body text-xs text-status-warning-300" >The waitlist desk becomes available after waitlist_fifo_promotion_upgrade.sql is applied.</p>
-      ) : rows.length === 0 ? (
-        <p className="font-body text-sm text-xert-concrete/40">No upcoming class waitlists.</p>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-          {rows.map(item => {
-            const credits = Number(item.next_available_credits || 0);
-            const capacityLabel = item.capacity == null ? `${item.active_count}/unlimited` : `${item.active_count}/${item.capacity}`;
-            const nextMember = item.next_full_name || item.next_email || 'Member';
-            return (
-              <article key={item.session_id} className="border border-xert-steel/15 bg-xert-ink p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-[12rem] flex-1">
-                    <p className="font-display text-base text-xert-offwhite uppercase">{item.title}</p>
-                    <p className="font-body text-xs text-xert-concrete/50 mt-1">
-                      {new Date(item.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
-                    </p>
-                    <p className="font-body text-[11px] text-xert-concrete/45 mt-2">
-                      {Number(item.waitlist_count)} waiting · {capacityLabel} active
-                    </p>
-                    <p className="font-body text-xs text-xert-concrete/65 mt-2">
-                      Next: {nextMember} · {credits} credit{credits === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                  <span className={`font-body text-[10px] uppercase tracking-wider px-2 py-1 ${item.can_promote ? 'bg-xert-steel text-xert-navy' : 'bg-xert-steel/15 text-xert-pale'}`}>
-                    {item.can_promote ? 'Place open' : 'Class full'}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 mt-4">
-                  <button type="button" onClick={() => onOpen(item.session_id)} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-concrete/65 hover:border-xert-steel">
-                    Open roster
-                  </button>
-                  {item.can_promote && credits > 0 && (
-                    <button type="button" onClick={() => onPromote(item)} disabled={Boolean(promotingSessionId)} className="inline-flex min-h-11 items-center gap-1.5 px-3 border border-xert-steel/40 font-body text-xs text-xert-steel hover:border-xert-steel disabled:opacity-40">
-                      <UserCheck className="w-3.5 h-3.5" />
-                      {promotingSessionId === item.session_id ? 'Promoting...' : 'Promote next'}
-                    </button>
-                  )}
-                  {item.can_promote && credits === 0 && <span className="font-body text-xs text-status-warning-300" >Next member needs a credit</span>}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
 }
 
 function rosterExportFilename(session) {
@@ -131,24 +56,10 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="cancellation-follow-up-title"
-        className="flex max-h-[92vh] w-full max-w-xl flex-col border border-xert-steel/30 bg-xert-ink">
-        <div className="flex items-start justify-between gap-4 border-b border-xert-steel/20 p-5 sm:p-6">
-          <div>
-            <p className="font-body text-[10px] uppercase tracking-[0.22em] text-xert-steel">Class cancelled</p>
-            <h3 id="cancellation-follow-up-title" className="mt-1 font-display text-2xl uppercase text-xert-offwhite">Notify affected members</h3>
-            <p className="mt-2 font-body text-sm text-xert-concrete/65">
-              {followUp.affectedBookings} active {followUp.affectedBookings === 1 ? 'booking was' : 'bookings were'} cancelled and refunded.
-            </p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close cancellation follow-up" title="Close"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-concrete/60 hover:text-xert-offwhite">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <AdminDrawer open onOpenChange={open => { if (!open) onClose(); }} title="Notify affected members" closeLabel="Close cancellation follow-up"
+      description={`${followUp.affectedBookings} active ${followUp.affectedBookings === 1 ? 'booking was' : 'bookings were'} cancelled and refunded.`}>
+        <div className="calendar-dialog-content">
 
-        <div className="overflow-y-auto p-5 sm:p-6">
           {followUp.notification ? (
             <div className="mb-4 flex gap-3 border border-xert-steel/30 bg-xert-steel/10 p-3">
               <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-xert-steel" aria-hidden="true" />
@@ -184,8 +95,8 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
               {followUp.contacts.map(contact => (
                 <div key={`${contact.email}:${contact.phoneDialable}`} className="flex flex-wrap items-center justify-between gap-3 border border-xert-steel/15 bg-xert-charcoal p-3">
                   <div className="min-w-0">
-                    <p className="truncate font-body text-sm text-xert-offwhite">{contact.name || contact.email || contact.phone}</p>
-                    <p className="truncate font-body text-xs text-xert-concrete/50">{[contact.email, contact.phone].filter(Boolean).join(' · ')}</p>
+                    <p className="break-words font-body text-sm text-xert-offwhite">{contact.name || contact.email || contact.phone}</p>
+                    <p className="break-words font-body text-xs text-xert-concrete/50">{[contact.email, contact.phone].filter(Boolean).join(' · ')}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     {contact.email && <a href={`mailto:${contact.email}`} aria-label={`Email ${contact.name || contact.email}`} title="Email member" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-steel"><Mail className="h-4 w-4" /></a>}
@@ -204,7 +115,7 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
           )}
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-xert-steel/20 p-5 sm:flex-row sm:justify-end sm:p-6">
+        <div className="calendar-dialog-actions">
           <button type="button" onClick={onClose} className="min-h-11 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-concrete/70">Done</button>
           <button type="button" onClick={copyMessage} className="inline-flex min-h-11 items-center justify-center gap-2 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-steel">
             <Copy className="h-4 w-4" /> Copy message
@@ -215,285 +126,19 @@ function CancellationFollowUpDialog({ followUp, onClose }) {
             </a>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-const STATUS_COLORS = {
-  draft: 'text-xert-concrete/40 border-xert-steel/30',
-  published: 'text-status-confirmed-400 border-status-confirmed-600/40',
-  full: 'text-xert-orange border-xert-orange/40',
-  cancelled: 'text-xert-red/50 border-xert-red/20',
-  completed: 'text-xert-concrete/40 border-xert-steel/30',
-};
-
-function SessionEditor({ session, blackouts, onSave, onCancel, onDirtyChange }) {
-  const [form, setForm] = useState(() => classSessionEditorForm(session));
-  const [saving, setSaving] = useState(false);
-  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
-  const isDirty = classSessionEditorIsDirty(form, session);
-
-  useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
-
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
-
-  const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
-  const overlappingBlackouts = blackoutsOverlappingSession(form, blackouts);
-  const requestCancel = () => {
-    if (saving) return;
-    if (isDirty) {
-      setShowDiscardConfirmation(true);
-      return;
-    }
-    onCancel();
-  };
-
-  const handleSave = async () => {
-    const validationError = classSessionValidationError(form);
-    if (validationError) {
-      toast({ title: validationError, variant: 'destructive' });
-      return;
-    }
-    setSaving(true);
-    try {
-      if (session?.id) {
-        await updateClassSession(session.id, form);
-      } else {
-        await createClassSession(form);
-      }
-      onDirtyChange?.(false);
-      onSave();
-    } catch (e) {
-      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4">
-        <div role="dialog" aria-modal="true" aria-labelledby="class-editor-title" className="flex max-h-[100dvh] w-full max-w-2xl flex-col border border-xert-steel/20 bg-xert-ink sm:max-h-[90vh]">
-        <div className="flex shrink-0 items-center justify-between border-b border-xert-steel/20 p-5 sm:p-6">
-          <h3 id="class-editor-title" className="font-display text-xl text-xert-offwhite uppercase">{session?.id ? 'Edit Class' : 'New Class'}</h3>
-          <button type="button" onClick={requestCancel} disabled={saving} aria-label="Close class editor" title="Close" className="min-w-11 min-h-11 text-xert-concrete/40 hover:text-xert-offwhite text-xl disabled:opacity-40">&#10005;</button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="class-type" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class type</label>
-              <select id="class-type" value={form.class_type} onChange={e => set('class_type', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-                {CLASS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="class-status" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Status</label>
-              <select id="class-status" value={form.status} onChange={e => set('status', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-                {classEditorStatuses(session).map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              {session?.id && ['cancelled', 'completed'].includes(session.status) && (
-                <p className="mt-1 font-body text-[11px] leading-relaxed text-xert-concrete/45">
-                  Terminal class status is locked. Create a new class rather than reopening it.
-                </p>
-              )}
-            </div>
-          </div>
-          <div>
-            <label htmlFor="class-title" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Title *</label>
-            <input id="class-title" required value={form.title} onChange={e => set('title', e.target.value)} placeholder="Class title"
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-          </div>
-          <div>
-            <label htmlFor="class-description" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Description</label>
-            <textarea id="class-description" value={form.description} onChange={e => set('description', e.target.value)} rows={2}
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="class-start" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Start time</label>
-              <input id="class-start" type="datetime-local" value={form.start_time} onChange={e => set('start_time', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-            </div>
-            <div>
-              <label htmlFor="class-end" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">End time</label>
-              <input id="class-end" type="datetime-local" value={form.end_time} onChange={e => set('end_time', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-            </div>
-            <div>
-              <label htmlFor="class-duration" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Duration (min)</label>
-              <input id="class-duration" type="number" min="1" step="1" value={form.duration_minutes} onChange={e => set('duration_minutes', +e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="class-capacity" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Capacity</label>
-              <input id="class-capacity" type="number" min="1" step="1" value={form.capacity} onChange={e => set('capacity', +e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-            </div>
-            <div>
-              <label htmlFor="class-intensity" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Intensity</label>
-              <select id="class-intensity" value={form.intensity_level} onChange={e => set('intensity_level', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-                {INTENSITY.map(i => <option key={i} value={i}>{i}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="class-booking-mode" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Booking mode</label>
-              <select id="class-booking-mode" value={form.booking_mode} onChange={e => set('booking_mode', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-                {BOOKING_MODES.map(m => <option key={m} value={m}>{BOOKING_MODE_LABELS[m] || m}</option>)}
-              </select>
-            </div>
-          </div>
-          {overlappingBlackouts.length > 0 && (
-            <div role="alert" className="border border-xert-orange/40 bg-xert-orange/10 p-3 flex gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-xert-orange" />
-              <p className="font-body text-xs leading-relaxed text-xert-concrete/80">
-                This class overlaps a blackout: {overlappingBlackouts.map(blackout => blackout.reason).join(', ')}.
-              </p>
-            </div>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="class-coach" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Coach name</label>
-              <input id="class-coach" value={form.coach_name} onChange={e => set('coach_name', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-            </div>
-            <div>
-              <label htmlFor="class-location" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Location / zone</label>
-              <input id="class-location" value={form.location_zone} onChange={e => set('location_zone', e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-            </div>
-          </div>
-          <div className="flex gap-6">
-            <label className="flex min-h-11 items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.beginner_friendly} onChange={e => set('beginner_friendly', e.target.checked)} className="peer sr-only" />
-              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-xert-red peer-checked:bg-xert-steel peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.beginner_friendly && <span className="text-xert-navy text-xs">&#10003;</span>}</span>
-              <span className="font-body text-sm text-xert-concrete/80">Beginner friendly</span>
-            </label>
-            <label className="flex min-h-11 items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.public_visible} onChange={e => set('public_visible', e.target.checked)} className="peer sr-only" />
-              <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-status-confirmed-500 peer-checked:bg-status-confirmed-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{form.public_visible && <span className="text-white text-xs">&#10003;</span>}</span>
-              <span className="font-body text-sm text-xert-concrete/80">Public visible</span>
-            </label>
-          </div>
-          <div>
-            <label htmlFor="class-notes" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Notes</label>
-            <textarea id="class-notes" value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
-              className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red resize-none" />
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-3 border-t border-xert-steel/20 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-6">
-          <button type="button" onClick={requestCancel} disabled={saving}
-            className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors">
-            Cancel
-          </button>
-          <button type="button" onClick={handleSave} disabled={saving}
-            className={`${ADMIN_BUTTON.primary} flex-1`}>
-            {saving ? 'Saving...' : 'Save class'}
-          </button>
-        </div>
-      </div>
-      </div>
-      <AdminConfirmDialog
-        open={showDiscardConfirmation}
-        onOpenChange={setShowDiscardConfirmation}
-        title="Discard unsaved class changes?"
-        description="This class draft has changes that have not been saved."
-        warning="Discarding will permanently remove the edits made in this class editor."
-        cancelLabel="Keep editing"
-        confirmLabel="Discard changes"
-        onConfirm={() => {
-          onDirtyChange?.(false);
-          onCancel();
-        }}
-      />
-    </>
-  );
-}
-
-function RepeatModal({ session, onDone, onCancel }) {
-  const [intervalDays, setIntervalDays] = useState(8); // 4-on/4-off cycle
-  const [count, setCount] = useState(4);
-  const [keepPublished, setKeepPublished] = useState(session.status === 'published');
-  const [saving, setSaving] = useState(false);
-
-  const handleRepeat = async () => {
-    if (!session.start_time) { toast({ title: 'This class needs a start time before it can be repeated.', variant: 'destructive' }); return; }
-    setSaving(true);
-    try {
-      const copies = repeatedClassSessionCopies(session, { intervalDays, count, keepPublished });
-      await createClassSessions(copies);
-      onDone(copies.length);
-    } catch (e) {
-      toast({ title: 'Repeat failed', description: e.message, variant: 'destructive' });
-      setSaving(false);
-    }
-  };
-
-  const preview = session.start_time
-    ? Array.from({ length: Math.min(count, 3) }, (_, i) =>
-        new Date(new Date(session.start_time).getTime() + (i + 1) * intervalDays * 86400000)
-          .toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }))
-    : [];
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="repeat-class-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
-        <div className={`${ADMIN_PAGE} border-b border-xert-steel/20`}>
-          <h3 id="repeat-class-title" className="font-display text-xl text-xert-offwhite uppercase">Repeat Class</h3>
-          <p className="font-body text-xs text-xert-concrete/50 mt-1">{session.title}</p>
-        </div>
-        <div className={`${ADMIN_PAGE} space-y-4`}>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="repeat-interval" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Every ... days</label>
-              <select id="repeat-interval" value={intervalDays} onChange={e => setIntervalDays(+e.target.value)}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red">
-                <option value={1}>1 (daily)</option>
-                <option value={2}>2</option>
-                <option value={7}>7 (weekly)</option>
-                <option value={8}>8 (4-on / 4-off cycle)</option>
-                <option value={14}>14 (fortnightly)</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="repeat-count" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Copies</label>
-              <input id="repeat-count" type="number" min="1" max="26" value={count} onChange={e => setCount(Math.max(1, Math.min(26, +e.target.value)))}
-                className="w-full bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-red" />
-            </div>
-          </div>
-          {preview.length > 0 && (
-            <p className="font-body text-xs text-xert-concrete/40">
-              Next dates: {preview.join(', ')}{count > 3 ? '…' : ''}
-            </p>
-          )}
-          <label className="flex min-h-11 items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={keepPublished} onChange={e => setKeepPublished(e.target.checked)} className="peer sr-only" />
-            <span aria-hidden="true" className="w-5 h-5 border-2 border-xert-steel/50 flex items-center justify-center peer-checked:border-status-confirmed-500 peer-checked:bg-status-confirmed-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-xert-offwhite">{keepPublished && <span className="text-white text-xs">&#10003;</span>}</span>
-            <span className="font-body text-sm text-xert-concrete/80">Copies keep this class&rsquo;s publish status</span>
-          </label>
-        </div>
-        <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
-          <button type="button" onClick={handleRepeat} disabled={saving}
-            className={`${ADMIN_BUTTON.primary} flex-1`}>
-            {saving ? 'Creating…' : `Create ${count} copies`}
-          </button>
-        </div>
-      </div>
-    </div>
+    </AdminDrawer>
   );
 }
 
 export default function ClassCalendarAdmin({ initialAction, initialSessionId, onIntentHandled, onDirtyChange }) {
+  const location = useLocation();
+  const calendarParams = new URLSearchParams(location.search);
+  const calendarSearch = (calendarParams.get('calendarSearch') || '').trim().toLowerCase();
+  const calendarType = calendarParams.get('calendarType') || '';
+  const matchesSearch = session => (!calendarType || !CLASS_TYPES.includes(calendarType) || session.class_type === calendarType)
+    && (!calendarSearch || [session.title, session.class_type, session.coach_name].filter(Boolean).join(' ').toLowerCase().includes(calendarSearch));
   const [sessions, setSessions] = useState([]);
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
@@ -590,6 +235,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
   const load = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [loadedSessions, loadedBlackouts, loadedSignups, loadedCapacity, loadedSettings] = await Promise.all([
         getClassSessions(false),
@@ -617,6 +263,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       setCapacityById(loadedCapacity?.byId || {});
       if (loadedSettings) setBookingsEnabled(loadedSettings.bookings_enabled === true);
     } catch (error) {
+      setLoadError(error.message || 'Please retry loading the calendar.');
       toast({ title: 'Could not load class sessions', description: error.message, variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -1049,8 +696,8 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   });
   const cancelledInTimeFilter = sessionsInTimeFilter.filter(s => s.status === 'cancelled');
   const activeSessions = sessions.filter(s => s.status !== 'cancelled');
-  const filtered = sessionsInTimeFilter.filter(s => showCancelled || s.status !== 'cancelled');
-  const visibleCalendarSessions = sessions.filter(s => showCancelled || s.status !== 'cancelled');
+  const filtered = sessionsInTimeFilter.filter(s => (showCancelled || s.status !== 'cancelled') && matchesSearch(s));
+  const visibleCalendarSessions = sessions.filter(s => (showCancelled || s.status !== 'cancelled') && matchesSearch(s));
   const upcomingCount = activeSessions.filter(s => !s.start_time || new Date(s.start_time).getTime() >= now).length;
   const pastCount = activeSessions.length - upcomingCount;
   const cancelledCount = view === 'calendar'
@@ -1063,58 +710,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
   const pendingAttendanceRequests = classRoll.filter(person => person.status === 'requested' && person.attendance_source === 'member');
 
   return (
-    <div className={ADMIN_PAGE}>
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4">
-          <h2 className={ADMIN_TEXT.pageTitle}>Class Calendar</h2>
-          <div className="flex" role="group" aria-label="Calendar view">
-            {[
-              { key: 'calendar', label: 'Calendar', icon: CalendarDays },
-              { key: 'list', label: 'List', icon: List },
-            ].map(option => (
-              <button key={option.key} onClick={() => setView(option.key)} aria-pressed={view === option.key}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors -ml-px ${view === option.key ? 'border-xert-steel bg-xert-steel/10 text-xert-offwhite' : 'border-xert-steel/20 text-xert-pale/50'}`}>
-                <option.icon className="w-3.5 h-3.5" aria-hidden="true" />
-                {option.label}
-              </button>
-            ))}
-          </div>
-          {view === 'list' && (
-            <div className="flex">
-              {[
-                { key: 'upcoming', label: `Upcoming (${upcomingCount})` },
-                { key: 'past', label: `Past (${pastCount})` },
-                { key: 'all', label: 'All' },
-              ].map(t => (
-                <button key={t.key} onClick={() => setTimeFilter(t.key)}
-                  className={`px-3 py-1.5 font-body text-xs uppercase tracking-wider border transition-colors -ml-px ${timeFilter === t.key ? 'border-xert-steel bg-xert-steel/10 text-xert-offwhite' : 'border-xert-steel/20 text-xert-pale/50'}`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {cancelledCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowCancelled(current => !current)}
-              aria-pressed={showCancelled}
-              className="min-h-10 px-3 border border-xert-red/30 font-body text-xs text-xert-concrete/65 hover:border-xert-red/60 transition-colors"
-            >
-              {showCancelled ? 'Hide cancelled' : `Show cancelled (${cancelledCount})`}
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setShowBankManager(true)}
-            className="px-4 py-2.5 border border-xert-steel/40 text-xert-steel font-display text-sm uppercase hover:border-xert-steel transition-colors">
-            Class bank
-          </button>
-          <button onClick={() => { setEditingSession(null); setShowEditor(true); }}
-            className={ADMIN_BUTTON.primary}>
-            + New Class
-          </button>
-        </div>
+    <div className="calendar-workspace admin-kit-container">
+      <AdminPageHeader eyebrow="Scheduling" title="Class Calendar" description="Plan classes, review who is coming and keep the next place moving.">
+        <button type="button" onClick={() => setShowBankManager(true)} className={ADMIN_BUTTON.ghost}>Class bank</button>
+        <button type="button" onClick={() => { setEditingSession(null); setShowEditor(true); }} className={ADMIN_BUTTON.primary}>+ New Class</button>
+      </AdminPageHeader>
+      <div className="calendar-toolbar">
+        <AdminSegmented label="Calendar view" value={view} onValueChange={setView} options={[{value:'calendar',label:'Calendar'},{value:'list',label:'List'}]} />
+        {view === 'list' && <AdminSegmented label="Class period" value={timeFilter} onValueChange={setTimeFilter} options={[{value:'upcoming',label:`Upcoming (${upcomingCount})`},{value:'past',label:`Past (${pastCount})`},{value:'all',label:'All'}]} />}
+        {cancelledCount > 0 && <button type="button" className="admin-kit-button" onClick={() => setShowCancelled(current => !current)} aria-pressed={showCancelled}>{showCancelled ? 'Hide cancelled' : `Show cancelled (${cancelledCount})`}</button>}
       </div>
+      <AdminFilterBar queryKey="calendarSearch" searchLabel="Search classes" filters={[{key:'calendarType',label:'Class type',options:CLASS_TYPES.map(value => ({value,label:value}))}]} />
 
       {bookingsEnabled === false && (
         <div className="mb-6 flex flex-wrap items-start gap-3 border border-xert-orange/40 bg-xert-orange/[0.06] p-4">
@@ -1144,7 +750,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       />
 
       {loading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 bg-xert-ink animate-pulse" />)}</div>
+        <div className="calendar-loading"><AdminSkeleton variant="editor" label="Loading class calendar" /><AdminSkeleton variant="field" decorative /><AdminSkeleton variant="field" decorative /></div>
+      ) : loadError ? (
+        <AdminEmptyState title="Could not load classes" description={loadError} action={<button type="button" className="admin-kit-button" onClick={() => void load()}>Retry classes</button>} />
       ) : view === 'calendar' ? (
         <ClassCalendarBoard
           sessions={visibleCalendarSessions}
@@ -1173,18 +781,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
           savingToBankId={savingToBankId}
         />
       ) : filtered.length === 0 ? (
-        <div className="py-16 text-center border border-xert-steel/20">
-          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">
-            {sessions.length === 0 ? 'No classes yet' : `No ${timeFilter === 'all' ? '' : timeFilter} classes`}
-          </p>
-          <p className="font-body text-sm text-xert-concrete/40 mb-6">
-            {sessions.length === 0
-              ? 'Create your first class session.'
-              : !showCancelled && cancelledInTimeFilter.length > 0
-                ? `${cancelledInTimeFilter.length} cancelled ${cancelledInTimeFilter.length === 1 ? 'class is' : 'classes are'} hidden. Show cancelled to review the retained record.`
-                : 'Try another filter or create a new class.'}
-          </p>
-        </div>
+        <AdminEmptyState title={sessions.length === 0 ? 'No classes yet' : `No ${timeFilter === 'all' ? '' : timeFilter} classes`}
+          description={sessions.length === 0 ? 'Create your first class session.' : !showCancelled && cancelledInTimeFilter.length > 0 ? `${cancelledInTimeFilter.length} cancelled classes are hidden. Show cancelled to review the retained record.` : 'Try another filter or create a new class.'}
+          action={<button type="button" className="admin-kit-button" onClick={() => { setEditingSession(null); setShowEditor(true); }}>New Class</button>} />
       ) : (
         <div className="space-y-2">
           {filtered.map(s => {
@@ -1199,17 +798,17 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
             const placesTaken = capacityById[s.id]?.taken ?? activeRosterCount;
             const hasOpenPlace = s.capacity == null || placesTaken < s.capacity;
             return (
-            <div id={`class-session-${s.id}`} key={s.id} className="bg-xert-ink border border-xert-steel/20 scroll-mt-20">
+            <div id={`class-session-${s.id}`} key={s.id} className="calendar-session-card">
               <div className="p-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="calendar-session-heading">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className={`font-body text-xs border px-2 py-0.5 uppercase ${STATUS_COLORS[s.status] || 'text-xert-concrete/40 border-xert-steel/30'}`}>{s.status}</span>
-                      {s.public_visible && <span className="font-body text-xs border border-status-confirmed-600/40 text-status-confirmed-400 px-2 py-0.5 uppercase">Public</span>}
+                      <AdminBadge status={s.status}>{s.status}</AdminBadge>
+                      {s.public_visible && <AdminBadge status="active">Public</AdminBadge>}
                       {s.beginner_friendly && <span className="font-body text-xs text-xert-concrete/40 uppercase text-xs">Beginner friendly</span>}
                       {s.booking_mode && <span className="font-body text-xs text-xert-concrete/40 uppercase">{s.booking_mode.replaceAll('_', ' ')}</span>}
                     </div>
-                    <h3 className={ADMIN_TEXT.pageTitle}>{s.title}</h3>
+                    <h3 className="calendar-session-title">{s.title}</h3>
                     <p className="font-body text-xs text-xert-concrete/50">
                       {s.class_type} · {s.start_time ? new Date(s.start_time).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'No time set'}
                       {s.coach_name ? ` · ${s.coach_name}` : ''} · Cap: {s.capacity}
@@ -1221,7 +820,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                       </p>
                     )}
                   </div>
-                  <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+                  <div className="calendar-session-actions">
                     <button onClick={() => loadBookings(s.id)}
                       className="px-3 py-1.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
                       Bookings
@@ -1250,7 +849,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
 
               {/* Bookings panel */}
               {expandedBookings === s.id && (
-                <div className="border-t border-xert-steel/20 p-4 bg-xert-charcoal">
+                <div className="calendar-roster-panel">
                   {/* Credit-based member roster */}
                   <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <h4 className="font-display text-sm text-xert-concrete/60 uppercase">
@@ -1294,13 +893,13 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                           ? waitlistedRoster.findIndex(member => member.booking_id === r.booking_id) + 1
                           : null;
                         return (
-                        <div key={r.booking_id} className="flex items-center justify-between gap-4 bg-xert-ink p-3">
+                        <div key={r.booking_id} className="calendar-roster-row">
                           <div>
                             <p className="font-body text-sm text-xert-offwhite">{r.full_name || r.email || 'Member'}</p>
                             <p className="font-body text-xs text-xert-concrete/50">{r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
                             {waitlistPosition && <p className="font-body text-[11px] text-xert-steel mt-1">Waitlist position {waitlistPosition}</p>}
                           </div>
-                          <select value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || !['published', 'full'].includes(s.status)}
+                          <select aria-label={`Status for ${r.full_name || r.email || 'Member'}`} value={r.status} onChange={e => handleRosterStatus(r.booking_id, e.target.value)} disabled={updatingBookingId === r.booking_id || !['published', 'full'].includes(s.status)}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {rosterStatusOptions(r.status, s.status, waitlistedRoster.length > 0).map(st => <option key={st} value={st}>{st}</option>)}
                           </select>
@@ -1350,12 +949,12 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                   ) : (
                     <div className="space-y-2">
                       {bookings.map(b => (
-                        <div key={b.id} className="flex items-center justify-between gap-4 bg-xert-ink p-3">
+                        <div key={b.id} className="calendar-roster-row">
                           <div>
                             <p className="font-body text-sm text-xert-offwhite">{b.full_name}</p>
                             <p className="font-body text-xs text-xert-concrete/50">{b.email} · {b.training_level}</p>
                           </div>
-                          <select value={b.status} onChange={e => handleBookingStatus(b.id, e.target.value)} disabled={updatingBookingId === b.id}
+                          <select aria-label={`Status for ${b.full_name || b.email || 'Signup'}`} value={b.status} onChange={e => handleBookingStatus(b.id, e.target.value)} disabled={updatingBookingId === b.id}
                             className="bg-xert-charcoal border border-xert-steel/40 px-2 py-1 font-body text-xs text-xert-offwhite focus:outline-none focus:border-xert-red">
                             {BOOKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
@@ -1405,25 +1004,10 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
       )}
 
       {attendanceSession && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="attendance-title"
-            className="flex max-h-[92vh] w-full max-w-2xl flex-col border border-xert-steel/30 bg-xert-ink">
-            <div className="flex items-start justify-between gap-4 border-b border-xert-steel/20 p-5 sm:p-6">
-              <div>
-                <p className="font-body text-[10px] uppercase tracking-[0.22em] text-xert-steel">Class roll call</p>
-                <h3 id="attendance-title" className="mt-1 font-display text-2xl uppercase text-xert-offwhite">{attendanceSession.title}</h3>
-                <p className="mt-1 font-body text-xs text-xert-concrete/55">
-                  {`${gymDayLabel(attendanceSession.start_time)}, ${gymTimeLabel(attendanceSession.start_time)}`}
-                </p>
-              </div>
-              <button type="button" onClick={() => setAttendanceSession(null)} disabled={isSavingAttendance}
-                aria-label="Close attendance roll call" title="Close"
-                className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-concrete/60 disabled:opacity-40">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+        <AdminDrawer open onOpenChange={open => { if (!open && !isSavingAttendance) setAttendanceSession(null); }} title={attendanceSession.title}
+          description={`Class roll call · ${gymDayLabel(attendanceSession.start_time)}, ${gymTimeLabel(attendanceSession.start_time)}`} closeLabel="Close attendance roll call">
+            <div className="calendar-attendance">
 
-            <div className="overflow-y-auto p-5 sm:p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-5 font-body text-xs text-xert-concrete/60" aria-live="polite">
                   <span><strong className="text-xert-offwhite">{attendanceSummary.marked}/{attendanceSummary.total}</strong> marked</span>
@@ -1460,10 +1044,10 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                   const rowId = attendanceRowId(member);
                   const who = member.full_name || member.email || 'Member';
                   return (
-                  <div key={rowId} className="flex flex-col gap-3 border border-xert-steel/20 bg-xert-charcoal p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div key={rowId} className="calendar-attendance-row">
                     <div className="min-w-0">
-                      <p className="truncate font-body text-sm text-xert-offwhite">{who}</p>
-                      <p className="truncate font-body text-xs text-xert-concrete/45">
+                      <p className="break-words font-body text-sm text-xert-offwhite">{who}</p>
+                      <p className="break-words font-body text-xs text-xert-concrete/45">
                         {member.email}
                         {member.attendance_source === 'signup' ? ' · timetable sign-up' : ''}
                       </p>
@@ -1486,7 +1070,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
               </div>
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-xert-steel/20 p-5 sm:flex-row sm:justify-end sm:p-6">
+            <div className="calendar-dialog-actions">
               <button type="button" onClick={() => setAttendanceSession(null)} disabled={isSavingAttendance}
                 className="min-h-11 border border-xert-steel/40 px-5 font-display text-xs uppercase text-xert-concrete/70 disabled:opacity-40">Cancel</button>
               <button type="button" onClick={() => void saveAttendance()} disabled={isSavingAttendance || !attendanceSummary.complete || pendingAttendanceRequests.length > 0}
@@ -1495,8 +1079,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                 {isSavingAttendance ? 'Saving roll call...' : 'Save attendance'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDrawer>
       )}
 
       {sessionToCancel && (

@@ -41,7 +41,7 @@ for (const path of [
 }
 
 test('class calendar exposes waitlist blockers, roster access, and direct promotion', async () => {
-  const source = await read('../src/components/admin/ClassCalendarAdmin.jsx');
+  const source = (await Promise.all(['ClassCalendarAdmin.jsx', 'ClassCalendarWaitlist.jsx'].map(file => read(`../src/components/admin/${file}`)))).join('\n');
 
   assert.match(source, /Waitlist desk/);
   assert.match(source, /Future class queues, ordered with open places first\./);

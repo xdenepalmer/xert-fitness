@@ -8,7 +8,7 @@ import {
 
 const [adminData, classCalendar, freshSchema, upgradeSchema] = await Promise.all([
   readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/admin/ClassCalendarAdmin.jsx', import.meta.url), 'utf8'),
+  Promise.all(['ClassCalendarAdmin.jsx', 'ClassCalendarEditors.jsx'].map(file => readFile(new URL(`../src/components/admin/${file}`, import.meta.url), 'utf8'))).then(parts => parts.join('\n')),
   readFile(new URL('../src/supabase/admin_cms_schema.sql', import.meta.url), 'utf8'),
   readFile(new URL('../supabase/migrations/20260713000000_class_session_update_guard.sql', import.meta.url), 'utf8'),
 ]);

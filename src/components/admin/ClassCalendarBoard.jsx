@@ -1,3 +1,4 @@
+import { AdminBadge, AdminSkeleton } from '@/components/admin/ui';
 import ClassSignupRoster from '@/components/admin/ClassSignupRoster';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Archive, CalendarPlus, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
@@ -16,22 +17,6 @@ import {
   shiftMonth,
   timeInputFromMinutes,
 } from '@/lib/classCalendar';
-
-const STATUS_CHIP = {
-  published: 'border-status-confirmed-600/50 text-status-confirmed-300 bg-status-confirmed-900/20',
-  full: 'border-xert-orange/60 text-xert-orange bg-xert-steel/10',
-  draft: 'border-dashed border-xert-steel/40 text-xert-concrete/50 bg-transparent',
-  cancelled: 'border-xert-red/20 text-xert-red/40 line-through',
-  completed: 'border-xert-steel/20 text-xert-concrete/35',
-};
-
-const STATUS_DOT = {
-  published: 'bg-status-confirmed-400',
-  full: 'bg-xert-orange',
-  draft: 'bg-xert-steel/40',
-  cancelled: 'bg-xert-red/30',
-  completed: 'bg-xert-steel/25',
-};
 
 // The gym's clock, not the device's: the owner reading this on a phone that
 // picked up Sydney time must still see the hour the class actually runs.
@@ -151,7 +136,7 @@ export default function ClassCalendarBoard({
       skipInitialScroll.current = false;
       return;
     }
-    panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    panelRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
   }, [selectedDayKey]);
 
   const selectDay = key => {
@@ -192,7 +177,7 @@ export default function ClassCalendarBoard({
     : 'Pick a date';
 
   return (
-    <div>
+    <div className="calendar-board">
       {/* Month navigation */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -220,7 +205,7 @@ export default function ClassCalendarBoard({
       {/* Weekday header */}
       <div className="grid grid-cols-7 border-b border-xert-steel/20">
         {WEEKDAY_LABELS.map(label => (
-          <div key={label} className="px-1 py-2 text-center font-body text-[10px] uppercase tracking-[0.18em] text-xert-concrete/40 sm:px-2">
+          <div key={label} className="px-1 py-2 text-center font-body text-[10px] uppercase tracking-[0.18em] text-xert-concrete/40">
             {label}
           </div>
         ))}
@@ -246,7 +231,7 @@ export default function ClassCalendarBoard({
                     onClick={() => selectDay(cell.key)}
                     aria-label={ariaLabel}
                     aria-pressed={isSelected}
-                    className={`flex min-h-[64px] w-full flex-col items-stretch gap-1 p-1 text-left transition-colors sm:min-h-[96px] sm:p-1.5
+                    className={`calendar-day-cell flex w-full flex-col items-stretch gap-1 p-1 text-left transition-colors
                       ${isSelected ? 'bg-xert-steel/15 outline outline-1 outline-xert-steel' : 'hover:bg-xert-steel/5'}
                       ${cell.inMonth ? '' : 'opacity-35'}`}
                   >
@@ -258,19 +243,18 @@ export default function ClassCalendarBoard({
                       {cellBlackouts.length > 0 && <AlertTriangle aria-hidden="true" className="h-3 w-3 text-xert-orange/80" />}
                     </span>
                     {/* Compact dots on small screens */}
-                    <span className="flex flex-wrap gap-1 sm:hidden" aria-hidden="true">
+                    <span className="calendar-day-dots flex-wrap gap-1" aria-hidden="true">
                       {cellSessions.slice(0, 4).map(session => (
-                        <span key={session.id} className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[session.status] || STATUS_DOT.draft}`} />
+                        <span key={session.id} className="h-1.5 w-1.5 rounded-full bg-accent-default" />
                       ))}
                       {cellSessions.length > 4 && <span className="font-body text-[9px] leading-none text-xert-concrete/50">+{cellSessions.length - 4}</span>}
                     </span>
                     {/* Chips on larger screens */}
-                    <span className="hidden flex-col gap-1 sm:flex" aria-hidden="true">
+                    <span className="calendar-day-details flex-col gap-1" aria-hidden="true">
                       {cellSessions.slice(0, 3).map(session => (
-                        <span key={session.id}
-                          className={`truncate border px-1.5 py-0.5 font-body text-[10px] leading-tight ${STATUS_CHIP[session.status] || STATUS_CHIP.draft}`}>
+                        <AdminBadge key={session.id} status={session.status}>
                           {session.start_time ? `${chipTime(session.start_time)} ` : ''}{session.title}
-                        </span>
+                        </AdminBadge>
                       ))}
                       {cellSessions.length > 3 && (
                         <span className="px-1.5 font-body text-[10px] text-xert-concrete/50">+{cellSessions.length - 3} more</span>
@@ -292,7 +276,7 @@ export default function ClassCalendarBoard({
 
       {/* Selected day panel */}
       <section ref={panelRef} aria-labelledby="calendar-day-title" className="mt-6 scroll-mt-20 border border-xert-steel/20 bg-xert-ink">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-xert-steel/20 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-xert-steel/20 p-4">
           <div>
             <h3 id="calendar-day-title" className="font-display text-xl uppercase text-xert-offwhite">{selectedLabel}</h3>
             <p className="mt-0.5 font-body text-xs text-xert-concrete/45">
@@ -307,7 +291,7 @@ export default function ClassCalendarBoard({
         </div>
 
         {selectedBlackouts.length > 0 && (
-          <div role="alert" className="mx-4 mt-4 flex gap-2 border border-xert-orange/40 bg-xert-orange/10 p-3 sm:mx-5">
+          <div role="alert" className="mx-4 mt-4 flex gap-2 border border-xert-orange/40 bg-xert-orange/10 p-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-xert-orange" />
             <p className="font-body text-xs leading-relaxed text-xert-concrete/80">
               Blackout on this day: {selectedBlackouts.map(blackout => blackout.reason).join(', ')}.
@@ -315,7 +299,7 @@ export default function ClassCalendarBoard({
           </div>
         )}
 
-        <div className="p-4 sm:p-5">
+        <div className="p-4">
           {selectedSessions.length === 0 ? (
             <p className="mb-5 font-body text-sm text-xert-concrete/40">No classes on this day yet. Add one from the bank below or create a custom class.</p>
           ) : (
@@ -324,7 +308,7 @@ export default function ClassCalendarBoard({
                 <li key={session.id} className="flex flex-wrap items-start justify-between gap-3 border border-xert-steel/15 bg-xert-charcoal p-3">
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className={`border px-2 py-0.5 font-body text-[10px] uppercase ${STATUS_CHIP[session.status] || STATUS_CHIP.draft}`}>{session.status}</span>
+                      <AdminBadge status={session.status}>{session.status}</AdminBadge>
                       {session.public_visible && <span className="border border-status-confirmed-600/40 px-2 py-0.5 font-body text-[10px] uppercase text-status-confirmed-400">Public</span>}
                     </div>
                     <p className="font-display text-base uppercase text-xert-offwhite">{session.title}</p>
@@ -402,7 +386,7 @@ export default function ClassCalendarBoard({
                 The class bank becomes available after class_template_bank.sql is applied.
               </p>
             ) : templatesLoading ? (
-              <div className="h-14 animate-pulse bg-xert-charcoal" />
+              <AdminSkeleton variant="field" label="Loading class bank" />
             ) : templates.length === 0 ? (
               <p className="font-body text-sm text-xert-concrete/40">
                 No saved classes yet. Press <span className="text-xert-steel">Bank it</span> on any class, or add entries in Manage bank.

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
 import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
 import PWAInstallPrompt from '@/components/public/PWAInstallPrompt';
-import { getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
+import { adminSearchAfterIntent, getAdminSectionFromPath, getAdminSectionPath } from '@/lib/adminNavigation';
 import { UNSAVED_ADMIN_CHANGES_MESSAGE } from '@/lib/siteContentDraft';
 import { AdminWorkspaceBoundary, WorkspaceSkeleton, retryableLazy as lazy } from '@/components/admin/AdminWorkspaceBoundary';
 
@@ -117,8 +117,9 @@ export default function AdminCommandCentre() {
   }, [navigate, pendingNavigation]);
 
   const consumeIntent = useCallback(() => {
-    navigate(canonicalPath, { replace: true });
-  }, [canonicalPath, navigate]);
+    const search = adminSearchAfterIntent(location.search, section);
+    navigate({ pathname: canonicalPath, search: search ? `?${search}` : '', hash: location.hash }, { replace: true, state: location.state });
+  }, [canonicalPath, location.hash, location.search, location.state, navigate, section]);
 
   const renderSection = () => {
     switch (section) {

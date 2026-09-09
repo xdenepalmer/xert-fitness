@@ -9,6 +9,7 @@ const adminFiles = [
   'AvailabilityManager.jsx',
   'BookingRequestsTable.jsx',
   'ClassCalendarAdmin.jsx',
+  'ClassCalendarEditors.jsx',
   'CoachesManager.jsx',
   'EventsManager.jsx',
   'LeadTable.jsx',
@@ -23,7 +24,11 @@ test('the admin workspace centrally observes every custom modal dialog', () => {
   assert.match(layout, /useAdminDialogLayer\(workspaceRef\)/);
   assert.match(layer, /workspace\.querySelectorAll\(DIALOG_SELECTOR\)/);
   assert.match(layer, /new MutationObserver\(syncDialog\)/);
-  assert.ok(adminFiles.reduce((count, source) => count + (source.match(/aria-modal="true"/g) || []).length, 0) >= 17);
+  // Converted surfaces use a native modal portal instead of the legacy observer.
+  assert.ok(adminFiles.reduce((count, source) => count + (source.match(/aria-modal="true"|<AdminDrawer\b/g) || []).length, 0) >= 17);
+  const drawer = readFileSync(new URL('../src/components/admin/ui/AdminDrawer.jsx', import.meta.url), 'utf8');
+  assert.match(drawer, /node\.showModal\(\)/);
+  assert.match(drawer, /node\.close\(\)/);
 });
 
 test('custom admin dialogs lock background scroll and restore their trigger', () => {

@@ -29,6 +29,14 @@ export const ADMIN_SECTION_KEYS = Object.freeze([
 
 const ADMIN_SECTION_SET = new Set(ADMIN_SECTION_KEYS);
 
+/** Consume only this workspace's handled intent; filters and caller context survive. */
+export function adminSearchAfterIntent(search, section) {
+  const params = new URLSearchParams(search);
+  const keys = section === 'calendar' ? ['action', 'session'] : section === 'gym-members' ? ['member'] : ['action'];
+  keys.forEach(key => params.delete(key));
+  return params.toString();
+}
+
 export function isAdminSection(value) {
   return ADMIN_SECTION_SET.has(value);
 }

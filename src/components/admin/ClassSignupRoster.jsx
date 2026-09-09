@@ -1,18 +1,9 @@
 import React from 'react';
-import { Loader2, Mail, Phone } from 'lucide-react';
+import { Mail, Phone } from 'lucide-react';
 
+import { AdminBadge, AdminSkeleton } from '@/components/admin/ui';
 import { gymTimeLabel } from '@/lib/gymTime';
 import { rosterPeople, rosterPlacesHeld } from '@/lib/classRoster';
-
-const STATUS_CHIP = {
-  confirmed: 'border-status-confirmed-600/40 text-status-confirmed-400',
-  requested: 'border-xert-orange/40 text-xert-orange',
-  waitlisted: 'border-status-info-600/40 text-status-info-400',
-  attended: 'border-status-confirmed-600/40 text-status-confirmed-400',
-  cancelled: 'border-xert-steel/30 text-xert-concrete/40',
-  declined: 'border-xert-steel/30 text-xert-concrete/40',
-  no_show: 'border-xert-red/40 text-xert-red',
-};
 
 const SOURCE_LABEL = {
   member: 'Member credit',
@@ -39,7 +30,7 @@ export default function ClassSignupRoster({
   const spotsLeft = session?.capacity ? Math.max(session.capacity - taken, 0) : null;
 
   const row = (person, index, group) => (
-    <div key={`${person.source}-${person.rowId}`} className="flex flex-wrap items-center justify-between gap-3 bg-xert-ink p-3">
+    <div key={`${person.source}-${person.rowId}`} className="calendar-roster-row">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-body text-sm text-xert-offwhite">{person.name}</p>
@@ -83,9 +74,7 @@ export default function ClassSignupRoster({
           {statuses.map(status => <option key={status} value={status}>{status}</option>)}
         </select>
       ) : (
-        <span className={`border px-2 py-0.5 font-body text-[10px] uppercase ${STATUS_CHIP[person.status] || 'border-xert-steel/30 text-xert-concrete/40'}`}>
-          {person.status}
-        </span>
+        <AdminBadge status={person.status}>{person.status}</AdminBadge>
       )}
     </div>
   );
@@ -124,9 +113,7 @@ export default function ClassSignupRoster({
       </div>
 
       {loading ? (
-        <p className="inline-flex items-center gap-2 font-body text-sm text-xert-concrete/50">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading sign-ups…
-        </p>
+        <AdminSkeleton variant="editor" label="Loading sign-ups" />
       ) : (
         <>
           {group('In the class', inClass, 'Nobody has taken a spot yet.')}

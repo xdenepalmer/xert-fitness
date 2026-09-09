@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { availabilityBlockEditorForm, blackoutPeriodEditorForm, blackoutPeriodMutationError, blackoutsOverlappingSession, classSessionEditorForm, classSessionEditorIsDirty, classSessionUpdateRpcError, classSessionValidationError, hasValidTimeRange, normalizeAvailabilityBlock, normalizeBlackoutPeriod, normalizeClassSession, repeatedClassSessionCopies, sessionEndTime, toDateTimeLocalInput } from '../src/lib/scheduling.js';
 
+test('null new-class sessions share the empty editor baseline', () => {
+  const empty = classSessionEditorForm();
+  assert.deepEqual(classSessionEditorForm(null), empty);
+  assert.equal(classSessionEditorIsDirty(empty, null), false);
+  assert.equal(classSessionEditorIsDirty({ ...empty, title: 'Morning strength' }, null), true);
+});
+
 test('normalizes explicit availability and blackout payloads', () => {
   const block = normalizeAvailabilityBlock({
     id: 'must-not-be-sent', start_time: '2026-08-01T08:00', end_time: '2026-08-01T09:00',

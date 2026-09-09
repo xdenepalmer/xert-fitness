@@ -39,6 +39,7 @@ export function toDateTimeLocalInput(value) {
 }
 
 export function classSessionEditorForm(session = {}) {
+  session = session ?? {};
   const numberOrDefault = (value, fallback) => {
     if (value === null || value === undefined || value === '') return fallback;
     const number = Number(value);

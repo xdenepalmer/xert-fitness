@@ -1,0 +1,52 @@
+.calendar-workspace { padding: var(--space-group); color: var(--text-primary); max-width: none; }
+.calendar-toolbar, .calendar-session-actions, .calendar-dialog-actions { display: flex; flex-wrap: wrap; gap: var(--space-control); margin-block-end: var(--space-group); }
+.calendar-toolbar { align-items: center; }
+.calendar-workspace button, .calendar-workspace select, .calendar-workspace input:not([type="checkbox"]), .calendar-workspace a,
+.calendar-dialog-actions button, .calendar-dialog-actions a { min-height: var(--control-height); white-space: normal; overflow-wrap: anywhere; }
+.calendar-workspace select, .calendar-workspace input { max-width: 100%; }
+.calendar-workspace .truncate { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.calendar-workspace p, .calendar-workspace h3, .calendar-workspace a { overflow-wrap: anywhere; }
+.calendar-workspace [class*="text-xert-concrete/"], .calendar-workspace [class*="text-xert-pale/"] { color: var(--text-secondary); }
+.calendar-session-card, .calendar-queue-card { border: var(--nav-line-width) solid var(--border-hairline); border-radius: var(--nav-radius-card); background: var(--surface-raised); overflow: hidden; }
+.calendar-session-card { scroll-margin-top: var(--space-group); }
+.calendar-session-heading, .calendar-roster-row { display: flex; flex-direction: column; gap: var(--space-control); }
+.calendar-session-title { font-family: var(--font-display); font-size: var(--nav-font-title); line-height: var(--line-display); margin-block: var(--space-inline); }
+.calendar-session-actions { margin: 0; align-items: start; }
+.calendar-session-actions button { flex: 1 1 auto; }
+.calendar-roster-panel { border-top: var(--nav-line-width) solid var(--border-strong); padding: var(--space-group); background: var(--surface-sunken); }
+.calendar-roster-row { padding: var(--space-row) var(--space-control); border-bottom: var(--nav-line-width) solid var(--border-hairline); background: var(--surface-raised); overflow-wrap: anywhere; }
+.calendar-roster-row > div { min-width: 0; }
+.calendar-roster-row select { min-width: 0; width: 100%; }
+.calendar-waitlist { margin-block: var(--space-group); padding-block: var(--space-control); }
+.calendar-waitlist-grid, .calendar-loading, .calendar-editor { display: grid; gap: var(--space-group); }
+.calendar-queue-card { padding: var(--space-row) var(--space-group); border-inline-start: var(--focus-width) solid var(--accent-default); }
+.calendar-form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-group); }
+.calendar-dialog-actions { margin-block: var(--space-group) 0; padding-block: var(--space-group); border-top: var(--nav-line-width) solid var(--border-hairline); }
+.calendar-dialog-actions > * { flex: 1 1 auto; }
+.calendar-attendance { container: calendar-attendance / inline-size; }
+.calendar-attendance-row { display: grid; gap: var(--space-control); border: var(--nav-line-width) solid var(--border-hairline); border-radius: var(--radius-control); background: var(--surface-raised); padding: var(--space-row) var(--space-control); }
+.calendar-attendance-row [role="group"] { display: flex; flex-wrap: wrap; gap: var(--space-label); }
+.calendar-attendance-row [role="group"] button { flex: 1 1 auto; white-space: nowrap; overflow-wrap: normal; border: var(--nav-line-width) solid var(--border-strong); }
+.calendar-editor [class*="text-xert-concrete/"], .calendar-attendance [class*="text-xert-concrete/"], .calendar-dialog-content [class*="text-xert-concrete/"] { color: var(--text-secondary); }
+.calendar-board { container: calendar-board / inline-size; }
+.calendar-day-cell { min-height: var(--control-height); }
+.calendar-day-dots { display: flex; }
+.calendar-day-details { display: none; }
+@container admin-kit (min-width: 36rem) {
+  .calendar-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calendar-roster-row { flex-direction: row; align-items: center; justify-content: space-between; }
+  .calendar-roster-row select { width: auto; }
+}
+@container admin-kit (min-width: 48rem) {
+  .calendar-waitlist-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calendar-session-heading { flex-direction: row; justify-content: space-between; }
+  .calendar-session-actions { max-width: 45%; }
+}
+@container calendar-board (min-width: 48rem) {
+  .calendar-day-cell { min-height: calc(var(--control-height) * 2); }
+  .calendar-day-dots { display: none; }
+  .calendar-day-details { display: flex; }
+}
+@container calendar-attendance (min-width: 36rem) {
+  .calendar-attendance-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
+}
