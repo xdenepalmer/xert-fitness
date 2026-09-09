@@ -67,6 +67,11 @@ try {
         try {
           await page.goto(origin + path, { waitUntil: 'networkidle' });
           await page.locator('main').first().waitFor();
+          if (path.startsWith('/admin') && process.argv.includes('--compact')) {
+            const compact = page.getByRole('button', { name: 'Compact density', exact: true });
+            if (await compact.count()) await compact.click();
+            await page.locator('[data-admin-shell][data-density="compact"]').waitFor();
+          }
           if (path === '/') await checkAnnouncement(page);
           if (path === '/' && signedIn && width === 390) {
             const qr = await page.evaluate(async () => {

@@ -82,6 +82,8 @@ buttons are measured in both dimensions, not just their height.
 `--header` checks actual visible workspace-heading text against header action
 hitboxes at normal and 200% text. This detects overlaps that a page-width check
 cannot catch; intentionally clipped text is excluded from the visible ranges.
+`--compact` sets compact density through the actual shell control before admin
+screenshots and assertions; the normal run starts with comfortable density.
 
 `--calendar-data` supplies read-only fictional calendar data: member bookings,
 public sign-ups, a FIFO waitlist candidate and a past class with a pending member
