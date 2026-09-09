@@ -53,8 +53,6 @@ final class NativeDesignSystemTests: XCTestCase {
         // Test-only controls, no production screen, account, service or network access.
         let content = NativeKitEvidence(group: group)
             .environment(\.dynamicTypeSize, size)
-            .environment(\.accessibilityReduceMotion, true)
-            .environment(\.accessibilityReduceTransparency, true)
             .preferredColorScheme(.dark)
         let host = UIHostingController(rootView: content)
         let proposed = CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
@@ -77,6 +75,10 @@ final class NativeDesignSystemTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        let settings = XCTAttachment(string: "Reduce Motion: \(UIAccessibility.isReduceMotionEnabled); Reduce Transparency: \(UIAccessibility.isReduceTransparencyEnabled). These system settings were observed, not overridden by the fixture.")
+        settings.name = "\(name)-system-settings"
+        settings.lifetime = .keepAlways
+        add(settings)
         return fit.height
     }
 }
