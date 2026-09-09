@@ -12,6 +12,7 @@ import { checkAdminShell } from '../test/browser/admin-shell.mjs';
 import { checkAdminCommands } from '../test/browser/admin-commands.mjs';
 import { checkAdminRecovery } from '../test/browser/admin-recovery.mjs';
 import { checkAdminKit, checkAdminFilterGuard } from '../test/browser/admin-kit.mjs';
+import { checkAdminCalendar } from '../test/browser/admin-calendar.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -193,6 +194,16 @@ try {
           } catch (error) {
             await page.screenshot({ path: resolve(output, `${prefix}-commands-failure.png`) });
             results.push({ prefix: `${prefix}-commands`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/calendar' && signedIn && (process.argv.includes('--calendar') || process.argv.includes('--calendar-before'))) {
+          try {
+            await checkAdminCalendar(page, { origin, failures, baseline: process.argv.includes('--calendar-before'), capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during calendar workflows');
+            results.push({ prefix: `${prefix}-calendar-flows`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-calendar-failure.png`) });
+            results.push({ prefix: `${prefix}-calendar-flows`, passed: false, error: error.message, browserErrors: errors });
           }
         }
       }

@@ -87,6 +87,14 @@ mutation fixture. Use it for the calendar's before/after screenshots:
 ```sh
 node scripts/verify-design.mjs --tag=calendar --routes=/admin/calendar --calendar-data
 ```
+Add `--calendar` to exercise the actual roster, FIFO promotion review, editor
+discard cancellation, both attendance sources, pending-member blocker and
+waitlist failure/retry. These checks cancel before any mutation. They also
+verify that New Class opens and that consumed deep-link intents retain unrelated
+URL parameters. `--calendar-before` captures the pre-conversion baseline using
+an existing class editor; it deliberately omits those two known-broken legacy
+assertions and must not be used as the final conversion gate.
+
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine
