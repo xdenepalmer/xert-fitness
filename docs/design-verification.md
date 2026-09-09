@@ -38,6 +38,8 @@ node scripts/verify-design.mjs --tag=panels --routes=/admin,/admin/calendar,/adm
 node scripts/verify-design.mjs --tag=owner --routes=/admin --shell --commands --recovery
 node scripts/verify-design.mjs --tag=kit --kit-only
 node scripts/verify-design.mjs --tag=kit-motion --kit-only --motion=default --quick
+node scripts/verify-design.mjs --tag=visitor-settings --routes=/admin/settings --visitor-prices
+node scripts/verify-design.mjs --tag=visitor-payments --routes=/casual,/3daypass,/3months --public-visitor-prices --membership-paperwork
 ```
 
 The full matrix uses 390×844, 768×1024, 1440×900 and 1920×1080. It captures resting,
@@ -51,6 +53,20 @@ content is scrolled). `--announcement` uses a long fictional announcement to
 check that the full banner clears the header and hero at both text sizes.
 Interaction results are reported separately so an unrelated page overflow does
 not hide the navigation test outcomes.
+`--visitor-prices` exercises all three real Settings price controls using unsaved
+fictional drafts: valid discounts, lowering the base below a running discount,
+invalid intermediate amounts, clearing a discount and discarding changes. It
+asserts no settings or payment activation mutation was requested.
+`--public-visitor-prices` supplies fictional settings reads to each payment page
+and verifies active, disabled and invalid discounts, including enlarged text.
+`--membership-paperwork` verifies that a PEQ alone or another visitor's agreement
+marker resumes signing with the return destination intact. Both matching device
+markers enable only the server verification request; the fixture rejects that
+request locally. This is not proof of a live payment, email or signed record.
+Real handler tests separately verify persisted questionnaire/agreement checks,
+configured charge amounts and failure paths before an injected Stripe client.
+`--calendar-search` additionally preserves the selected Past period when an
+upcoming attendee result is opened through the selected-session exception.
 `--shell` checks persistent density, pointer-independent sidebar resizing, an icon
 rail, fuzzy results, manual-activation tabs, shortcuts and preservation of an
 actual unsaved editor draft when navigation is cancelled. `--commands` enables an

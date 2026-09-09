@@ -14,6 +14,9 @@ import { checkAdminRecovery } from '../test/browser/admin-recovery.mjs';
 import { checkAdminKit, checkAdminFilterGuard } from '../test/browser/admin-kit.mjs';
 import { checkAdminCalendar } from '../test/browser/admin-calendar.mjs';
 import { checkAttendeeSearch } from '../test/browser/admin-attendee-search.mjs';
+import { checkVisitorPrices } from '../test/browser/admin-visitor-prices.mjs';
+import { checkMembershipPaperwork } from '../test/browser/public-membership-paperwork.mjs';
+import { checkPublicVisitorPrices } from '../test/browser/public-visitor-prices.mjs';
 import { checkAdminLeads } from '../test/browser/admin-leads.mjs';
 import { checkAdminHeaderLayout } from '../test/browser/admin-header.mjs';
 import { checkAdminForms } from '../test/browser/admin-forms.mjs';
@@ -75,7 +78,13 @@ try {
         const prefix = `${width}-${signedIn ? 'signed-in' : 'signed-out'}-${path === '/' ? 'home' : path.slice(1).replaceAll('/', '-')}`;
         try {
           await page.goto(origin + path, { waitUntil: 'networkidle' });
-          await page.locator('main').first().waitFor();
+          if (path === '/login' && !signedIn) {
+            await page.getByRole('heading', { name: 'Welcome back', exact: true }).waitFor();
+            await page.getByLabel('Email', { exact: true }).waitFor();
+            await page.getByLabel('Password', { exact: true }).waitFor();
+          } else {
+            await page.locator('main').first().waitFor();
+          }
           if (path.startsWith('/admin') && process.argv.includes('--compact')) {
             const compact = page.getByRole('button', { name: 'Compact density', exact: true });
             if (await compact.count()) await compact.click();
@@ -222,6 +231,36 @@ try {
           } catch (error) {
             await page.screenshot({ path: resolve(output, `${prefix}-calendar-failure.png`) });
             results.push({ prefix: `${prefix}-calendar-flows`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (['/casual', '/3daypass', '/3months'].includes(path) && process.argv.includes('--public-visitor-prices')) {
+          try {
+            await checkPublicVisitorPrices(page, { origin, path, capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during public price display checks');
+            results.push({ prefix: `${prefix}-public-prices`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-public-prices-failure.png`) });
+            results.push({ prefix: `${prefix}-public-prices`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/3months' && process.argv.includes('--membership-paperwork')) {
+          try {
+            await checkMembershipPaperwork(page, { origin, requests, capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during membership paperwork handoff');
+            results.push({ prefix: `${prefix}-membership-paperwork`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-membership-paperwork-failure.png`) });
+            results.push({ prefix: `${prefix}-membership-paperwork`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/settings' && signedIn && process.argv.includes('--visitor-prices')) {
+          try {
+            await checkVisitorPrices(page, { origin, requests, capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during visitor price draft changes');
+            results.push({ prefix: `${prefix}-visitor-prices`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-visitor-prices-failure.png`) });
+            results.push({ prefix: `${prefix}-visitor-prices`, passed: false, error: error.message, browserErrors: errors });
           }
         }
         if (path === '/admin/calendar' && signedIn && process.argv.includes('--calendar-search')) {

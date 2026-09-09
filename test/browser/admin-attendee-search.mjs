@@ -27,6 +27,8 @@ export async function checkAttendeeSearch(page, { origin, failures, capture = as
   await page.getByRole('alert').filter({ hasText: 'Fixture class service temporarily unavailable.' }).waitFor();
   assert.equal(await page.getByText('Morgan Ellis', { exact: true }).count(), 0, 'Previous-query matches are hidden after changing the query');
   failures.admin_search_class_attendees = 0;
+  const period = page.getByRole('radiogroup', { name: 'Class period', exact: true });
+  await period.getByRole('radio', { name: /^Past \(/ }).click();
   await search.fill('Sky');
   await page.getByText('Sky Parker', { exact: true }).waitFor();
   await page.getByRole('alert').filter({ hasText: 'Fixture class service temporarily unavailable.' }).waitFor({ state: 'hidden' });
@@ -36,4 +38,12 @@ export async function checkAttendeeSearch(page, { origin, failures, capture = as
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'Search results stay readable at enlarged text');
   await capture('attendee-search-recovered-text-200');
   await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  await page.getByRole('button').filter({ hasText: 'Foundation Strength' }).click();
+  const futureRoster = page.locator(`#class-session-${ids.futureClass}`);
+  await futureRoster.getByText('Sky Parker', { exact: true }).waitFor();
+  assert.equal(await period.getByRole('radio', { name: /^Past \(/ }).getAttribute('aria-checked'), 'true', 'Opening an upcoming attendee result preserves the selected Past period');
+  assert.ok((await futureRoster.textContent()).includes('outside current filters'), 'Selected-session exception reveals the result without changing filters');
+  assert.equal(new URL(page.url()).searchParams.get('calendarSearch'), 'non-matching-filter');
+  assert.equal(new URL(page.url()).hash, '#keep');
+  await capture('attendee-search-period-preserved');
 }
