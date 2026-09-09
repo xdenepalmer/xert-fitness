@@ -1,3 +1,5 @@
+@import '../../styles/admin-calendar-queries.css';
+
 .calendar-workspace { padding: var(--space-group); color: var(--text-primary); max-width: none; }
 .calendar-toolbar, .calendar-session-actions, .calendar-dialog-actions { display: flex; flex-wrap: wrap; gap: var(--space-control); margin-block-end: var(--space-group); }
 .calendar-toolbar { align-items: center; }
@@ -29,24 +31,8 @@
 .calendar-attendance-row [role="group"] button { flex: 1 1 auto; white-space: nowrap; overflow-wrap: normal; border: var(--nav-line-width) solid var(--border-strong); }
 .calendar-editor [class*="text-xert-concrete/"], .calendar-attendance [class*="text-xert-concrete/"], .calendar-dialog-content [class*="text-xert-concrete/"] { color: var(--text-secondary); }
 .calendar-board { container: calendar-board / inline-size; }
-.calendar-day-cell { min-height: var(--control-height); }
+.calendar-month-scroll { max-width: 100%; overflow-x: auto; }
+.calendar-month-grid { min-width: calc(7 * (var(--control-height) + var(--nav-line-width))); }
+.calendar-day-cell { min-width: var(--control-height); min-height: var(--control-height); }
 .calendar-day-dots { display: flex; }
 .calendar-day-details { display: none; }
-@container admin-kit (min-width: 36rem) {
-  .calendar-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .calendar-roster-row { flex-direction: row; align-items: center; justify-content: space-between; }
-  .calendar-roster-row select { width: auto; }
-}
-@container admin-kit (min-width: 48rem) {
-  .calendar-waitlist-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .calendar-session-heading { flex-direction: row; justify-content: space-between; }
-  .calendar-session-actions { max-width: 45%; }
-}
-@container calendar-board (min-width: 48rem) {
-  .calendar-day-cell { min-height: calc(var(--control-height) * 2); }
-  .calendar-day-dots { display: none; }
-  .calendar-day-details { display: flex; }
-}
-@container calendar-attendance (min-width: 36rem) {
-  .calendar-attendance-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
-}

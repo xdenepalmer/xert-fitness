@@ -202,6 +202,8 @@ export default function ClassCalendarBoard({
         </div>
       </div>
 
+      <div className="calendar-month-scroll" role="region" aria-label="Calendar dates" tabIndex={0}>
+      <div className="calendar-month-grid">
       {/* Weekday header */}
       <div className="grid grid-cols-7 border-b border-xert-steel/20">
         {WEEKDAY_LABELS.map(label => (
@@ -266,6 +268,9 @@ export default function ClassCalendarBoard({
             })}
           </div>
         ))}
+      </div>
+
+      </div>
       </div>
 
       {undated.length > 0 && (

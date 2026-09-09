@@ -37,6 +37,22 @@ test('all checked-in outputs are byte-identical to deterministic generation', ()
   assert.deepEqual(generated, generateTokens(JSON.parse(JSON.stringify(source))));
   for (const [path, content] of Object.entries(generated)) assert.equal(read(path), content, path);
 });
+
+test('calendar container queries follow changed shared breakpoints without private literals', () => {
+  const changed = structuredClone(source);
+  changed.components['admin.kit.breakpoint.columns'] = '41rem';
+  changed.components['admin.kit.breakpoint.table'] = '53rem';
+  const css = generateTokens(changed)['src/styles/admin-calendar-queries.css'];
+  assert.equal(typeof css, 'string', 'calendar queries are a generated artifact');
+  assert.match(css, /@container admin-kit \(min-width: 41rem\)/);
+  assert.match(css, /@container admin-kit \(min-width: 53rem\)/);
+  assert.match(css, /@container calendar-board \(min-width: 53rem\)/);
+  assert.match(css, /@container calendar-attendance \(min-width: 41rem\)/);
+  assert.doesNotMatch(css, /36rem|48rem/);
+  const calendarStyles = read('src/components/admin/calendar.css');
+  assert.match(calendarStyles, /@import '\.\.\/\.\.\/styles\/admin-calendar-queries\.css'/);
+  assert.doesNotMatch(calendarStyles, /@container[^\n]*\d+(?:px|rem)/);
+});
 test('CSS and Swift expose exactly the same semantic color names', () => {
   const values = resolveTokens(source);
   const expected = Object.entries(values).filter(([key, value]) => key.startsWith('semantics.') && /^#[\da-f]{6,8}$/i.test(value)).map(([key]) => key.slice(10)).sort();
