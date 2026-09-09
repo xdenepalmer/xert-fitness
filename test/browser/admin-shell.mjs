@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 export async function checkAdminShell(page, { origin, width }) {
   const shell = page.locator('[data-admin-shell]');
   await shell.waitFor();
-  await page.getByRole('button', { name: 'Compact density', exact: true }).click();
-  assert.equal(await shell.getAttribute('data-density'), 'compact');
-  await page.reload({ waitUntil: 'networkidle' });
-  assert.equal(await shell.getAttribute('data-density'), 'compact', 'Density preference survives reload');
-  await page.getByRole('button', { name: 'Comfortable density', exact: true }).click();
-
   if (width >= 1024) {
+    await page.getByRole('button', { name: 'Compact density', exact: true }).click();
+    assert.equal(await shell.getAttribute('data-density'), 'compact');
+    await page.reload({ waitUntil: 'networkidle' });
+    assert.equal(await shell.getAttribute('data-density'), 'compact', 'Density preference survives reload');
+    await page.getByRole('button', { name: 'Comfortable density', exact: true }).click();
+    await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Keyboard shortcuts', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
     const handle = page.getByRole('separator', { name: /resize.*navigation/i });
     await handle.focus();
     const initialWidth = Number(await handle.getAttribute('aria-valuenow'));
@@ -22,6 +24,29 @@ export async function checkAdminShell(page, { origin, width }) {
     const rail = await page.locator('#admin-navigation').boundingBox();
     assert.ok(rail.width < initialWidth / 2, 'Collapsed navigation is an icon rail');
     await page.getByRole('button', { name: 'Expand navigation', exact: true }).click();
+  } else {
+    assert.equal(await page.getByRole('button', { name: /^(Compact|Comfortable) density$/ }).count(), 0, 'Mobile header omits the spacing control');
+    assert.equal(await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).count(), 0, 'Mobile header omits keyboard help');
+    const account = page.getByRole('button', { name: 'Open account and navigation', exact: true });
+    await account.tap();
+    await page.locator('#admin-navigation[aria-modal="true"]').waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await account.getAttribute('aria-expanded'), 'false', 'Mobile account navigation still opens and closes');
+  }
+
+  await page.getByRole('button', { name: 'Search admin tools', exact: true }).tap();
+  await page.getByRole('dialog', { name: 'Find an owner task', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+
+  if (width === 390) {
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ ...viewport, width: 1024 });
+    await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Compact density', exact: true }).waitFor();
+    await page.setViewportSize({ ...viewport, width: 1023 });
+    await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).waitFor({ state: 'detached' });
+    assert.equal(await page.getByRole('button', { name: /^(Compact|Comfortable) density$/ }).count(), 0, 'Both controls disappear when returning below the desktop breakpoint');
+    await page.setViewportSize(viewport);
   }
 
   await page.keyboard.press('Control+k');

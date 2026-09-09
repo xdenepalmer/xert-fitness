@@ -302,8 +302,8 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
             </div>
             <div className="admin-shell-actions flex items-center gap-2">
             {desktopNavigation && <button type="button" className="admin-shell-control" onClick={() => shell.setCollapsed(value => !value)} aria-label={shell.collapsed ? 'Expand navigation' : 'Collapse navigation'} title={shell.collapsed ? 'Expand navigation' : 'Collapse navigation'}>{shell.collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}</button>}
-            <button type="button" className="admin-shell-control" onClick={() => shell.setDensity(value => value === 'compact' ? 'comfortable' : 'compact')} aria-label={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'} title={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'}><SlidersHorizontal /></button>
-            <button type="button" className="admin-shell-control" onClick={() => shell.setShortcutsOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts"><Keyboard /></button>
+            {desktopNavigation && <button type="button" className="admin-shell-control" onClick={() => shell.setDensity(value => value === 'compact' ? 'comfortable' : 'compact')} aria-label={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'} title={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'}><SlidersHorizontal /></button>}
+            {desktopNavigation && <button type="button" className="admin-shell-control" onClick={() => shell.setShortcutsOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts"><Keyboard /></button>}
             <button ref={menuButtonRef} type="button" onClick={() => setSidebarOpen(true)} aria-label="Open account and navigation"
               aria-expanded={sidebarOpen} aria-controls="admin-navigation"
               className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] font-display text-sm text-xert-steel transition-colors hover:border-xert-steel/60 lg:hidden">

@@ -86,9 +86,13 @@ try {
             await page.locator('main').first().waitFor();
           }
           if (path.startsWith('/admin') && process.argv.includes('--compact')) {
+            // Choose the desktop-only preference before checking its retained mobile layout.
+            if (width < 1024) await page.setViewportSize({ width: 1024, height });
+            await page.getByRole('button', { name: /^(Compact|Comfortable) density$/ }).waitFor();
             const compact = page.getByRole('button', { name: 'Compact density', exact: true });
             if (await compact.count()) await compact.click();
             await page.locator('[data-admin-shell][data-density="compact"]').waitFor();
+            if (width < 1024) await page.setViewportSize({ width, height });
           }
           if (path === '/') await checkAnnouncement(page);
           if (path === '/' && signedIn && width === 390) {
