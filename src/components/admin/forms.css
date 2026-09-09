@@ -21,6 +21,11 @@
 .forms-card { width: 100%; text-align: start; padding: var(--space-group); }
 .forms-card:hover { border-color: var(--border-strong); }
 .forms-loading-stack { display: grid; gap: var(--space-group); }
+/* Keep fixed-token fragments within their loading column at enlarged text sizes. */
+.forms-loading-stack,
+[data-form-placeholder] .forms-contact,
+[data-form-placeholder].forms-contact,
+.forms-trends.forms-loading-trends { min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .forms-trends.forms-loading-trends li { grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr); }
 .admin-kit-skeleton.forms-loading-badge { height: calc(var(--font-size-label) + var(--space-label) * 2); border-radius: var(--radius-pill); }
 .forms-record-loading { background: var(--surface-paper); }
