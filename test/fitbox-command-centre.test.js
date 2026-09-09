@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 test('web Command Centre gives member leads an explicit, privacy-clear FitBox handoff', async () => {
-  const table = await readFile(new URL('../src/components/admin/LeadTable.jsx', import.meta.url), 'utf8');
+  const table = await readFile(new URL('../src/components/admin/LeadDetailDrawer.jsx', import.meta.url), 'utf8');
   const handoff = await readFile(new URL('../src/components/admin/FitboxLeadHandoff.jsx', import.meta.url), 'utf8');
   const data = await readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8');
   assert.match(table, /table === 'member_interest' && <FitboxLeadHandoff lead=\{lead\}/);

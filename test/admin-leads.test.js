@@ -96,13 +96,15 @@ test('a member lead can end up training casually, and every surface offers it', 
   assert.throws(() => validateLeadMutation('partner_interest', 'casual', ['lead-a']), /status/i);
 
   // Casual sits with joined as an outcome, not among the dead ends.
-  const [web, native, sql] = await Promise.all([
+  const [web, native, sql, leadModel] = await Promise.all([
     read('../src/components/admin/LeadTable.jsx'),
     read('../ios/XertFitnessApp/XertFitnessApp/AdminModels.swift'),
     read('../supabase/migrations/20260908050000_member_lead_casual_status.sql'),
+    read('../src/lib/adminLeads.js'),
   ]);
-  assert.match(web, /'joined', 'casual', 'not_suitable'/);
-  assert.match(web, /^ {2}casual: /m, 'the badge has its own colour');
+  assert.match(web, /statuses = LEAD_STATUSES\[table\]/, 'both editors use the validated status vocabulary');
+  assert.match(leadModel, /'joined', 'casual', 'not_suitable'/);
+  assert.match(web, /<AdminBadge status=\{lead.status\}/, 'casual remains readable through the shared neutral badge fallback');
   assert.match(native, /"joined", "casual", "not_suitable"/);
   assert.match(sql, /'booked_trial', 'joined', 'casual', 'not_suitable', 'archived'/);
   // The server is the gate, so the trainer and partner lists must not gain it.

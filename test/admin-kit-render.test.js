@@ -38,6 +38,18 @@ test('table empty, pending and error states provide context and recovery', () =>
   assert.match(failed, /Retry/);
 });
 
+test('table selection names its loaded-page scope and locks every checkbox during a mutation', () => {
+  const props = {rows:[{id:'a',name:'A'},{id:'b',name:'B'}],columns:[{key:'name',header:'Name'}],selectable:true};
+  const html = render(kit.AdminDataTable, {...props,selectAllLabel:'Select all leads on this page',selectionDisabled:true});
+  assert.match(html, /aria-label="Select all leads on this page"/);
+  const checkboxes = html.match(/<input[^>]*type="checkbox"[^>]*>/g);
+  assert.equal(checkboxes.length, 3);
+  assert.ok(checkboxes.every(input => input.includes('disabled=""')));
+  const defaultHtml = render(kit.AdminDataTable, props);
+  assert.match(defaultHtml, /aria-label="Select all filtered results"/);
+  assert.ok((defaultHtml.match(/<input[^>]*type="checkbox"[^>]*>/g)).every(input => !input.includes('disabled')));
+});
+
 test('unknown statuses remain readable and neutral, segmented items expose one selected radio', () => {
   assert.equal(typeof kit.AdminBadge, 'function');
   assert.match(render(kit.AdminBadge, {status:'future-status'}), /data-tone="neutral"/);

@@ -10,10 +10,10 @@ const threshold = kitTokens['table.threshold'];
 const estimate = kitTokens['table.estimate'];
 const overscan = kitTokens['table.overscan'];
 
-function SelectionBox({label, checked, mixed = false, onChange}) {
+function SelectionBox({label, checked, mixed = false, disabled = false, onChange}) {
   const ref = useRef(null);
   useEffect(() => {if (ref.current) ref.current.indeterminate = mixed;}, [mixed]);
-  return <label className="admin-table-check"><input ref={ref} type="checkbox" aria-label={label} checked={checked} onChange={onChange} /></label>;
+  return <label className="admin-table-check"><input ref={ref} type="checkbox" aria-label={label} checked={checked} disabled={disabled} onChange={onChange} /></label>;
 }
 
 function MeasuredRow({rowKey, measure, generation, children, ...props}) {
@@ -31,13 +31,14 @@ function MeasuredRow({rowKey, measure, generation, children, ...props}) {
 }
 
 /**
- * rows is the complete current filtered result. Header selection covers all of it.
+ * Header selection covers the supplied rows. Server-paged consumers must name that scope with selectAllLabel.
  * selectedKeys/sort undefined => local state; supplied Set/null => controlled.
  * Large lists measure mounted rows and retain the focused stable-key node.
  * Full-results mode exposes every action in normal document tab order.
  */
 export function AdminDataTable({rows = EMPTY, columns = EMPTY, getRowKey = getId, getRowLabel = getLabel, label = 'Records',
   selectable = false, selectedKeys = undefined, defaultSelectedKeys = EMPTY, onSelectionChange = undefined,
+  selectAllLabel = 'Select all filtered results', selectionDisabled = false,
   sort = undefined, defaultSort = null, onSortChange = undefined, loading = false, error = null, onRetry = undefined,
   emptyTitle = 'No results', emptyDescription = 'Try changing your filters or adding a record.', emptyAction = null}) {
   const [localSelected, setLocalSelected] = useState(() => new Set(defaultSelectedKeys));
@@ -105,6 +106,7 @@ export function AdminDataTable({rows = EMPTY, columns = EMPTY, getRowKey = getId
     return () => {observer.disconnect(); mutations.disconnect();};
   }, [virtualized,readViewport,loading,error]);
   function select(keysToChange, checked) {
+    if (selectionDisabled) return;
     const next = toggleSelection(selected,keysToChange,checked);
     if (selectedKeys === undefined) setLocalSelected(next);
     onSelectionChange?.(next);
@@ -126,7 +128,7 @@ export function AdminDataTable({rows = EMPTY, columns = EMPTY, getRowKey = getId
     if (virtualized) spacer(previousIndex+1,index);
     body.push(<MeasuredRow key={key} rowKey={key} measure={virtualized ? measure : null} generation={generation} aria-rowindex={index+2} aria-selected={selectable ? selected.has(key) : undefined}
       onFocusCapture={() => setFocusedKey(key)}>
-      {selectable && <td role="cell" className="admin-selection-cell"><SelectionBox label={`Select ${getRowLabel(row)}`} checked={selected.has(key)} onChange={event => select([key],event.target.checked)} /></td>}
+      {selectable && <td role="cell" className="admin-selection-cell"><SelectionBox label={`Select ${getRowLabel(row)}`} checked={selected.has(key)} disabled={selectionDisabled} onChange={event => select([key],event.target.checked)} /></td>}
       {columns.map(column => <td role="cell" key={column.key}><span className="admin-cell-label" aria-hidden="true">{column.header}</span><div className="admin-cell-value">{column.render ? column.render(row) : row[column.key] ?? '—'}</div></td>)}
     </MeasuredRow>);
     previousIndex = index;
@@ -145,7 +147,7 @@ export function AdminDataTable({rows = EMPTY, columns = EMPTY, getRowKey = getId
         onBlurCapture={event => {if (!event.currentTarget.contains(event.relatedTarget)) setFocusedKey(null);}}>
         <table className="admin-data-table" role="table" aria-label={label} aria-rowcount={rows.length+1}>
           <thead ref={headRef} role="rowgroup" className="admin-table-head"><tr role="row" aria-rowindex={1}>
-            {selectable && <th scope="col" role="columnheader" className="admin-selection-heading"><SelectionBox label="Select all filtered results" checked={summary.all} mixed={summary.partial} onChange={event => select(keys,event.target.checked)} /><span className="sr-only">Selection</span></th>}
+            {selectable && <th scope="col" role="columnheader" className="admin-selection-heading"><SelectionBox label={selectAllLabel} checked={summary.all} mixed={summary.partial} disabled={selectionDisabled} onChange={event => select(keys,event.target.checked)} /><span className="sr-only">Selection</span></th>}
             {columns.map(column => <th key={column.key} scope="col" role="columnheader" aria-sort={column.sortable ? currentSort?.key === column.key ? currentSort.direction : 'none' : undefined}>
               {column.sortable ? <button type="button" className="admin-table-sort" onClick={() => changeSort(column.key)}>{column.header}<span aria-hidden="true">{currentSort?.key === column.key ? currentSort.direction === 'ascending' ? ' ↑' : ' ↓' : ' ↕'}</span></button> : column.header}
             </th>)}

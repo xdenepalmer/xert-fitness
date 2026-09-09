@@ -13,6 +13,7 @@ const adminFiles = [
   'CoachesManager.jsx',
   'EventsManager.jsx',
   'LeadTable.jsx',
+  'LeadDetailDrawer.jsx',
   'MembersManager.jsx',
   'OrdersManager.jsx',
   'ProductsManager.jsx',

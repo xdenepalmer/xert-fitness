@@ -128,9 +128,9 @@ export default function AdminCommandCentre() {
       case 'fitbox': return <FitboxHub initialTab={intent.get('tab') || 'overview'} />;
       case 'audit': return <AdminAuditLog />;
       // key remounts the shared table per section so filters/selection don't bleed between lead types
-      case 'members': return <LeadTable key={section} type="member" />;
-      case 'trainers': return <LeadTable key={section} type="trainer" />;
-      case 'partners': return <LeadTable key={section} type="partner" />;
+      case 'members': return <LeadTable key={section} type="member" onDirtyChange={setHasUnsavedChanges} />;
+      case 'trainers': return <LeadTable key={section} type="trainer" onDirtyChange={setHasUnsavedChanges} />;
+      case 'partners': return <LeadTable key={section} type="partner" onDirtyChange={setHasUnsavedChanges} />;
       case 'calendar': return <ClassCalendarAdmin initialAction={intent.get('action')} initialSessionId={intent.get('session')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'workouts': return <WorkoutManager onDirtyChange={setHasUnsavedChanges} />;
       case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
