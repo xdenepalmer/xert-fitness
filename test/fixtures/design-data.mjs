@@ -1,6 +1,7 @@
 // Fictional, local-browser-only data. Never imported by the application.
 import { installCommandData } from './admin-command-data.mjs';
 import { installCalendarData } from './admin-calendar-data.mjs';
+import { installLeadData } from './admin-lead-data.mjs';
 
 export const fixtureUser = {
   id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', role: 'authenticated',
@@ -57,11 +58,12 @@ const readRPCs = new Set([
 // Network-level isolation: keep real auth/router/components, intercept only I/O.
 // External data destinations are fulfilled here or aborted. Only unauthenticated
 // Google Fonts reads pass through so typography matches the real product.
-export async function installDesignFixtures(context, { origin, signedIn = false, requests = [], failures = {}, announcement = false, commands = false, calendar = false, mutations = [] }) {
+export async function installDesignFixtures(context, { origin, signedIn = false, requests = [], failures = {}, announcement = false, commands = false, calendar = false, leads = false, mutations = [] }) {
   const data = designData();
   if (commands && calendar) throw new Error('Use separate contexts for command mutation and read-only calendar fixtures.');
   const commandData = commands ? installCommandData(data, { mutations }) : null;
   const calendarData = calendar ? installCalendarData(data) : null;
+  const leadData = leads ? installLeadData() : null;
   if (announcement) Object.assign(data.admin_settings[0], {
     announcement_banner_enabled: true,
     announcement_banner_text: 'Welcome to XERT. Our coached training sessions are open for booking. Please arrive ten minutes early so your coach can help you get ready.',
@@ -74,7 +76,7 @@ export async function installDesignFixtures(context, { origin, signedIn = false,
     if (['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname)
       && method === 'GET' && !request.headers().authorization) return route.continue();
     const respond = (body, status = 200, extra = {}) => route.fulfill({ status,
-      contentType: 'application/json', headers: { 'access-control-allow-origin': '*', ...extra },
+      contentType: 'application/json', headers: { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range', ...extra },
       body: method === 'HEAD' ? '' : JSON.stringify(body),
     });
     if (url.hostname.endsWith('.supabase.co') || url.hostname === 'invalid.xert.invalid') {
@@ -91,9 +93,19 @@ export async function installDesignFixtures(context, { origin, signedIn = false,
       if (simulated) return respond(simulated.body, simulated.status || 200);
       if (rpc && !readRPCs.has(name)) return respond({ message: 'Mutation or unconfigured RPC blocked by local design fixture.' }, 501);
       if (!rpc && !['GET', 'HEAD', 'OPTIONS'].includes(method)) return respond({ message: 'Writes blocked by local design fixture.' }, 403);
+      const leadPage = leadData?.read(name, url);
+      if (leadPage) return respond(leadPage.rows, 200, { 'content-range': leadPage.rows.length
+        ? `${leadPage.offset}-${leadPage.offset + leadPage.rows.length - 1}/${leadPage.total}` : `*/${leadPage.total}` });
       const rows = calendarData?.read(name, args, url) ?? commandData?.read(name, args) ?? data[name] ?? [];
       const single = request.headers().accept?.includes('vnd.pgrst.object');
       return respond(single ? rows[0] ?? null : rows, 200, { 'content-range': rows.length ? `0-${rows.length - 1}/${rows.length}` : '*/0' });
+    }
+    if (url.origin === origin && method === 'GET' && url.pathname === '/api/admin-fitbox-integration') {
+      const leadState = leadData?.leadState(url.searchParams.get('lead_id'));
+      if (leadState) {
+        requests.push({ method, path: url.pathname, fixture: true });
+        return respond(leadState);
+      }
     }
     requests.push({ method, path: url.pathname, blocked: true });
     if (url.origin === origin) return respond({ message: 'Live APIs disabled in local design verification.' }, 403);

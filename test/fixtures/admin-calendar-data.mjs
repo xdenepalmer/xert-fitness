@@ -11,7 +11,7 @@ export const calendarFixtureIds = Object.freeze({
 export function installCalendarData(data) {
   const now = Date.now();
   const session = (id, title, hours) => ({
-    id, title, session_type: 'XERT Strength', status: 'published', public_visible: true,
+    id, title, class_type: 'XERT Strength', session_type: 'XERT Strength', status: 'published', public_visible: true,
     start_time: new Date(now + hours * 3600000).toISOString(),
     end_time: new Date(now + (hours + 1) * 3600000).toISOString(),
     coach_name: 'Sam', location_zone: 'Main floor', capacity: 8, booking_mode: 'request_to_book',

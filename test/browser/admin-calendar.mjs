@@ -1,6 +1,43 @@
 import assert from 'node:assert/strict';
 import { calendarFixtureIds as ids } from '../fixtures/admin-calendar-data.mjs';
 
+async function assertReachableControl(control, label) {
+  await control.scrollIntoViewIfNeeded();
+  const geometry = await control.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    const visible = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      const bounds = parent.getBoundingClientRect();
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+        visible.left = Math.max(visible.left, bounds.left);
+        visible.right = Math.min(visible.right, bounds.right);
+      }
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+        visible.top = Math.max(visible.top, bounds.top);
+        visible.bottom = Math.min(visible.bottom, bounds.bottom);
+      }
+    }
+    const splitWords = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const text = walker.currentNode;
+      for (const match of text.textContent.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(text, match.index);
+        range.setEnd(text, match.index + match[0].length);
+        if (range.getClientRects().length > 1) splitWords.push(match[0]);
+      }
+    }
+    return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height, visible, splitWords };
+  });
+  assert.ok(geometry.width >= 44 && geometry.height >= 44, `${label} retains a 44px target: ${JSON.stringify(geometry)}`);
+  assert.deepEqual(geometry.splitWords, [], `${label} does not split short action words across lines`);
+  assert.ok(geometry.left >= geometry.visible.left - 2 && geometry.right <= geometry.visible.right + 2
+    && geometry.top >= geometry.visible.top - 2 && geometry.bottom <= geometry.visible.bottom + 2,
+  `${label} can be scrolled fully into view at 200% text: ${JSON.stringify(geometry)}`);
+}
+
 export async function checkAdminCalendar(page, { origin, failures, capture = async () => {}, baseline = false }) {
   const rosterUrl = origin + `/admin/calendar?source=calendar-proof&action=roster&session=${ids.futureClass}`;
   await page.goto(rosterUrl, { waitUntil: 'networkidle' });
@@ -29,8 +66,23 @@ export async function checkAdminCalendar(page, { origin, failures, capture = asy
   await editor.waitFor();
   const title = editor.getByRole('textbox', { name: /^Title/ });
   await title.fill('Keep this fictional class draft');
-  await editor.getByRole('button', { name: /^Close (class editor|drawer)$/ }).click();
   const discard = page.getByRole('alertdialog', { name: 'Discard unsaved class changes?', exact: true });
+  if (!baseline) {
+    for (let step = 0; step < 14; step++) {
+      await page.keyboard.press('Tab');
+      assert.equal(await editor.evaluate(element => element.contains(document.activeElement)), true, 'Editor keyboard focus remains within the modal');
+    }
+    await page.keyboard.press('Escape');
+    await discard.waitFor();
+    for (let step = 0; step < 8; step++) {
+      await page.keyboard.press('Tab');
+      assert.equal(await discard.evaluate(element => element.contains(document.activeElement)), true, 'Nested discard confirmation owns keyboard focus');
+    }
+    await page.keyboard.press('Escape');
+    await discard.waitFor({ state: 'hidden' });
+    assert.equal(await editor.evaluate(element => element.contains(document.activeElement)), true, 'Cancelling the nested confirmation returns focus to the editor');
+  }
+  await editor.getByRole('button', { name: /^Close (class editor|drawer)$/ }).click();
   await discard.waitFor();
   await discard.getByRole('button', { name: 'Keep editing', exact: true }).click();
   assert.equal(await title.inputValue(), 'Keep this fictional class draft', 'Cancelling discard preserves the real class draft');
@@ -52,6 +104,13 @@ export async function checkAdminCalendar(page, { origin, failures, capture = asy
   assert.equal(await save.isEnabled(), true, 'A complete roll can be reviewed despite an unrelated public enquiry');
   assert.equal(await attendance.getByRole('group', { name: 'Attendance for Pat River', exact: true }).count(), 0, 'Public enquiries are not misrepresented as booked attendees');
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  if (!baseline) {
+    await assertReachableControl(attendance.getByRole('group', { name: 'Attendance for Morgan Ellis', exact: true }).getByRole('button', { name: 'Present', exact: true }), 'Member attendance control');
+    await capture('calendar-member-attendance-text-200');
+    await assertReachableControl(attendance.getByRole('group', { name: 'Attendance for Taylor Lane', exact: true }).getByRole('button', { name: 'No show', exact: true }), 'Public signup attendance control');
+    await capture('calendar-public-attendance-text-200');
+    await assertReachableControl(save, 'Save attendance');
+  }
   await capture('calendar-complete-attendance-text-200');
   await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
   // Deliberately cancel: this read-only fixture does not authorize attendance writes.
@@ -83,5 +142,49 @@ export async function checkAdminCalendar(page, { origin, failures, capture = asy
     assert.equal(await newEditor.getByRole('textbox', { name: /^Title/ }).inputValue(), '', 'New class starts as an empty draft without a null-session crash');
     await newEditor.getByRole('button', { name: /^Close (class editor|drawer)$/ }).click();
     assert.equal(intentPreservedSource, true, 'Handling a roster deep link preserves unrelated URL parameters');
+
+    await page.getByRole('radiogroup', { name: 'Calendar view', exact: true }).getByRole('radio', { name: 'List', exact: true }).click();
+    await page.getByRole('radiogroup', { name: 'Class period', exact: true }).getByRole('radio', { name: 'All', exact: true }).click();
+    await page.locator(`#class-session-${ids.pastClass}`).waitFor();
+    const search = page.getByRole('searchbox', { name: 'Search classes', exact: true });
+    await search.fill('Morning');
+    await page.waitForURL(url => url.searchParams.get('calendarSearch') === 'Morning');
+    assert.equal(await page.locator(`#class-session-${ids.futureClass}`).count(), 0, 'Search filters actual list records');
+    await page.locator(`#class-session-${ids.pastClass}`).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('source'), 'calendar-proof');
+    await page.getByRole('button', { name: 'Reset filters', exact: true }).click();
+    await page.locator(`#class-session-${ids.futureClass}`).waitFor();
+    await page.getByRole('combobox', { name: 'Class type', exact: true }).selectOption('XERT Strength');
+    await page.waitForURL(url => url.searchParams.get('calendarType') === 'XERT Strength');
+    await page.locator(`#class-session-${ids.futureClass}`).waitFor();
+    await page.getByRole('button', { name: 'Reset filters', exact: true }).click();
+
+    const workspace = page.locator('.calendar-workspace');
+    await workspace.evaluate(element => { element.style.maxWidth = '384px'; });
+    await page.locator('[data-admin-shell]').evaluate(element => { element.dataset.density = 'compact'; });
+    const roster = page.locator(`#class-session-${ids.futureClass}`);
+    await roster.getByRole('button', { name: 'Bookings', exact: true }).click();
+    await roster.getByText('Casey Reed', { exact: true }).waitFor();
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    assert.ok((await workspace.boundingBox()).width <= 385, 'The test keeps the containing column narrow independently of text size');
+    await roster.scrollIntoViewIfNeeded();
+    await capture('calendar-narrow-column-compact-text-200');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'Narrow calendar column with enlarged text does not overflow the page');
+    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+    await workspace.evaluate(element => { element.style.maxWidth = ''; });
+    await page.locator('[data-admin-shell]').evaluate(element => { element.dataset.density = 'comfortable'; });
+
+    await page.goto(origin + `/admin/calendar?source=calendar-proof&calendarSearch=non-matching-filter&action=roster&session=${ids.futureClass}#retained-context`, { waitUntil: 'networkidle' });
+    const outsideFilter = page.locator(`#class-session-${ids.futureClass}`);
+    await outsideFilter.getByText('Drew Rowan', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('searchbox', { name: 'Search classes', exact: true }).inputValue(), 'non-matching-filter', 'An explicit roster intent does not clear the user filter');
+    assert.ok((await outsideFilter.textContent()).includes('outside current filters'), 'A selected class exception is explained rather than passed off as a search match');
+    const deepLink = new URL(page.url());
+    assert.equal(deepLink.searchParams.get('source'), 'calendar-proof');
+    assert.equal(deepLink.hash, '#retained-context');
+    assert.equal(deepLink.searchParams.has('action'), false, 'Only the handled action is consumed');
+    await capture('calendar-roster-outside-filters');
+    await outsideFilter.getByRole('button', { name: 'Bookings', exact: true }).click();
+    await outsideFilter.waitFor({ state: 'hidden' });
   }
 }

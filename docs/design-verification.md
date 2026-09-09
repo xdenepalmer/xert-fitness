@@ -95,6 +95,14 @@ URL parameters. `--calendar-before` captures the pre-conversion baseline using
 an existing class editor; it deliberately omits those two known-broken legacy
 assertions and must not be used as the final conversion gate.
 
+`--lead-data` supplies read-only, server-paginated member, trainer and partner
+enquiries. It exposes exact result counts through the same CORS header the
+Supabase client reads, applies search/status/projection/range and returns a
+disabled provider handoff state. `--leads-before` exercises current pagination,
+selection reset, detail viewing, filters, complete CSV export and error/retry;
+`--leads` is reserved for final conversion assertions. Neither supports lead
+updates or provider dispatches.
+
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine
