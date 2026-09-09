@@ -39,7 +39,7 @@ node scripts/verify-design.mjs --tag=owner --routes=/admin --shell --commands --
 node scripts/verify-design.mjs --tag=kit --kit-only
 node scripts/verify-design.mjs --tag=kit-motion --kit-only --motion=default --quick
 node scripts/verify-design.mjs --tag=visitor-settings --routes=/admin/settings --visitor-prices
-node scripts/verify-design.mjs --tag=visitor-payments --routes=/casual,/3daypass,/3months --public-visitor-prices --membership-paperwork
+node scripts/verify-design.mjs --tag=visitor-payments --routes=/casual,/3daypass,/3months --public-visitor-prices
 ```
 
 The full matrix uses 390×844, 768×1024, 1440×900 and 1920×1080. It captures resting,
@@ -59,12 +59,19 @@ invalid intermediate amounts, clearing a discount and discarding changes. It
 asserts no settings or payment activation mutation was requested.
 `--public-visitor-prices` supplies fictional settings reads to each payment page
 and verifies active, disabled and invalid discounts, including enlarged text.
-`--membership-paperwork` verifies that a PEQ alone or another visitor's agreement
-marker resumes signing with the return destination intact. Both matching device
-markers enable only the server verification request; the fixture rejects that
-request locally. This is not proof of a live payment, email or signed record.
-Real handler tests separately verify persisted questionnaire/agreement checks,
-configured charge amounts and failure paths before an injected Stripe client.
+`--membership-paperwork` is a pending, known-failing regression probe, not a
+passing release gate. It describes the intended PEQ/agreement handoff, but that
+unpublished repair was excluded from the first web release. The `/3months`
+membership decisions and handler retain production behavior from `27d076b`.
+The current questionnaire RPC validates the casual PEQ rather than the member
+PEQ, and the agreement RPC does not distinguish accepted/signed terms from a
+completed decline. These known defects still need a separately approved
+verification-contract repair. Device markers and mocked boolean RPC responses
+cannot establish genuine signed-record validity. Earlier passing runs of this
+probe are not evidence that those contracts work.
+Real casual checkout handler tests separately verify server-configured charge
+amounts and failure paths before an injected Stripe client. No isolated browser
+check proves a live payment, activation email or signed record.
 `--calendar-search` additionally preserves the selected Past period when an
 upcoming attendee result is opened through the selected-session exception.
 `--shell` checks persistent density, pointer-independent sidebar resizing, an icon
