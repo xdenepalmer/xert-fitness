@@ -125,6 +125,31 @@ dirty dismissal, failed-save draft retention,44px controls and fixed narrow-colu
 checks. Both use the same blocked-mutation fixture; neither supports successful lead
 updates or provider dispatches.
 
+`--form-data --forms` covers503fictional submissions across two server pages,
+complete CSV export, draft discard/rejected-save retention, original captured
+terms versus a clearly labelled reconstructed record, archived hidden/unmatched
+answers, actual respondent/date/duration metadata, readable contrast and44px
+reachable controls at200% text. Printable A4 PDFs are saved alongside screen
+captures after checking paper color and hidden interactive controls. Inspect
+the rendered PDF separately; producing a file alone is not print-layout approval.
+`--forms-before` records preserved legacy flows without asserting new-kit behavior.
+
+`--qr` checks the existing QR component on the requested route, including an
+actual PNG download with a1024px square image, opaque white canvas corner and
+reachable download control at200% text. Use it on Orders without first visiting
+Forms to catch accidental dependencies on the Forms lazy-loaded stylesheet.
+This verifies export and layout, not QR decoding or live payment processing.
+
+`--member-data --members-before` supplies112fictional accounts through the actual
+server-paged RPC interface, with role/credit/search filters, activation snapshot,
+manual follow-up queues and a detailed record. It exercises page2, archived note
+visibility, unsent private-notice discard/rejected-send recovery, grant validation,
+role-confirm cancellation, full112-record CSV and read-error recovery. Only scoped
+read RPCs are fulfilled; no roles, credits, notes or notices are changed. Do not
+combine this read-only dataset with `--commands` mutation fixtures.
+`--member-geometry` adds an actual center-hit check for the enlarged notice Send
+control; bounding rectangles alone can miss an overlapping sticky header.
+
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine

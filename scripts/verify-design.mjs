@@ -16,6 +16,8 @@ import { checkAdminCalendar } from '../test/browser/admin-calendar.mjs';
 import { checkAdminLeads } from '../test/browser/admin-leads.mjs';
 import { checkAdminHeaderLayout } from '../test/browser/admin-header.mjs';
 import { checkAdminForms } from '../test/browser/admin-forms.mjs';
+import { checkAdminMembers } from '../test/browser/admin-members.mjs';
+import { checkAdminQR } from '../test/browser/admin-qr.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -58,7 +60,7 @@ try {
       const failures = {};
       const mutations = [];
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion, hasTouch: true, serviceWorkers: 'block' });
-      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), calendar: process.argv.includes('--calendar-data'), leads: process.argv.includes('--lead-data'), forms: process.argv.includes('--form-data'), mutations });
+      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), calendar: process.argv.includes('--calendar-data'), leads: process.argv.includes('--lead-data'), forms: process.argv.includes('--form-data'), members: process.argv.includes('--member-data'), mutations });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -218,12 +220,32 @@ try {
         }
         if (path === '/admin/forms' && signedIn && (process.argv.includes('--forms-before') || process.argv.includes('--forms'))) {
           try {
-            await checkAdminForms(page, { origin, baseline: process.argv.includes('--forms-before'), capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            await checkAdminForms(page, { origin, failures, baseline: process.argv.includes('--forms-before'), capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }), capturePDF: name => page.pdf({ path: resolve(output, `${prefix}-${name}.pdf`), format: 'A4', printBackground: true }) });
             assert.deepEqual(errors, [], 'No runtime errors during form workflows');
             results.push({ prefix: `${prefix}-form-flows`, passed: true });
           } catch (error) {
             await page.screenshot({ path: resolve(output, `${prefix}-forms-failure.png`) });
             results.push({ prefix: `${prefix}-form-flows`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (process.argv.includes('--qr') && signedIn) {
+          try {
+            await checkAdminQR(page, { capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during QR export');
+            results.push({ prefix: `${prefix}-qr`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-qr-failure.png`) });
+            results.push({ prefix: `${prefix}-qr`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/gym-members' && signedIn && (process.argv.includes('--members') || process.argv.includes('--members-before'))) {
+          try {
+            await checkAdminMembers(page, { origin, failures, baseline: process.argv.includes('--members-before'), geometry: process.argv.includes('--member-geometry') || process.argv.includes('--members'), capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during member workflows');
+            results.push({ prefix: `${prefix}-member-flows`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-member-failure.png`) });
+            results.push({ prefix: `${prefix}-member-flows`, passed: false, error: error.message, browserErrors: errors });
           }
         }
         if (path === '/admin/members' && signedIn && (process.argv.includes('--leads') || process.argv.includes('--leads-before'))) {
