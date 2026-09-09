@@ -58,7 +58,9 @@ Only that fixture can simulate successful writes; all real destinations remain
 blocked, including the SMS endpoint. Failure/retry and duplicate-submit checks
 assert exact fixture receipts. The command review is also checked at 200% text.
 `--recovery` deliberately fails one local workspace chunk download and verifies
-that retry recovers the region without losing the shell or URL parameters.
+that the shell survives and explicitly chosen reload recovery preserves URL
+parameters. A browser-cached module failure needs a fresh document, distinct
+from the local region retry offered for ordinary render errors.
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine

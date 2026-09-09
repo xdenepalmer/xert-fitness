@@ -40,6 +40,7 @@ export async function checkAdminShell(page, { origin, width }) {
 
   const tabs = page.getByRole('tablist', { name: 'Workspace sections', exact: true });
   const tab = tabs.getByRole('tab');
+  await tabs.locator('[role="tab"][tabindex="0"]').waitFor();
   assert.equal(await tabs.locator('[role="tab"][tabindex="0"]').count(), 1, 'Tablist has one keyboard entry point');
   await tabs.locator('[role="tab"][tabindex="0"]').focus();
   await page.keyboard.press('End');
@@ -54,6 +55,16 @@ export async function checkAdminShell(page, { origin, width }) {
   assert.equal(await tab.nth(1).evaluate(el => el === document.activeElement), true, 'ArrowRight roves focus');
   await page.keyboard.press('Enter');
   await page.waitForURL(origin + '/admin/bookings');
+  await tabs.locator('[role="tab"][aria-selected="true"]').filter({ hasText: 'Class requests' }).waitFor();
+  const marker = tabs.locator('.admin-tab-indicator');
+  await marker.evaluate(async element => {
+    await Promise.all(element.getAnimations().map(animation => animation.finished));
+  });
+  const selectedBox = await tabs.locator('[aria-selected="true"]').boundingBox();
+  const markerBox = await marker.boundingBox();
+  assert.ok(Math.abs(markerBox.x - selectedBox.x) <= 2 && Math.abs(markerBox.width - selectedBox.width) <= 2, 'Tab indicator tracks the selected tab after its transition');
+  const motion = await marker.evaluate(element => ({ reduced: matchMedia('(prefers-reduced-motion: reduce)').matches, durations: getComputedStyle(element).transitionDuration.split(',').map(value => parseFloat(value)) }));
+  assert.equal(motion.durations.some(value => value > 0), !motion.reduced, 'Tab motion follows the shared reduced-motion preference');
 
   await page.getByRole('main').click({ position: { x: 8, y: 8 } });
   await page.keyboard.press('?');

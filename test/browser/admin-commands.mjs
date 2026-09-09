@@ -102,6 +102,19 @@ export async function checkAdminCommands(page, { mutations, failures, requests, 
   const viewport = page.viewportSize();
   assert.ok(bounds.x >= -1 && bounds.x + bounds.width <= viewport.width + 1 && bounds.y >= -1 && bounds.y + bounds.height <= viewport.height + 1, 'Enlarged command review stays within the viewport');
   assert.equal(await palette.evaluate(element => element.scrollWidth > element.clientWidth + 1), false, 'Enlarged command review has no horizontal clipping');
+  const overflowingControls = await palette.evaluate(element => [...element.querySelectorAll('button')].flatMap(button => {
+    const box = button.getBoundingClientRect();
+    const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (!walker.currentNode.textContent.trim()) continue;
+      if (walker.currentNode.parentElement.closest('.sr-only')) continue;
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      if ([...range.getClientRects()].some(text => text.top < box.top - 1 || text.bottom > box.bottom + 1 || text.left < box.left - 1 || text.right > box.right + 1)) return [button.textContent.trim()];
+    }
+    return [];
+  }));
+  assert.deepEqual(overflowingControls, [], 'Enlarged command button text stays inside each growing button');
   for (let index = 0; index < 8; index++) {
     await page.keyboard.press('Tab');
     assert.equal(await palette.evaluate(element => element.contains(document.activeElement)), true, 'Keyboard focus stays inside the command review');
