@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import { assertReachableControl } from './control-geometry.mjs';
 
+export async function checkAdminOrderDraft(page, { origin, capture = async () => {} }) {
+  await page.goto(origin + '/admin/orders?source=order-draft-proof', { waitUntil: 'networkidle' });
+  await page.getByRole('button').filter({ hasText: 'Fictional session pack 001' }).click();
+  const detail = page.getByRole('dialog', { name: 'Fictional session pack 001', exact: true });
+  await detail.getByLabel('Type REFUND to confirm', { exact: true }).fill('REFUND');
+  await detail.getByRole('combobox', { name: 'Refund reason', exact: true }).selectOption('duplicate');
+  await detail.getByRole('button', { name: 'Close order detail', exact: true }).click();
+  await capture('order-refund-draft-dismissal');
+  assert.equal(await page.getByRole('alertdialog').count(), 1, 'Closing an edited refund draft requires explicit discard confirmation');
+}
+
 export async function checkAdminOrders(page, { origin, failures, capture = async () => {}, baseline = true, visitError = false }) {
   await page.goto(origin + '/admin/orders?source=order-proof', { waitUntil: 'networkidle' });
   await page.getByText('1-50 of 503 matching orders', { exact: true }).waitFor();

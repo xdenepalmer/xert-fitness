@@ -21,7 +21,7 @@ import { checkAdminQR } from '../test/browser/admin-qr.mjs';
 import { checkAdminFormsLoading } from '../test/browser/admin-forms-loading.mjs';
 import { checkAdminMembersLoading } from '../test/browser/admin-members-loading.mjs';
 import { checkAdminMemberFilters } from '../test/browser/admin-member-filters.mjs';
-import { checkAdminOrders } from '../test/browser/admin-orders.mjs';
+import { checkAdminOrders, checkAdminOrderDraft } from '../test/browser/admin-orders.mjs';
 import { checkAdminToday } from '../test/browser/admin-today.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
@@ -251,6 +251,15 @@ try {
           } catch (error) {
             await page.screenshot({ path: resolve(output, `${prefix}-order-flows-failure.png`) });
             results.push({ prefix: `${prefix}-order-flows`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/orders' && signedIn && process.argv.includes('--order-draft')) {
+          try {
+            await checkAdminOrderDraft(page, { origin, capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'Refund draft guard has no runtime errors');
+            results.push({ prefix: `${prefix}-order-draft`, passed: true });
+          } catch (error) {
+            results.push({ prefix: `${prefix}-order-draft`, passed: false, error: error.message, browserErrors: errors });
           }
         }
         if (path === '/admin' && signedIn && (process.argv.includes('--today-before') || process.argv.includes('--today'))) {
