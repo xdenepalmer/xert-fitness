@@ -79,6 +79,10 @@ URL filters while the editor has an unsaved draft, then verifies that cancelled
 workspace navigation and filter reset retain that draft. Short-label segmented
 buttons are measured in both dimensions, not just their height.
 
+`--header` checks actual visible workspace-heading text against header action
+hitboxes at normal and 200% text. This detects overlaps that a page-width check
+cannot catch; intentionally clipped text is excluded from the visible ranges.
+
 `--calendar-data` supplies read-only fictional calendar data: member bookings,
 public sign-ups, a FIFO waitlist candidate and a past class with a pending member
 request. It is deliberately incompatible with the separate `--commands`
@@ -94,6 +98,11 @@ verify that New Class opens and that consumed deep-link intents retain unrelated
 URL parameters. `--calendar-before` captures the pre-conversion baseline using
 an existing class editor; it deliberately omits those two known-broken legacy
 assertions and must not be used as the final conversion gate.
+The final calendar pass measures date buttons in both dimensions at200% text,
+uses Tab/Enter to select the last weekday column and checks that any horizontal
+scrolling stays inside the date grid. It also checks whole attendance action
+words, a fixed384px containing column and explicitly selected rosters outside
+the current filters.
 
 `--lead-data` supplies read-only, server-paginated member, trainer and partner
 enquiries. It exposes exact result counts through the same CORS header the

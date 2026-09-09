@@ -14,10 +14,23 @@ export async function checkAdminLeads(page, { origin, failures, capture = async 
   await detail.waitFor();
   assert.ok((await detail.textContent()).includes('Lead Member 001'));
   assert.ok((await detail.textContent()).includes('Returning to training'));
+  const discard = page.getByRole('alertdialog', { name: 'Discard unsaved lead changes?', exact: true });
+  if (!baseline) {
+    await detail.getByRole('textbox', { name: 'Admin notes', exact: true }).fill('Keep this fictional lead draft');
+    await page.keyboard.press('Escape');
+    await discard.waitFor({ timeout: 5000 });
+    await discard.getByRole('button', { name: 'Keep editing', exact: true }).click();
+    assert.equal(await detail.getByRole('textbox', { name: 'Admin notes', exact: true }).inputValue(), 'Keep this fictional lead draft', 'Cancelling dismissal preserves lead notes');
+    for (let step = 0; step < 12; step++) {
+      await page.keyboard.press('Tab');
+      assert.equal(await detail.evaluate(element => element.contains(document.activeElement)), true, 'Lead detail retains modal keyboard focus');
+    }
+  }
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   await capture('leads-detail-text-200');
   await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
   await detail.getByRole('button', { name: /^Close (lead details|drawer)$/ }).click();
+  if (!baseline) await discard.getByRole('button', { name: 'Discard changes', exact: true }).click();
   await detail.waitFor({ state: 'hidden' });
 
   const search = page.getByLabel('Search leads by name or email', { exact: true });

@@ -39,6 +39,29 @@ async function assertReachableControl(control, label) {
 }
 
 export async function checkAdminCalendar(page, { origin, failures, capture = async () => {}, baseline = false }) {
+  if (!baseline) {
+    await page.goto(origin + '/admin/calendar', { waitUntil: 'networkidle' });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const grid = page.getByRole('grid', { name: /^Class calendar for/ });
+    await grid.waitFor();
+    await grid.scrollIntoViewIfNeeded();
+    const targets = await grid.getByRole('button').evaluateAll(buttons => buttons.map(button => {
+      const box = button.getBoundingClientRect();
+      return { label: button.getAttribute('aria-label'), width: box.width, height: box.height };
+    }));
+    await capture('calendar-day-targets-text-200');
+    assert.deepEqual(targets.filter(target => target.width < 44 || target.height < 44).slice(0, 5), [], 'Calendar day targets retain 44px in both dimensions at enlarged text');
+    const days = grid.getByRole('button');
+    const dayIndex = await days.nth(6).getAttribute('aria-pressed') === 'true' ? 13 : 6;
+    await days.first().focus();
+    for (let step = 0; step < dayIndex; step++) await page.keyboard.press('Tab');
+    assert.equal(await days.nth(dayIndex).evaluate(element => element === document.activeElement), true, 'Keyboard users can reach the last weekday column');
+    await days.nth(dayIndex).press('Enter');
+    assert.equal(await days.nth(dayIndex).getAttribute('aria-pressed'), 'true', 'Keyboard activation selects the actual calendar day');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'Large calendar targets do not overflow the page');
+    await capture('calendar-day-keyboard-text-200');
+    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  }
   const rosterUrl = origin + `/admin/calendar?source=calendar-proof&action=roster&session=${ids.futureClass}`;
   await page.goto(rosterUrl, { waitUntil: 'networkidle' });
   const future = page.locator(`#class-session-${ids.futureClass}`);

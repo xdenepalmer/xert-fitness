@@ -14,6 +14,7 @@ import { checkAdminRecovery } from '../test/browser/admin-recovery.mjs';
 import { checkAdminKit, checkAdminFilterGuard } from '../test/browser/admin-kit.mjs';
 import { checkAdminCalendar } from '../test/browser/admin-calendar.mjs';
 import { checkAdminLeads } from '../test/browser/admin-leads.mjs';
+import { checkAdminHeaderLayout } from '../test/browser/admin-header.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -84,6 +85,7 @@ try {
             await writeFile(resolve(output, 'casual-qr.png'), Buffer.from(qr.png.split(',')[1], 'base64'));
           }
           await page.screenshot({ path: resolve(output, `${prefix}-rest.png`) });
+          if (path.startsWith('/admin') && process.argv.includes('--header')) await checkAdminHeaderLayout(page);
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
           assert.equal(overflow, false, 'Page must not overflow horizontally');
           if (path === '/') {
@@ -111,6 +113,7 @@ try {
           const zoomMenu = page.locator('button[aria-controls="mobile-navigation"]');
           if (path === '/' && await zoomMenu.isVisible()) await zoomMenu.click();
           await page.screenshot({ path: resolve(output, `${prefix}-text-200.png`) });
+          if (path.startsWith('/admin') && process.argv.includes('--header')) await checkAdminHeaderLayout(page);
           if (path === '/') {
             const clipped = await page.evaluate(() => {
               const nav = document.querySelector('[data-public-nav]');
