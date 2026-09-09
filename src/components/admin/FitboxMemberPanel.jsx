@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CalendarCheck, CreditCard, Link2, Loader2, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { lookupFitboxUser } from '@/lib/adminData';
+import {AdminBadge} from './ui';
 
 function when(value) {
   if (!value) return '—';
@@ -39,7 +40,7 @@ async function loadMirror(member) {
 }
 
 /** FitBox at a glance for one XERT member: link, status, membership, next session. */
-export default function FitboxMemberPanel({ member }) {
+export default function FitboxMemberPanel({ member, disabled = false }) {
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -75,44 +76,44 @@ export default function FitboxMemberPanel({ member }) {
 
   const user = state?.user;
   return (
-    <section className="mb-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4" aria-labelledby="fitbox-member-title">
-      <div className="flex items-start justify-between gap-3">
+    <section className="members-card" aria-labelledby="fitbox-member-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h4 id="fitbox-member-title" className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/70"><Link2 className="size-3.5" /> FitBox</h4>
-          <p className="mt-1 font-body text-xs text-xert-pale/50">Membership and billing live in FitBox. This is what FitBox last told XERT.</p>
+          <h4 id="fitbox-member-title" className="flex flex-wrap items-center gap-2 font-display text-sm uppercase tracking-[0.2em] text-text-secondary"><Link2 className="size-3.5" /> FitBox</h4>
+          <p className="mt-1 font-body text-sm text-text-secondary">Membership and billing live in FitBox. This is what FitBox last told XERT.</p>
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading || checking} aria-label="Refresh FitBox details" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-steel disabled:opacity-40">
+        <button type="button" onClick={() => void load()} disabled={disabled || loading || checking} aria-label="Refresh FitBox details" className="admin-kit-button">
           <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
       {loading && !state ? (
-        <p className="mt-3 flex items-center gap-2 font-body text-xs text-xert-pale/50"><Loader2 className="size-4 animate-spin" /> Checking FitBox mirror…</p>
+        <p className="mt-3 flex flex-wrap items-center gap-2 font-body text-sm text-text-secondary"><Loader2 className="size-4 animate-spin" /> Checking FitBox mirror…</p>
       ) : state?.installed === false ? (
-        <p className="mt-3 font-body text-xs text-status-warning-200">FitBox mirror tables are not installed yet.</p>
+        <p className="mt-3 font-body text-sm text-state-warning">FitBox mirror tables are not installed yet.</p>
       ) : user ? (
         <div className="mt-3 space-y-3 font-body text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xert-offwhite">{[user.first_name, user.last_name].filter(Boolean).join(' ') || user.email}</span>
-            <span className="rounded-full border border-white/10 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-xert-pale/70">{user.status || 'unknown'}</span>
-            {state.link && <span className="rounded-full border border-status-success-300/30 bg-status-success-300/10 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-status-success-200">Linked · {String(state.link.link_method || '').replace(/_/g, ' ')}</span>}
+            <span className="text-text-primary">{[user.first_name, user.last_name].filter(Boolean).join(' ') || user.email}</span>
+            <AdminBadge status={user.status}>{user.status || 'unknown'}</AdminBadge>
+            {state.link && <AdminBadge status="active">Linked · {String(state.link.link_method || '').replace(/_/g, ' ')}</AdminBadge>}
           </div>
-          <p className="text-xs text-xert-pale/55">FitBox ID {user.fitbox_user_id} · {user.email || 'no email'} · {user.phone || 'no phone'} · synced {when(user.synced_at)}</p>
+          <p className="text-sm text-text-secondary">FitBox ID {user.fitbox_user_id} · {user.email || 'no email'} · {user.phone || 'no phone'} · synced {when(user.synced_at)}</p>
           {state.subscriptions.length > 0 ? state.subscriptions.map(row => (
-            <p key={row.fitbox_subscription_id} className="flex items-start gap-2 text-xs text-xert-pale/75"><CreditCard className="mt-0.5 size-3.5 shrink-0 text-xert-steel" /> {row.product_name || 'Membership'} · {row.status} · {money(row.price_in_cents)}{row.sessions_count !== null && row.sessions_count !== undefined ? ` · ${row.sessions_count} sessions` : ''}</p>
-          )) : <p className="text-xs text-xert-pale/50">No membership in the mirror.</p>}
+            <p key={row.fitbox_subscription_id} className="flex flex-wrap items-start gap-2 text-sm text-text-secondary"><CreditCard className="mt-0.5 size-3.5 shrink-0 text-text-secondary" /> {row.product_name || 'Membership'} · {row.status} · {money(row.price_in_cents)}{row.sessions_count !== null && row.sessions_count !== undefined ? ` · ${row.sessions_count} sessions` : ''}</p>
+          )) : <p className="text-sm text-text-secondary">No membership in the mirror.</p>}
           {state.attendance.length > 0 ? state.attendance.map(row => (
-            <p key={row.fitbox_attendance_id} className="flex items-start gap-2 text-xs text-xert-pale/75"><CalendarCheck className="mt-0.5 size-3.5 shrink-0 text-xert-steel" /> {row.class_name || 'Class'} · {when(row.session_start_time)} · {row.status}</p>
-          )) : <p className="text-xs text-xert-pale/50">No upcoming FitBox booking in the mirror.</p>}
+            <p key={row.fitbox_attendance_id} className="flex flex-wrap items-start gap-2 text-sm text-text-secondary"><CalendarCheck className="mt-0.5 size-3.5 shrink-0 text-text-secondary" /> {row.class_name || 'Class'} · {when(row.session_start_time)} · {row.status}</p>
+          )) : <p className="text-sm text-text-secondary">No upcoming FitBox booking in the mirror.</p>}
         </div>
       ) : (
-        <p className="mt-3 font-body text-xs text-xert-pale/55">No FitBox record matched this member yet.</p>
+        <p className="mt-3 font-body text-sm text-text-secondary">No FitBox record matched this member yet.</p>
       )}
       {member.email && state?.installed !== false && (
-        <button type="button" onClick={() => void checkLive()} disabled={checking || loading} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-xert-steel/35 px-4 font-display text-xs uppercase text-xert-steel disabled:opacity-40">
+        <button type="button" onClick={() => void checkLive()} disabled={disabled || checking || loading} className="admin-kit-button">
           {checking ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} {checking ? 'Asking FitBox…' : 'Check FitBox now'}
         </button>
       )}
-      {error && <p role="alert" className="mt-3 font-body text-xs text-status-danger-200">{error}</p>}
+      {error && <p role="alert" className="mt-3 font-body text-sm text-state-danger">{error}</p>}
     </section>
   );
 }

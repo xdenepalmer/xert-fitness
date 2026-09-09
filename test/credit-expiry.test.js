@@ -1,3 +1,4 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -47,7 +48,7 @@ test('web and native member homes expose an actionable expiry warning', () => {
 
 test('admin follow-up paths prioritize aggregate expiring-credit data without member leakage', () => {
   const migration = readFileSync(new URL('../supabase/migrations/20260713060000_credit_expiry_follow_up.sql', import.meta.url), 'utf8');
-  const manager = readFileSync(new URL('../src/components/admin/MembersManager.jsx', import.meta.url), 'utf8');
+  const manager = readMembersSource();
 
   assert.match(migration, /credits_expiring bigint, next_credit_expiry timestamptz/i);
   assert.match(migration, /expires_at > now\(\)[\s\S]*expires_at <= now\(\) \+ interval '7 days'/i);

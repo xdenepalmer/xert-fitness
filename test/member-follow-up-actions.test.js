@@ -1,3 +1,4 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -45,7 +46,7 @@ test('follow-up logs normalize channel and optional context', () => {
 });
 
 test('member queue exposes tailored drafts and explicit audited completion', () => {
-  const source = readFileSync(new URL('../src/components/admin/MembersManager.jsx', import.meta.url), 'utf8');
+  const source = readMembersSource();
   assert.match(source, /createFollowUpCopy\(member, window\.location\.origin\)/);
   assert.match(source, /href=\{contact\.mailto\}/);
   assert.match(source, /Log Follow-up/);

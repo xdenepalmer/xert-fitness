@@ -1,9 +1,10 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [manager, data] = await Promise.all([
-  readFile(new URL('../src/components/admin/MembersManager.jsx', import.meta.url), 'utf8'),
+  readMembersSource(),
   readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
 ]);
 
@@ -24,17 +25,18 @@ test('member drawer preserves a verified record while refreshing and gates stale
   assert.match(manager, /Showing the last loaded record\. Refresh before making changes\./);
   assert.match(manager, /disabled=\{!detailMutationsAllowed \|\| noticeSaving/);
   assert.match(manager, /disabled=\{!detailMutationsAllowed \|\| noteSaving/);
-  assert.match(manager, /disabled=\{!detail\.creditAuditAvailable \|\| !detailMutationsAllowed\}/);
-  assert.match(manager, /if \(!detailMutationsAllowed\) return/);
+  assert.match(manager, /disabled=\{!detail\.creditAuditAvailable \|\| !detailMutationsAllowed \|\| busy\}/);
+  assert.match(manager, /if \(!detailMutationsAllowed \|\| mutationRef.current \|\| operationOpen\) return/);
 });
 
-test('member drawer fits compact mobile viewports and exposes reachable controls', () => {
-  assert.match(manager, /h-\[100dvh\] max-h-\[100dvh\]/);
-  assert.match(manager, /overscroll-contain/);
-  assert.match(manager, /safe-area-inset-top/);
-  assert.match(manager, /safe-area-inset-bottom/);
-  assert.match(manager, /tabIndex=\{-1\}/);
-  assert.match(manager, /title="Refresh member record"[\s\S]{0,300}min-h-11 min-w-11/);
-  assert.match(manager, /title="Close member detail"[\s\S]{0,300}min-h-11 min-w-11/);
-  assert.match(manager, /Loading \{member\.full_name \|\| member\.email \|\| 'member'\} record/);
+test('member drawer fits compact mobile viewports and exposes reachable controls', async () => {
+  const drawer = await readFile(new URL('../src/components/admin/ui/AdminDrawer.jsx', import.meta.url), 'utf8');
+  const styles = await readFile(new URL('../src/components/admin/ui/kit.css', import.meta.url), 'utf8');
+  assert.match(manager, /<AdminDrawer open[\s\S]*closeLabel="Close member detail"/);
+  assert.match(drawer, /node.showModal\(\)/);
+  assert.match(styles, /height: 100dvh; max-height: 100dvh/);
+  assert.match(styles, /safe-area-inset-top/);
+  assert.match(styles, /safe-area-inset-bottom/);
+  assert.match(manager, /title="Refresh member record"[\s\S]{0,300}admin-kit-button/);
+  assert.match(manager, /Loading \$\{member\.full_name \|\| member\.email \|\| 'member'\} record/);
 });

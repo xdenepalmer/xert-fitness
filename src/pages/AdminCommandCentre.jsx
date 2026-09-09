@@ -135,7 +135,7 @@ export default function AdminCommandCentre() {
       case 'workouts': return <WorkoutManager onDirtyChange={setHasUnsavedChanges} />;
       case 'coaches': return <CoachesManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'events': return <EventsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
-      case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} />;
+      case 'gym-members': return <MembersManager initialMemberId={intent.get('member')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'orders': return <OrdersManager />;
       case 'products': return <ProductsManager initialAction={intent.get('action')} onIntentHandled={consumeIntent} onDirtyChange={setHasUnsavedChanges} />;
       case 'content': return <ContentManager onDirtyChange={setHasUnsavedChanges} />;

@@ -1,3 +1,4 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -34,13 +35,13 @@ test('admin member notes use dedicated RPCs and tolerate only a missing list mig
 });
 
 test('member drawer exposes a bounded, safety-labelled archive workflow', () => {
-  const source = read('../src/components/admin/MembersManager.jsx');
+  const source = readMembersSource();
   assert.match(source, /Staff notes/);
   assert.match(source, /maxLength=\{1000\}/);
   assert.match(source, /Avoid unnecessary clinical or sensitive personal information/);
   assert.match(source, /Show archived/);
   assert.match(source, /Restore staff note/);
-  assert.match(source, /<AdminConfirmDialog/);
+  assert.match(source, /<MemberConfirmation/);
   assert.match(source, /Archived notes remain available to administrators and can be restored later/);
   assert.doesNotMatch(source, /window\.confirm/);
   assert.match(source, /admin_member_notes_upgrade\.sql/);

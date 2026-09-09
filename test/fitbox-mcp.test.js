@@ -1,3 +1,4 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -180,8 +181,8 @@ test('the gateway API is admin-gated, fail-closed and never logs provider payloa
   assert.match(centre, /case 'fitbox': return <FitboxHub/);
   const hub = await read('../src/components/admin/FitboxHub.jsx');
   for (const tab of ['overview', 'members', 'memberships', 'bookings', 'review', 'setup']) assert.match(hub, new RegExp(`key: '${tab}'`));
-  const members = await read('../src/components/admin/MembersManager.jsx');
-  assert.match(members, /<FitboxMemberPanel member=\{member\} \/>/);
+  const members = readMembersSource();
+  assert.match(members, /<FitboxMemberPanel member=\{member\} disabled=\{busy\} \/>/);
   const navigation = await read('../ios/XertFitnessApp/XertFitnessApp/OwnerNavigation.swift');
   assert.match(navigation, /case \.fitbox: return "FitBox"/);
   const view = await read('../ios/XertFitnessApp/XertFitnessApp/Views/AdminCommandCentreView.swift');

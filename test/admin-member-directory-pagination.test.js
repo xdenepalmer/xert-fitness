@@ -26,8 +26,10 @@ test('member directory UI requests only one race-safe server page and exports ev
   const pageHelper = data.slice(data.indexOf('export async function adminListMembersPage'), data.indexOf('export async function adminRecentMembers'));
 
   assert.doesNotMatch(component, /adminListMembers\b/);
-  assert.match(component, /window\.setTimeout\(\(\) => setDebouncedSearch\(search\.trim\(\)\), 250\)/);
-  assert.match(component, /let active = true[\s\S]*if \(!active\) return/);
+  assert.match(component, /<AdminFilterBar[^>]*debounceMs=\{250\}/);
+  assert.match(component, /member-search'\] \|\| ''\)\.trim\(\)/);
+  assert.match(component, /let active = true[\s\S]*if \(!active \|\| requestId !== directoryRequest.current\) return/);
+  assert.match(component, /current : \{\.\.\.next,page:1\}/);
   assert.match(component, /adminListMembersPage\(\{[\s\S]*pageSize: PAGE_SIZE/);
   assert.match(component, /adminExportMembers\(\{ search: debouncedSearch, role: roleFilter, credit: creditFilter \}\)/);
   assert.match(pageHelper, /rpc\('admin_list_members_page'/);

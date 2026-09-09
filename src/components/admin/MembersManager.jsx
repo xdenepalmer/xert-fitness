@@ -1,919 +1,55 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
-import { Activity, Archive, ArchiveRestore, BellRing, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Mail, MessageSquarePlus, Phone, Receipt, RefreshCw, Send, Ticket, UserRoundSearch, X } from 'lucide-react';
-import { adminAddMemberNote, adminExportMembers, adminGrantCredits, adminListMemberActivationQueue, adminListMemberFollowUps, adminListMembersPage, adminMemberActivationOverview, adminMemberDetail, adminSendMemberNotice, adminSetMemberNoteArchived, adminSetRole } from '@/lib/adminData';
+import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react';
+import { adminExportMembers, adminListMemberActivationQueue, adminListMemberFollowUps, adminListMembersPage, adminMemberActivationOverview, adminSetRole } from '@/lib/adminData';
 import { useSupabaseAuth } from '@/lib/SupabaseAuthContext';
 import { downloadCsv } from '@/lib/csv';
-import { creditGrantValidationError } from '@/lib/memberAdmin';
-import { createFollowUpCopy, createFollowUpLog } from '@/lib/memberFollowUp';
-import { activationQueuePresentation, activationSnapshotPresentation } from '@/lib/memberActivation';
 import { formatPackPrice } from '@/lib/products';
-import AdminLoadError from '@/components/admin/AdminLoadError';
-import AdminConfirmDialog from '@/components/admin/AdminConfirmDialog';
-import FitboxMemberPanel from '@/components/admin/FitboxMemberPanel';
-import { ADMIN_BUTTON, ADMIN_INPUT_BARE, ADMIN_PAGE, ADMIN_TEXT } from '@/components/admin/ui';
+import MemberConfirmation from './MemberConfirmation';
+import { ADMIN_PAGE, AdminPageHeader, AdminFilterBar, AdminDataTable, AdminBadge, AdminSkeleton, readFilterValues } from './ui';
+import {useLocation} from 'react-router-dom';
+import './members.css';
 
-function fmtDateTime(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
-}
+import MemberDrawer from './MemberDrawer';
+import {ActivationCockpit, FollowUpQueue} from './MemberQueues';
+import {FollowUpModal, GrantCreditsModal} from './MemberDialogs';
 
-function fmtDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-const BOOKING_BADGE = {
-  confirmed: { color: 'var(--accent-default)', label: 'Confirmed' },
-  attended: { color: 'var(--state-success)', label: 'Attended' },
-  no_show: { color: 'var(--state-warning)', label: 'No show' },
-  cancelled: { color: 'var(--text-secondary-40)', label: 'Cancelled' },
-};
 const PAGE_SIZE = 50;
-const emptyNoticeDraft = () => ({ title: '', body: '', tone: 'info', action: 'none', expiryDays: '30' });
-
-function MemberDrawer({ member, onClose, onGrant, onNotesChanged }) {
-  const [detail, setDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(true);
-  const [detailError, setDetailError] = useState('');
-  const [noteCategory, setNoteCategory] = useState('general');
-  const [noteBody, setNoteBody] = useState('');
-  const [noteError, setNoteError] = useState('');
-  const [noteSaving, setNoteSaving] = useState(false);
-  const [showArchivedNotes, setShowArchivedNotes] = useState(false);
-  const [noteToArchive, setNoteToArchive] = useState(null);
-  const [noticeDraft, setNoticeDraft] = useState(emptyNoticeDraft);
-  const [noticeSaving, setNoticeSaving] = useState(false);
-  const [noticeError, setNoticeError] = useState('');
-  const [discardNoticeOpen, setDiscardNoticeOpen] = useState(false);
-  const detailRequestIdRef = useRef(0);
-  const noticeDirty = Boolean(noticeDraft.title.trim() || noticeDraft.body.trim());
-  const detailMutationsAllowed = Boolean(detail && !detailLoading && !detailError);
-
-  const loadDetail = useCallback(({ preserve = false } = {}) => {
-    const expectedMemberId = member.id;
-    const requestId = ++detailRequestIdRef.current;
-    if (!preserve) setDetail(null);
-    setDetailLoading(true);
-    setDetailError('');
-    adminMemberDetail(expectedMemberId)
-      .then(nextDetail => {
-        if (
-          requestId !== detailRequestIdRef.current
-          || nextDetail.memberId !== expectedMemberId
-        ) return;
-        setDetail(nextDetail);
-      })
-      .catch(error => {
-        if (requestId !== detailRequestIdRef.current) return;
-        setDetailError(error.message || 'Check member detail permissions.');
-      })
-      .finally(() => {
-        if (requestId === detailRequestIdRef.current) setDetailLoading(false);
-      });
-  }, [member.id]);
-
-  useEffect(() => {
-    setNoteCategory('general');
-    setNoteBody('');
-    setNoteError('');
-    setShowArchivedNotes(false);
-    setNoteToArchive(null);
-    setNoticeDraft(emptyNoticeDraft());
-    setNoticeError('');
-    setDiscardNoticeOpen(false);
-    loadDetail();
-    return () => {
-      detailRequestIdRef.current += 1;
-    };
-  }, [loadDetail]);
-
-  const handleAddNote = async event => {
-    event.preventDefault();
-    if (!detailMutationsAllowed) return;
-    setNoteSaving(true);
-    setNoteError('');
-    try {
-      await adminAddMemberNote(member.id, noteCategory, noteBody);
-      setNoteBody('');
-      toast({ title: 'Staff note added' });
-      onNotesChanged?.();
-      loadDetail({ preserve: true });
-    } catch (error) {
-      setNoteError(error.message || 'Could not add the staff note.');
-    } finally {
-      setNoteSaving(false);
-    }
-  };
-
-  const handleNoteArchive = async note => {
-    if (!detailMutationsAllowed) return;
-    const shouldArchive = !note.archived_at;
-    setNoteSaving(true);
-    setNoteError('');
-    try {
-      await adminSetMemberNoteArchived(note.id, shouldArchive);
-      toast({ title: shouldArchive ? 'Staff note archived' : 'Staff note restored' });
-      loadDetail({ preserve: true });
-    } catch (error) {
-      setNoteError(error.message || 'Could not update the staff note.');
-    } finally {
-      setNoteSaving(false);
-    }
-  };
-
-  const requestClose = () => {
-    if (noticeDirty && !noticeSaving) {
-      setDiscardNoticeOpen(true);
-      return;
-    }
-    onClose();
-  };
-
-  const handleSendNotice = async event => {
-    event.preventDefault();
-    if (!detailMutationsAllowed) return;
-    setNoticeSaving(true);
-    setNoticeError('');
-    try {
-      const result = await adminSendMemberNotice(member.id, noticeDraft);
-      const push = result.push;
-      const description = result.warning
-        || (!push?.configured
-          ? 'It is available in the member app. APNs push is not configured.'
-          : push.delivered > 0
-            ? 'It is available in the member app and the push notification was delivered.'
-            : 'It is available in the member app. No active device received a push.');
-      toast({ title: 'Private notice sent', description });
-      setNoticeDraft(emptyNoticeDraft());
-      loadDetail({ preserve: true });
-    } catch (error) {
-      setNoticeError(error.message || 'Could not send the private member notice.');
-    } finally {
-      setNoticeSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/70" onClick={requestClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="member-detail-title" tabIndex={-1}
-        className="relative h-[100dvh] max-h-[100dvh] w-full max-w-lg overflow-y-auto overscroll-contain animate-slide-up sm:animate-none bg-surface-canvas border-l border-xert-steel/20"
->
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))] bg-surface-canvas border-b border-xert-steel/15"
->
-          <div className="min-w-0">
-            <h3 id="member-detail-title" className="font-display text-2xl uppercase leading-none text-xert-offwhite">{member.full_name || '(no name)'}</h3>
-            <p className="mt-1.5 break-words font-body text-xs text-xert-pale/45" >
-              {member.email}{member.phone ? ` · ${member.phone}` : ''}
-            </p>
-            <p className="font-body text-[11px] mt-0.5 text-xert-steel/50" >
-              Member since {fmtDate(member.joined_at)}{member.role === 'admin' ? ' · Admin' : ''}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <button type="button" onClick={() => loadDetail({ preserve: true })} disabled={detailLoading}
-              title="Refresh member record" aria-label={`Refresh ${member.full_name || member.email || 'member'} record`}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center text-xert-steel disabled:opacity-40">
-              <RefreshCw className={`h-4 w-4 ${detailLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
-            </button>
-            <button type="button" onClick={requestClose} title="Close member detail" aria-label="Close member detail"
- className="inline-flex min-h-11 min-w-11 items-center justify-center shrink-0 text-xert-pale/50" >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {detailError && !detail ? (
-          <div className="p-5"><AdminLoadError message={detailError} onRetry={() => loadDetail()} /></div>
-        ) : !detail ? (
-          <div className="flex items-center justify-center gap-3 py-20" role="status" aria-live="polite">
-            <Loader2 className="w-5 h-5 animate-spin text-xert-steel" />
-            <span className="font-body text-sm text-xert-concrete/55">Loading {member.full_name || member.email || 'member'} record…</span>
-          </div>
-        ) : (
-          <div className="space-y-7 px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-            {detailError && (
-              <div className="border border-state-warning/35 bg-state-warning/10 p-3">
-                <p role="status" className="font-body text-xs text-state-warning">
-                  Showing the last loaded record. Refresh before making changes.
-                </p>
-                <button type="button" onClick={() => loadDetail({ preserve: true })} disabled={detailLoading}
-                  className="mt-2 inline-flex min-h-11 items-center gap-2 border border-state-warning/40 px-3 font-body text-xs text-state-warning disabled:opacity-40">
-                  <RefreshCw className={`h-4 w-4 ${detailLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
-                  Retry member record
-                </button>
-              </div>
-            )}
-            {detailLoading && (
-              <p role="status" className="flex items-center gap-2 font-body text-xs text-xert-concrete/45">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-xert-steel" aria-hidden="true" />
-                Refreshing this member record…
-              </p>
-            )}
-            {/* Private member notices */}
-            <section>
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/70" >
-                    <BellRing className="w-3.5 h-3.5" /> Private notices
-                  </h4>
-                  <p className="font-body text-[11px] leading-relaxed mt-1 text-xert-pale/40" >
-                    Send an account-only message with optional iOS push delivery.
-                  </p>
-                </div>
-              </div>
-
-              {!detail.memberNoticesAvailable ? (
-                <p className="font-body text-xs text-status-warning-300" >
-                  Private notices are paused until targeted_member_notices_upgrade.sql is applied.
-                </p>
-              ) : (
-                <>
-                  <form onSubmit={handleSendNotice} className="space-y-2">
-                    <label htmlFor="member-notice-title" className="sr-only">Private notice title</label>
-                    <input
-                      id="member-notice-title"
-                      value={noticeDraft.title}
-                      onChange={event => setNoticeDraft(current => ({ ...current, title: event.target.value }))}
-                      disabled={noticeSaving || !detailMutationsAllowed}
-                      minLength={3}
-                      maxLength={120}
-                      required
-                      placeholder="Notice title"
-                      className={`${inputCls} w-full min-h-11`}
-                    />
-                    <label htmlFor="member-notice-body" className="sr-only">Private notice message</label>
-                    <textarea
-                      id="member-notice-body"
-                      value={noticeDraft.body}
-                      onChange={event => setNoticeDraft(current => ({ ...current, body: event.target.value }))}
-                      disabled={noticeSaving || !detailMutationsAllowed}
-                      minLength={3}
-                      maxLength={2000}
-                      rows={4}
-                      required
-                      placeholder="What does this member need to know?"
-                      className={`${inputCls} w-full resize-y`}
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <label className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
-                        Priority
-                        <select value={noticeDraft.tone} onChange={event => setNoticeDraft(current => ({ ...current, tone: event.target.value }))} disabled={noticeSaving || !detailMutationsAllowed} className={`${inputCls} w-full min-h-11 mt-1`}>
-                          <option value="info">Information</option>
-                          <option value="action">Action needed</option>
-                          <option value="urgent">Urgent</option>
-                        </select>
-                      </label>
-                      <label className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
-                        Action
-                        <select value={noticeDraft.action} onChange={event => setNoticeDraft(current => ({ ...current, action: event.target.value }))} disabled={noticeSaving || !detailMutationsAllowed} className={`${inputCls} w-full min-h-11 mt-1`}>
-                          <option value="none">No action</option>
-                          <option value="booking">Book a class</option>
-                          <option value="account">View account</option>
-                          <option value="events">View events</option>
-                        </select>
-                      </label>
-                      <label className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
-                        Expires
-                        <select value={noticeDraft.expiryDays} onChange={event => setNoticeDraft(current => ({ ...current, expiryDays: event.target.value }))} disabled={noticeSaving || !detailMutationsAllowed} className={`${inputCls} w-full min-h-11 mt-1`}>
-                          <option value="7">7 days</option>
-                          <option value="30">30 days</option>
-                          <option value="90">90 days</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-body text-[10px] leading-relaxed text-xert-pale/35" >
-                        The member sees this privately in XERT. Sending and receipt activity remain in this record.
-                      </p>
-                      <button type="submit" disabled={!detailMutationsAllowed || noticeSaving || noticeDraft.title.trim().length < 3 || noticeDraft.body.trim().length < 3}
-                        className="min-h-11 shrink-0 inline-flex items-center gap-2 px-3 bg-xert-steel font-display text-sm uppercase text-xert-navy transition-colors hover:bg-xert-pale disabled:opacity-40">
-                        {noticeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        {noticeSaving ? 'Sending' : 'Send privately'}
-                      </button>
-                    </div>
-                  </form>
-                  {noticeError && <p role="alert" className="font-body text-xs text-xert-red mt-2">{noticeError}</p>}
-
-                  <div className="mt-4 space-y-2">
-                    {detail.notices.length === 0 ? (
-                      <p className="font-body text-sm text-xert-pale/40" >No private notices yet.</p>
-                    ) : detail.notices.map(notice => (
-                      <article key={notice.id} className="p-3 bg-xert-navy/60 border border-xert-steel/10">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-display text-sm uppercase text-xert-offwhite break-words">{notice.title}</p>
-                            <p className="font-body text-xs whitespace-pre-wrap break-words mt-1 text-xert-concrete/60">{notice.body}</p>
-                          </div>
-                          <span className="shrink-0 font-body text-[9px] uppercase tracking-wider px-2 py-1 border border-xert-steel/25 text-xert-steel">
-                            {notice.source_kind === 'class_cancellation' ? 'Automatic' : notice.tone}
-                          </span>
-                        </div>
-                        <p className="font-body text-[10px] mt-2 text-xert-concrete/35">
-                          {fmtDateTime(notice.published_at)} · {notice.dismissed_at ? 'Dismissed' : notice.read_at ? 'Read in app' : 'Awaiting app open'}
-                          {Number(notice.push_delivered) > 0 ? ' · Push delivered' : Number(notice.push_attempted) > 0 ? ' · Push failed' : ' · No push device'}
-                        </p>
-                      </article>
-                    ))}
-                  </div>
-                </>
-              )}
-            </section>
-
-            <FitboxMemberPanel member={member} />
-
-            {/* Staff notes */}
-            <section>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >
-                  <MessageSquarePlus className="w-3.5 h-3.5" /> Staff notes
-                </h4>
-                {detail.notes.some(note => note.archived_at) && (
-                  <label className="inline-flex min-h-11 items-center gap-2 font-body text-[10px] uppercase tracking-wider text-xert-pale/55" >
-                    <input type="checkbox" checked={showArchivedNotes} onChange={event => setShowArchivedNotes(event.target.checked)} className="accent-xert-steel" />
-                    Show archived
-                  </label>
-                )}
-              </div>
-
-              {!detail.memberNotesAvailable ? (
-                <p className="font-body text-xs text-status-warning-300" >
-                  Staff notes are paused until admin_member_notes_upgrade.sql is applied.
-                </p>
-              ) : (
-                <>
-                  <form onSubmit={handleAddNote} className="space-y-2">
-                    <label htmlFor="member-note-category" className="sr-only">Staff note category</label>
-                    <select id="member-note-category" value={noteCategory} onChange={event => setNoteCategory(event.target.value)} disabled={noteSaving || !detailMutationsAllowed}
-                      className="w-full min-h-11 bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite focus:outline-none focus:border-xert-steel">
-                      <option value="general">General</option>
-                      <option value="coaching">Coaching</option>
-                      <option value="follow_up">Follow-up</option>
-                      <option value="billing">Billing</option>
-                    </select>
-                    <label htmlFor="member-note-body" className="sr-only">Staff note</label>
-                    <textarea id="member-note-body" value={noteBody} onChange={event => setNoteBody(event.target.value)} disabled={noteSaving || !detailMutationsAllowed}
-                      minLength={3} maxLength={1000} rows={3} required placeholder="Add operational context for staff"
-                      className="w-full resize-y bg-xert-charcoal border border-xert-steel/40 px-3 py-2 font-body text-sm text-xert-offwhite placeholder:text-xert-concrete/30 focus:outline-none focus:border-xert-steel" />
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-body text-[10px] leading-relaxed text-xert-pale/35" >
-                        Use factual operational or coaching context. Avoid unnecessary clinical or sensitive personal information.
-                      </p>
-                      <button type="submit" disabled={!detailMutationsAllowed || noteSaving || noteBody.trim().length < 3}
-                        className="min-h-11 shrink-0 px-3 border border-xert-steel/40 font-body text-xs text-xert-steel transition-colors hover:border-xert-steel disabled:opacity-40">
-                        {noteSaving ? 'Saving...' : 'Add note'}
-                      </button>
-                    </div>
-                  </form>
-                  {noteError && <p role="alert" className="font-body text-xs text-xert-red mt-2">{noteError}</p>}
-
-                  <div className="mt-4 space-y-2">
-                    {detail.notes.filter(note => showArchivedNotes || !note.archived_at).length === 0 ? (
-                      <p className="font-body text-sm text-xert-pale/40" >No staff notes yet.</p>
-                    ) : detail.notes.filter(note => showArchivedNotes || !note.archived_at).map(note => (
-                      <article key={note.id} className={`p-3 bg-xert-navy/60 border border-xert-steel/10 ${note.archived_at ? 'opacity-55' : ''}`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-body text-[10px] uppercase tracking-wider text-xert-steel" >{String(note.category || 'general').replace('_', '-')}</p>
-                            <p className="font-body text-sm whitespace-pre-wrap break-words mt-1 text-xert-pale" >{note.body}</p>
-                          </div>
-                          <button type="button" disabled={noteSaving || !detailMutationsAllowed} onClick={() => note.archived_at ? void handleNoteArchive(note) : setNoteToArchive(note)}
-                            title={note.archived_at ? 'Restore staff note' : 'Archive staff note'} aria-label={note.archived_at ? 'Restore staff note' : 'Archive staff note'}
-                            className="min-h-11 min-w-11 inline-flex shrink-0 items-center justify-center border border-xert-steel/20 text-xert-steel transition-colors hover:border-xert-steel disabled:opacity-40">
-                            {note.archived_at ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        <p className="font-body text-[10px] mt-2 text-xert-pale/35" >
-                          {note.author_name || 'Former admin'} · {fmtDateTime(note.created_at)}{note.archived_at ? ' · Archived' : ''}
-                        </p>
-                      </article>
-                    ))}
-                  </div>
-                </>
-              )}
-            </section>
-
-            {/* Credits */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] text-xert-steel/60" >
-                  <Ticket className="w-3.5 h-3.5" /> Credits
-                </h4>
-                <button type="button" disabled={!detail.creditAuditAvailable || !detailMutationsAllowed} onClick={onGrant}
-                  className={`min-h-11 px-2.5 py-2 border font-body text-[10px] uppercase tracking-wider transition-colors border-xert-steel/30 text-xert-steel ${detail.creditAuditAvailable && detailMutationsAllowed ? '' : 'opacity-40'}`}>
-                  + Grant
-                </button>
-              </div>
-              {detail.credits.length === 0 ? (
-                <p className="font-body text-sm text-xert-pale/40" >No credit packs yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {detail.credits.map(c => {
-                    const expired = c.expires_at && new Date(c.expires_at) <= new Date();
-                    const active = c.remaining > 0 && !expired;
-                    const grant = detail.grants.find(item => item.credit_batch_id === c.id);
-                    return (
-                      <div key={c.id} className={`flex items-center gap-3 p-3 bg-xert-navy/60 border border-xert-steel/10 ${active ? '' : 'opacity-55'}`}>
-                        <p className={`font-display text-xl tabular-nums ${active ? 'text-xert-steel' : 'text-xert-pale/40'}`}>
-                          {c.remaining}<span className="text-sm text-xert-pale/35" >/{c.total}</span>
-                        </p>
-                        <div className="flex-1">
-                          <p className="font-body text-xs text-xert-pale/60" >
-                            {expired ? 'Expired' : c.expires_at ? `Expires ${fmtDate(c.expires_at)}` : 'No expiry'}
-                          </p>
-                          <p className="font-body text-[10px] text-xert-pale/30" >
-                            Added {fmtDate(c.created_at)}{c.order_id ? '' : ' · manual grant'}
-                          </p>
-                          {grant && <p className="font-body text-[11px] mt-1 text-xert-steel/70" >Reason: {grant.note}</p>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {!detail.creditAuditAvailable && (
-                <p className="font-body text-xs mt-3 text-status-warning-300" >Credit audit migration is not installed; new manual grants are paused.</p>
-              )}
-            </section>
-
-            {/* Bookings */}
-            <section>
-              <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-3 text-xert-steel/60" >
-                <CalendarDays className="w-3.5 h-3.5" /> Bookings
-              </h4>
-              {detail.bookings.length === 0 ? (
-                <p className="font-body text-sm text-xert-pale/40" >No class bookings yet.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {detail.bookings.map(b => {
-                    const badge = BOOKING_BADGE[b.status] || BOOKING_BADGE.confirmed;
-                    return (
-                      <div key={b.id} className="flex items-center gap-3 py-2 px-3 bg-xert-navy/60 border border-xert-steel/10"
->
-                        <div className="flex-1 min-w-0">
-                          <p className="font-body text-sm truncate text-xert-pale" >
-                            {b.class_sessions?.title || b.class_sessions?.class_type || 'Class'}
-                          </p>
-                          <p className="font-body text-[11px] text-xert-pale/35" >
-                            {fmtDateTime(b.class_sessions?.start_time)}
-                          </p>
-                        </div>
-                        <span className="font-body text-[10px] uppercase tracking-wider shrink-0" style={{ color: badge.color }}>
-                          {badge.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Purchases */}
-            <section>
-              <h4 className="flex items-center gap-2 font-display text-xs uppercase tracking-[0.2em] mb-3 text-xert-steel/60" >
-                <Receipt className="w-3.5 h-3.5" /> Purchases
-              </h4>
-              {detail.orders.length === 0 ? (
-                <p className="font-body text-sm text-xert-pale/40" >No purchases yet.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {detail.orders.map(o => (
-                    <div key={o.id} className="flex items-center gap-3 py-2 px-3 bg-xert-navy/60 border border-xert-steel/10"
->
-                      <p className="font-body text-sm flex-1 truncate text-xert-pale" >{o.products?.name || 'Session pack'}</p>
-                      <p className="font-body text-[11px] shrink-0 text-xert-pale/35" >{fmtDate(o.paid_at || o.created_at)}</p>
-                      <p className="font-display text-sm tabular-nums shrink-0 text-xert-steel" >
-                        {formatPackPrice(o.amount_cents, o.currency)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
-        <AdminConfirmDialog
-          open={Boolean(noteToArchive)}
-          onOpenChange={open => !open && setNoteToArchive(null)}
-          title="Archive staff note?"
-          description="This note will leave the active member record and move into archived history."
-          warning="Archived notes remain available to administrators and can be restored later."
-          confirmLabel="Archive note"
-          onConfirm={() => {
-            const note = noteToArchive;
-            setNoteToArchive(null);
-            if (note) void handleNoteArchive(note);
-          }}
-          busy={noteSaving}
-        />
-        <AdminConfirmDialog
-          open={discardNoticeOpen}
-          onOpenChange={setDiscardNoticeOpen}
-          title="Discard private notice draft?"
-          description="This member notice has not been sent."
-          warning="The title and message you entered will be permanently discarded."
-          cancelLabel="Keep writing"
-          confirmLabel="Discard draft"
-          onConfirm={() => {
-            setDiscardNoticeOpen(false);
-            setNoticeDraft(emptyNoticeDraft());
-            onClose();
-          }}
-          busy={noticeSaving}
-        />
-      </div>
-    </div>
-  );
-}
-
-const inputCls = ADMIN_INPUT_BARE;
-
-const FOLLOW_UP_LABELS = {
-  no_first_booking: 'No first booking',
-  credits_expiring: 'Credits expiring',
-  idle_credits: 'Credits inactive',
-  renewal_due: 'Renewal due'
-};
-
-function followUpDetail(member) {
-  if (member.reason === 'no_first_booking') return `Joined ${fmtDate(member.joined_at)}`;
-  if (member.reason === 'credits_expiring') {
-    const count = Number(member.credits_expiring);
-    return `${count} credit${count === 1 ? '' : 's'} expire ${fmtDate(member.next_credit_expiry)}`;
-  }
-  return `${Number(member.credits_remaining)} credit${Number(member.credits_remaining) === 1 ? '' : 's'} · ${member.last_attended_at ? `Last class ${fmtDate(member.last_attended_at)}` : 'No attended class'}`;
-}
-
-function ActivationCockpit({
-  overview,
-  overviewAvailable,
-  overviewError,
-  overviewLoading,
-  queue,
-  queueAvailable,
-  queueError,
-  queueLoading,
-  onRetry,
-  onView,
-  onLog,
-}) {
-  const presentation = overview ? activationSnapshotPresentation(overview) : null;
-  const actionRows = activationQueuePresentation(queue, 12);
-  const outreachAllowed = !queueError && !queueLoading;
-  const hasSnapshotWarning = Boolean(overviewError || presentation?.partial || presentation?.inconsistent || presentation?.stale);
-
-  return (
-    <section aria-labelledby="member-activation-title" className="mb-6 border border-xert-steel/20 bg-xert-ink/45 p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 id="member-activation-title" className="flex items-center gap-2 font-display text-base uppercase text-xert-offwhite">
-            <Activity className="h-4 w-4 shrink-0 text-xert-steel" aria-hidden="true" /> Member activation
-          </h3>
-          <p className="mt-1 max-w-2xl font-body text-xs leading-relaxed text-xert-concrete/50">
-            Authoritative 30-day account cohort. Each step comes from current setup, training access, booking and recorded attendance — not page views.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRetry}
-          disabled={overviewLoading || queueLoading}
-          className="inline-flex min-h-11 items-center gap-2 border border-xert-steel/30 px-3 font-body text-xs uppercase tracking-wider text-xert-steel disabled:opacity-40"
-        >
-          <RefreshCw className={`h-4 w-4 ${(overviewLoading || queueLoading) ? 'animate-spin' : ''}`} aria-hidden="true" />
-          Refresh
-        </button>
-      </div>
-
-      {!overview && overviewLoading ? (
-        <div className="mt-4 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" aria-label="Loading member activation funnel">
-          {[1, 2, 3, 4, 5, 6].map(item => <div key={item} className="h-24 animate-pulse bg-xert-charcoal" />)}
-        </div>
-      ) : !overviewAvailable ? (
-        <p className="mt-4 border border-state-warning/35 bg-state-warning/10 p-3 font-body text-xs text-state-warning" role="status">
-          Activation reporting is paused until the member activation upgrade is applied.
-        </p>
-      ) : !overview ? (
-        <div className="mt-4">
-          <AdminLoadError message={overviewError || 'Member activation reporting is unavailable.'} onRetry={onRetry} />
-        </div>
-      ) : (
-        <>
-          {hasSnapshotWarning && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-state-warning/35 bg-state-warning/10 p-3">
-              <p role="status" className="font-body text-xs leading-relaxed text-state-warning">
-                {overviewError
-                  ? 'Showing the last successful activation snapshot. Refresh before making outreach decisions.'
-                  : presentation.inconsistent
-                    ? 'Activation stages do not form a valid funnel. Treat this snapshot as unavailable and retry.'
-                    : presentation.partial
-                      ? 'Some activation stages are unavailable. Known counts remain visible.'
-                      : 'This activation snapshot is stale. Refresh before making outreach decisions.'}
-              </p>
-              {presentation.asOf && (
-                <span className="font-body text-[10px] uppercase tracking-wider text-xert-concrete/50">
-                  As of {fmtDateTime(presentation.asOf)}
-                </span>
-              )}
-            </div>
-          )}
-
-          {overviewLoading && (
-            <p className="mt-3 font-body text-xs text-xert-concrete/45" role="status">Refreshing the last activation snapshot…</p>
-          )}
-
-          <div className="mt-4 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {presentation.stages.map(stage => (
-              <article
-                key={stage.key}
-                className="min-w-0 border border-xert-steel/15 bg-xert-charcoal/65 p-3"
-                aria-label={`${stage.label}: ${stage.countLabel}. ${stage.rateLabel}. ${stage.detail}.`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-display text-3xl leading-none tabular-nums text-xert-offwhite">{stage.countLabel}</p>
-                    <h4 className="mt-2 font-display text-xs uppercase tracking-wider text-xert-steel">{stage.label}</h4>
-                  </div>
-                  <span className="shrink-0 font-body text-[10px] tabular-nums text-xert-concrete/50">{stage.rate === null ? '—' : `${stage.rate}%`}</span>
-                </div>
-                <div className="mt-3 h-1 overflow-hidden bg-xert-navy" aria-hidden="true">
-                  <div className="h-full bg-xert-steel" style={{ width: `${stage.rate ?? 0}%` }} />
-                </div>
-                <p className="mt-2 font-body text-[10px] leading-relaxed text-xert-concrete/40">{stage.detail}</p>
-              </article>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className="mt-5 border-t border-xert-steel/15 pt-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h4 className="font-display text-sm uppercase text-xert-offwhite">Activation actions</h4>
-            <p className="mt-1 font-body text-[11px] text-xert-concrete/45">Bounded to the 12 highest-priority members. Outreach remains manual.</p>
-          </div>
-          {!queueLoading && queueAvailable && !queueError && (
-            <span className="font-body text-xs tabular-nums text-xert-concrete/40">{actionRows.length} due</span>
-          )}
-        </div>
-
-        {queueLoading && actionRows.length === 0 ? (
-          <div className="mt-3 h-14 animate-pulse bg-xert-charcoal" aria-label="Loading activation actions" />
-        ) : !queueAvailable ? (
-          <p className="mt-3 font-body text-xs text-state-warning" role="status">Activation actions are paused until the member activation upgrade is applied.</p>
-        ) : queueError && actionRows.length === 0 ? (
-          <div className="mt-3"><AdminLoadError message={queueError} onRetry={onRetry} /></div>
-        ) : actionRows.length === 0 ? (
-          <p className="mt-3 font-body text-sm text-xert-concrete/45">No activation follow-ups are due.</p>
-        ) : (
-          <>
-            {queueError && (
-              <p className="mt-3 font-body text-xs text-state-warning" role="status">Showing the last successful action queue. Refresh before contacting members.</p>
-            )}
-            <div className="mt-3 divide-y divide-xert-steel/10 border-t border-xert-steel/10">
-              {actionRows.map(member => {
-                const contact = createFollowUpCopy(member, window.location.origin);
-                const name = member.full_name || member.email || 'Member';
-                return (
-                  <div key={member.id} className="flex flex-wrap items-center gap-3 py-3">
-                    <div className="min-w-[12rem] flex-1">
-                      <p className="font-display text-sm uppercase text-xert-offwhite">{name}</p>
-                      <p className="mt-0.5 font-body text-[11px] text-xert-concrete/45">
-                        {member.activationReasonLabel}{member.joined_at ? ` · Joined ${fmtDate(member.joined_at)}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {member.email && (outreachAllowed ? (
-                        <a href={contact.mailto} title={`Draft email to ${name}`} aria-label={`Draft activation email to ${name}`} className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
-                          <Mail className="h-4 w-4" aria-hidden="true" />
-                        </a>
-                      ) : (
-                        <span aria-disabled="true" title="Refresh activation actions before emailing" className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/20 text-xert-concrete/30">
-                          <Mail className="h-4 w-4" aria-hidden="true" />
-                          <span className="sr-only">Email unavailable until activation actions refresh</span>
-                        </span>
-                      ))}
-                      {member.phone && (outreachAllowed ? (
-                        <a href={`tel:${member.phone}`} title={`Call ${name}`} aria-label={`Call ${name} about activation`} className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
-                          <Phone className="h-4 w-4" aria-hidden="true" />
-                        </a>
-                      ) : (
-                        <span aria-disabled="true" title="Refresh activation actions before calling" className="inline-flex min-h-11 min-w-11 items-center justify-center border border-xert-steel/20 text-xert-concrete/30">
-                          <Phone className="h-4 w-4" aria-hidden="true" />
-                          <span className="sr-only">Call unavailable until activation actions refresh</span>
-                        </span>
-                      ))}
-                      <button type="button" onClick={() => onLog(member)} disabled={!outreachAllowed} title={outreachAllowed ? `Log activation follow-up with ${name}` : 'Refresh activation actions before logging outreach'} className="inline-flex min-h-11 items-center gap-1.5 border border-xert-steel/30 px-3 font-body text-xs text-xert-steel hover:border-xert-steel disabled:cursor-not-allowed disabled:opacity-35">
-                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Log
-                      </button>
-                      <button type="button" onClick={() => onView(member)} className="min-h-11 border border-xert-steel/30 px-3 font-body text-xs text-xert-concrete/60 hover:border-xert-steel">View</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function FollowUpQueue({ rows, available, error, loading, onRetry, onView, onLog }) {
-  return (
-    <section aria-labelledby="member-follow-up-title" className="mb-6 border-y border-xert-steel/20 py-4">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 id="member-follow-up-title" className="flex items-center gap-2 font-display text-sm text-xert-offwhite uppercase">
-          <UserRoundSearch className="w-4 h-4 text-xert-steel" /> Follow-up queue
-          {!loading && available && <span className="font-body text-xs text-xert-concrete/40">({rows.length})</span>}
-        </h3>
-      </div>
-      {loading ? (
-        <div className="h-12 bg-xert-ink animate-pulse" />
-      ) : error ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p role="alert" className="font-body text-xs text-xert-red">{error}</p>
-          <button type="button" onClick={onRetry} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">Retry</button>
-        </div>
-      ) : !available ? (
-        <p className="font-body text-xs text-status-warning-300" >Follow-ups are paused until admin_member_follow_up_upgrade.sql is applied.</p>
-      ) : rows.length === 0 ? (
-        <p className="font-body text-sm text-xert-concrete/40">No follow-ups due.</p>
-      ) : (
-        <div className="divide-y divide-xert-steel/10 border-t border-xert-steel/10">
-          {rows.map(member => {
-            const contact = createFollowUpCopy(member, window.location.origin);
-            return (
-              <div key={member.id} className="flex flex-wrap items-center gap-3 py-3">
-                <div className="min-w-[12rem] flex-1">
-                  <p className="font-display text-sm text-xert-offwhite uppercase">{member.full_name || member.email}</p>
-                  <p className="font-body text-[11px] text-xert-concrete/45">
-                    {FOLLOW_UP_LABELS[member.reason] || 'Follow-up'} · {followUpDetail(member)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a href={contact.mailto} title={`Draft email to ${member.full_name || member.email}`} aria-label={`Draft email to ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
-                    <Mail className="w-4 h-4" />
-                  </a>
-                  {member.phone && (
-                    <a href={`tel:${member.phone}`} title={`Call ${member.full_name || member.email}`} aria-label={`Call ${member.full_name || member.email}`} className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel hover:border-xert-steel">
-                      <Phone className="w-4 h-4" />
-                    </a>
-                  )}
-                  <button type="button" onClick={() => onLog(member)} title={`Log follow-up with ${member.full_name || member.email}`} className="min-h-11 inline-flex items-center gap-1.5 px-3 border border-xert-steel/30 font-body text-xs text-xert-steel hover:border-xert-steel">
-                    <CheckCircle2 className="w-4 h-4" /> Log
-                  </button>
-                  <button type="button" onClick={() => onView(member)} className="min-h-11 px-3 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel">View</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function FollowUpModal({ member, onDone, onCancel }) {
-  const [channel, setChannel] = useState('email');
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async event => {
-    event.preventDefault();
-    setSaving(true);
-    setError('');
-    try {
-      const body = createFollowUpLog(member, channel, note);
-      await adminAddMemberNote(member.id, 'follow_up', body);
-      toast({ title: 'Follow-up recorded', description: `${member.full_name || member.email} will leave the queue for seven days.` });
-      onDone();
-    } catch (submitError) {
-      setError(submitError.message || 'Could not record this follow-up.');
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="follow-up-log-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md">
-        <div className={`${ADMIN_PAGE} border-b border-xert-steel/20`}>
-          <h3 id="follow-up-log-title" className="font-display text-xl text-xert-offwhite uppercase">Log Follow-up</h3>
-          <p className="font-body text-xs text-xert-concrete/50 mt-1">{member.full_name || member.email}</p>
-        </div>
-        <div className={`${ADMIN_PAGE} space-y-4`}>
-          <div>
-            <label htmlFor="follow-up-channel" className="block font-body text-xs text-xert-concrete/50 uppercase tracking-wider mb-1">Contact method</label>
-            <select id="follow-up-channel" value={channel} onChange={event => setChannel(event.target.value)} disabled={saving} className={`${inputCls} w-full min-h-11`}>
-              <option value="email">Email</option>
-              <option value="phone">Phone call</option>
-              <option value="sms">SMS</option>
-              <option value="in_person">In person</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="follow-up-context" className="block font-body text-xs text-xert-concrete/50 uppercase tracking-wider mb-1">Context (optional)</label>
-            <textarea id="follow-up-context" value={note} onChange={event => setNote(event.target.value)} disabled={saving} maxLength={500} rows={3} placeholder="Outcome, callback requested, or anything staff should know" className={`${inputCls} w-full resize-y`} />
-            <p className="mt-1 font-body text-[10px] text-xert-concrete/35 text-right">{note.length}/500</p>
-          </div>
-          <p className="font-body text-xs leading-relaxed text-xert-concrete/45">This adds a dated staff note and removes the member from the follow-up queue for seven days.</p>
-          {error && <p role="alert" className="font-body text-xs text-xert-red">{error}</p>}
-        </div>
-        <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" onClick={onCancel} disabled={saving} className="flex-1 min-h-11 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase disabled:opacity-50">Cancel</button>
-          <button type="submit" disabled={saving} className={`${ADMIN_BUTTON.primary} flex-1`}>
-            {saving ? 'Saving...' : 'Mark Contacted'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function GrantCreditsModal({ member, onDone, onCancel }) {
-  const [sessions, setSessions] = useState(1);
-  const [validityDays, setValidityDays] = useState(28);
-  const [note, setNote] = useState('');
-  const [requestId] = useState(() => crypto.randomUUID());
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const validationError = creditGrantValidationError({ sessions, validityDays, note });
-
-  const handleGrant = async () => {
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      await adminGrantCredits(member.id, sessions, validityDays > 0 ? validityDays : null, requestId, note.trim());
-      toast({ title: 'Credits granted', description: `${sessions} credit${sessions === 1 ? '' : 's'} added to ${member.full_name || member.email}.` });
-      onDone();
-    } catch (e) {
-      setError(e.message);
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="grant-credits-title" className="bg-xert-ink border border-xert-steel/20 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className={`${ADMIN_PAGE} border-b border-xert-steel/20`}>
-          <h3 id="grant-credits-title" className="font-display text-xl text-xert-offwhite uppercase">Grant Credits</h3>
-          <p className="font-body text-xs text-xert-concrete/50 mt-1">{member.full_name || member.email}</p>
-        </div>
-        <div className={`${ADMIN_PAGE} space-y-4`}>
-          <div>
-            <label htmlFor="grant-credit-count" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Class credits</label>
-            <input id="grant-credit-count" type="number" min="1" max="100" value={sessions} onChange={e => setSessions(+e.target.value)} className={`${inputCls} w-full`} />
-            <div className="flex gap-2 mt-2">{[1, 4, 10].map(value => <button type="button" key={value} onClick={() => setSessions(value)} className="px-2.5 py-1 border border-xert-steel/30 font-body text-xs text-xert-steel">{value}</button>)}</div>
-          </div>
-          <div>
-            <label htmlFor="grant-validity-days" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Validity (days, 0 = never expires)</label>
-            <input id="grant-validity-days" type="number" min="0" value={validityDays} onChange={e => setValidityDays(+e.target.value)} className={`${inputCls} w-full`} />
-            <div className="flex flex-wrap gap-2 mt-2">{[{ label: '14 days', value: 14 }, { label: '28 days', value: 28 }, { label: '56 days', value: 56 }, { label: 'No expiry', value: 0 }].map(option => <button type="button" key={option.value} onClick={() => setValidityDays(option.value)} className="px-2.5 py-1 border border-xert-steel/30 font-body text-xs text-xert-steel">{option.label}</button>)}</div>
-          </div>
-          <div>
-            <label htmlFor="grant-credit-reason" className="block font-body text-xs text-xert-concrete/40 uppercase tracking-wider mb-1">Grant reason</label>
-            <textarea id="grant-credit-reason" value={note} onChange={event => setNote(event.target.value)} maxLength={500} rows={3} placeholder="e.g. Cash sale, service recovery, competition prize" className={`${inputCls} w-full resize-none`} />
-            <p className="font-body text-[10px] text-xert-concrete/30 mt-1">Required for the permanent admin audit trail.</p>
-          </div>
-          <p className="font-body text-xs text-xert-concrete/40">
-            Use for comps, refunds or manual/cash sales. Credits appear instantly in the member&rsquo;s account.
-          </p>
-          {error && <p role="alert" className="font-body text-xs text-xert-red">{error}</p>}
-        </div>
-        <div className="flex gap-3 p-6 border-t border-xert-steel/20">
-          <button type="button" disabled={saving} onClick={onCancel} className="flex-1 py-3 border border-xert-steel/40 font-display text-sm text-xert-concrete/70 uppercase hover:border-xert-steel transition-colors disabled:opacity-50">Cancel</button>
-          <button type="button" onClick={handleGrant} disabled={saving}
-            className={`${ADMIN_BUTTON.primary} flex-1`}>
-            {saving ? 'Granting…' : `Grant ${sessions}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function MembersManager({ initialMemberId, onIntentHandled }) {
+const filterFields = [{key:'member-search'}, {key:'member-role',options:[{value:'member'},{value:'admin'}]}, {key:'member-credit',options:[{value:'available'},{value:'none'}]}];
+const queryValues = values => ({search:(values['member-search'] || '').trim(), role:values['member-role'] || 'all', credit:values['member-credit'] || 'all'});
+const memberLabel = member => member.full_name || member.email || '(no name)';
+const contactSkeleton = () => <div className="members-stack"><AdminSkeleton decorative variant="control" /><AdminSkeleton decorative /><AdminSkeleton decorative size="medium" /></div>;
+const actionsSkeleton = () => <div className="members-actions">{[0,1,2].map(index => <AdminSkeleton decorative key={index} variant="control" size="short" />)}</div>;
+export default function MembersManager({ initialMemberId, onIntentHandled, onDirtyChange }) {
   const { user } = useSupabaseAuth();
   const [members, setMembers] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const location = useLocation();
+  const [query, setQuery] = useState(() => ({...queryValues(readFilterValues(location.search, filterFields)), page:1}));
+  const {search:debouncedSearch, role:roleFilter, credit:creditFilter, page} = query;
+  const [searchPending, setSearchPending] = useState(false);
+  const directoryRequest = useRef(0);
+  const exportPending = useRef(false);
+  const rolePending = useRef(false);
+  const handledIntent = useRef(null);
+  const [drawerDirty, setDrawerDirty] = useState(false);
+  const [operationDirty, setOperationDirty] = useState(false);
+  useEffect(() => {onDirtyChange?.(drawerDirty || operationDirty);}, [drawerDirty, operationDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+  const setPage = value => setQuery(current => ({...current,page:typeof value === 'function' ? value(current.page) : value}));
+  const changeFilters = useCallback(values => {
+    const next = queryValues(values);
+    setSearchPending(false);
+    setQuery(current => current.search === next.search && current.role === next.role && current.credit === next.credit ? current : {...next,page:1});
+  }, []);
+  const invalidateSearch = () => {directoryRequest.current += 1; setSearchPending(true);};
   const [granting, setGranting] = useState(null);
+  const [grantVersion, setGrantVersion] = useState(0);
   const [loggingFollowUp, setLoggingFollowUp] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [loadError, setLoadError] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [creditFilter, setCreditFilter] = useState('all');
   const [roleChangingId, setRoleChangingId] = useState(null);
-  const [page, setPage] = useState(1);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [followUps, setFollowUps] = useState([]);
@@ -931,12 +67,9 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const [pendingRoleChange, setPendingRoleChange] = useState(null);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
-    return () => window.clearTimeout(timeoutId);
-  }, [search]);
-
-  useEffect(() => {
     let active = true;
+    const requestId = ++directoryRequest.current;
+    if (searchPending) return () => { active = false; };
     setLoading(true);
     setLoadError('');
     adminListMembersPage({
@@ -946,19 +79,19 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
       page,
       pageSize: PAGE_SIZE
     }).then(result => {
-      if (!active) return;
+      if (!active || requestId !== directoryRequest.current) return;
       setMembers(result.rows);
       setTotal(result.total);
     }).catch(error => {
-      if (!active) return;
+      if (!active || requestId !== directoryRequest.current) return;
       setMembers([]);
       setTotal(0);
       setLoadError(error.message || 'Check the member admin RPC and permissions.');
     }).finally(() => {
-      if (active) setLoading(false);
+      if (active && requestId === directoryRequest.current) setLoading(false);
     });
     return () => { active = false; };
-  }, [creditFilter, debouncedSearch, page, refreshVersion, roleFilter]);
+  }, [creditFilter, debouncedSearch, page, refreshVersion, roleFilter, searchPending]);
 
   useEffect(() => {
     let active = true;
@@ -1023,18 +156,10 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
   const firstResult = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const lastResult = Math.min((page - 1) * PAGE_SIZE + members.length, total);
   const hasFilters = Boolean(debouncedSearch) || roleFilter !== 'all' || creditFilter !== 'all';
-  const searchPending = search.trim() !== debouncedSearch;
   const refresh = () => setRefreshVersion(version => version + 1);
 
   useEffect(() => {
-    setPage(1);
-    setViewing(null);
-    setGranting(null);
-    setLoggingFollowUp(null);
-  }, [creditFilter, debouncedSearch, roleFilter]);
-
-  useEffect(() => {
-    if (!initialMemberId) return undefined;
+    if (!initialMemberId || handledIntent.current === initialMemberId) return undefined;
     let active = true;
     adminListMembersPage({ memberId: initialMemberId, pageSize: 1 })
       .then(result => {
@@ -1045,11 +170,13 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
       .catch(error => {
         if (active) toast({ title: 'Member unavailable', description: error.message, variant: 'destructive' });
       })
-      .finally(() => { if (active) onIntentHandled?.(); });
+      .finally(() => { if (active) {handledIntent.current = initialMemberId; onIntentHandled?.();} });
     return () => { active = false; };
   }, [initialMemberId, onIntentHandled]);
 
   const handleExport = async () => {
+    if (exportPending.current || loading || searchPending) return;
+    exportPending.current = true;
     setExporting(true);
     try {
       const rows = await adminExportMembers({ search: debouncedSearch, role: roleFilter, credit: creditFilter });
@@ -1062,11 +189,13 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
     } catch (error) {
       toast({ title: 'Export failed', description: error.message, variant: 'destructive' });
     } finally {
+      exportPending.current = false;
       setExporting(false);
     }
   };
 
   const requestRoleChange = (m, role) => {
+    if (rolePending.current || loading || searchPending || (role === 'member' && m.id === user?.id)) return;
     const verb = role === 'admin' ? 'Promote' : 'Remove admin from';
     const consequence = role === 'admin'
       ? 'This grants access to member data, bookings, sales, content, and staff controls.'
@@ -1076,9 +205,9 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
 
   const applyRoleChange = async () => {
     const pending = pendingRoleChange;
-    if (!pending) return;
+    if (!pending || rolePending.current) return;
+    rolePending.current = true;
     const { member: m, role } = pending;
-    setPendingRoleChange(null);
     setRoleChangingId(m.id);
     try {
       await adminSetRole(m.id, role);
@@ -1086,27 +215,29 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
       setPage(1);
       refresh();
     } catch (e) { toast({ title: 'Failed', description: e.message, variant: 'destructive' }); }
-    finally { setRoleChangingId(null); }
+    finally { rolePending.current = false; setRoleChangingId(null); setPendingRoleChange(null); }
   };
 
+  const directoryBusy = loading || searchPending || roleChangingId !== null;
+  const columns = [
+    {key:'full_name',header:'Member',renderSkeleton:contactSkeleton,render:m => <div className="members-stack"><button type="button" className="admin-kit-button members-name" disabled={directoryBusy} onClick={() => setViewing(m)}>{memberLabel(m)}</button><a className="members-contact-link" href={`mailto:${m.email}`}>{m.email}</a>{m.phone && <a className="members-contact-link" href={`tel:${m.phone}`}>{m.phone}</a>}<span className="members-secondary">Joined {new Date(m.joined_at).toLocaleDateString('en-AU')}</span>{m.role === 'admin' && <AdminBadge status="active">Admin</AdminBadge>}</div>},
+    {key:'credits_remaining',header:'Credits',render:m => <span className="tabular-nums">{m.credits_remaining}</span>},
+    {key:'bookings_count',header:'Bookings'},
+    {key:'total_spent_cents',header:'Spent',render:m => formatPackPrice(m.total_spent_cents,'aud')},
+    {key:'actions',header:'Actions',renderSkeleton:actionsSkeleton,render:m => <div className="members-actions"><button type="button" className="admin-kit-button" disabled={directoryBusy} onClick={() => setViewing(m)}>View</button><button type="button" className="admin-kit-button" disabled={directoryBusy} onClick={() => setGranting(m)}>+ Credits</button>{m.role === 'admin' ? m.id !== user?.id && <button type="button" className="admin-kit-button" disabled={directoryBusy} onClick={() => requestRoleChange(m,'member')}>Remove admin</button> : <button type="button" className="admin-kit-button" disabled={directoryBusy} onClick={() => requestRoleChange(m,'admin')}>Make admin</button>}</div>},
+  ];
   return (
-    <div className={ADMIN_PAGE}>
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h2 className={ADMIN_TEXT.pageTitle}>Members ({total})</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Search members" placeholder="Search name, email or phone…"
-            className={`${inputCls} w-64`} />
-          <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} aria-label="Filter members by role" className={inputCls}><option value="all">All roles</option><option value="member">Members</option><option value="admin">Admins</option></select>
-          <select value={creditFilter} onChange={event => setCreditFilter(event.target.value)} aria-label="Filter members by credits" className={inputCls}><option value="all">All credits</option><option value="available">Has credits</option><option value="none">No credits</option></select>
-          <button type="button" onClick={refresh} disabled={loading} title="Refresh members" aria-label="Refresh members" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/30 text-xert-steel disabled:opacity-40"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
-          <button
-            onClick={() => void handleExport()}
-            disabled={total === 0 || exporting || searchPending}
-            className="inline-flex items-center gap-1.5 px-3 py-2 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 uppercase tracking-wider hover:border-xert-steel transition-colors disabled:opacity-40">
-            <Download className="w-3.5 h-3.5" /> {exporting ? 'Exporting…' : 'CSV'}
-          </button>
-        </div>
-      </div>
+    <div className={`${ADMIN_PAGE} members-workspace`}>
+      <AdminPageHeader title={`Members (${total})`} description="Account directory, private records and manual member follow-up.">
+        <button type="button" onClick={refresh} disabled={loading || searchPending} aria-label="Refresh members" className="admin-kit-button"><RefreshCw className="h-4 w-4" /> Refresh</button>
+        <button type="button" onClick={() => void handleExport()} disabled={total === 0 || exporting || directoryBusy} className="admin-kit-button"><Download className="h-4 w-4" />{exporting ? 'Exporting…' : 'CSV'}</button>
+      </AdminPageHeader>
+      <fieldset className="members-filter" disabled={roleChangingId !== null} onChange={invalidateSearch}>
+        <AdminFilterBar queryKey="member-search" searchLabel="Search members" debounceMs={250} onChange={changeFilters} filters={[
+          {key:'member-role',label:'Filter members by role',options:[{value:'member',label:'Members'},{value:'admin',label:'Admins'}]},
+          {key:'member-credit',label:'Filter members by credits',options:[{value:'available',label:'Has credits'},{value:'none',label:'No credits'}]},
+        ]} />
+      </fieldset>
 
       <ActivationCockpit
         overview={activationOverview}
@@ -1120,91 +251,24 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
         onRetry={refresh}
         onView={setViewing}
         onLog={setLoggingFollowUp}
+        disabled={roleChangingId !== null}
       />
 
       <FollowUpQueue rows={followUps} available={followUpsAvailable} error={followUpsError} loading={followUpsLoading} onRetry={refresh} onView={setViewing} onLog={setLoggingFollowUp} />
 
-      {loading ? (
-        <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-xert-ink animate-pulse" />)}</div>
-      ) : loadError ? (
-        <AdminLoadError message={loadError} onRetry={refresh} />
-      ) : total === 0 ? (
-        <div className="py-16 text-center border border-xert-steel/20">
-          <p className="font-display text-lg text-xert-offwhite uppercase mb-2">
-            {hasFilters ? 'No matches' : 'No members yet'}
-          </p>
-          <p className="font-body text-sm text-xert-concrete/40">
-            {hasFilters ? 'Try a different search or filter.' : 'Members appear here as soon as they create an account on the site.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {members.map(m => (
-            <div key={m.id} className="bg-xert-ink border border-xert-steel/20 p-4 flex flex-wrap items-center gap-4">
-              <div className="flex-1 min-w-[14rem]">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-display text-base text-xert-offwhite uppercase">{m.full_name || '(no name)'}</h3>
-                  {m.role === 'admin' && (
-                    <span className="font-body text-xs border border-xert-orange/40 text-xert-orange px-2 py-0.5 uppercase">Admin</span>
-                  )}
-                </div>
-                <p className="font-body text-xs text-xert-concrete/50">
-                  <a href={`mailto:${m.email}`} className="hover:text-xert-steel">{m.email}</a>{m.phone ? <> · <a href={`tel:${m.phone}`} className="hover:text-xert-steel">{m.phone}</a></> : ''} · joined {new Date(m.joined_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-              </div>
-              <div className="flex items-center gap-5 font-body text-xs text-xert-concrete/60 shrink-0">
-                <div className="text-center">
-                  <p className="font-display text-lg text-xert-offwhite tabular-nums">{m.credits_remaining}</p>
-                  <p className="uppercase tracking-wider text-[10px]">Credits</p>
-                </div>
-                <div className="text-center">
-                  <p className="font-display text-lg text-xert-offwhite tabular-nums">{m.bookings_count}</p>
-                  <p className="uppercase tracking-wider text-[10px]">Bookings</p>
-                </div>
-                <div className="text-center">
-                  <p className="font-display text-lg text-xert-offwhite tabular-nums">{formatPackPrice(m.total_spent_cents, 'aud')}</p>
-                  <p className="uppercase tracking-wider text-[10px]">Spent</p>
-                </div>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button type="button" onClick={() => setViewing(m)}
-                  className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
-                  View
-                </button>
-                <button type="button" onClick={() => setGranting(m)}
-                  className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
-                  + Credits
-                </button>
-                {m.role === 'admin' ? (
-                  m.id !== user?.id && (
-                    <button disabled={roleChangingId !== null} onClick={() => requestRoleChange(m, 'member')}
-                      className="min-h-11 px-3 py-2.5 border border-xert-red/30 font-body text-xs text-xert-red/60 hover:border-xert-red/60 transition-colors">
-                      Remove admin
-                    </button>
-                  )
-                ) : (
-                  <button disabled={roleChangingId !== null} onClick={() => requestRoleChange(m, 'admin')}
-                    className="min-h-11 px-3 py-2.5 border border-xert-steel/30 font-body text-xs text-xert-concrete/60 hover:border-xert-steel transition-colors">
-                    Make admin
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <AdminDataTable rows={members} columns={columns} label="Member directory" getRowLabel={memberLabel} sort={null} loading={loading || searchPending} error={loadError} onRetry={refresh} emptyTitle={hasFilters ? 'No matches' : 'No members yet'} emptyDescription={hasFilters ? 'Try a different search or filter.' : 'Members appear here as soon as they create an account on the site.'} />
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p role="status" aria-live="polite" className="font-body text-xs text-xert-concrete/40">
+      <div className="members-pagination">
+        <p role="status" aria-live="polite" className="font-body text-xs text-text-secondary">
           {total === 0 ? '0 results' : `${firstResult}-${lastResult} of ${total} matching members`}
         </p>
         {pageCount > 1 && (
-          <nav aria-label="Member result pages" className="flex items-center gap-2">
-            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.max(1, current - 1)); }} disabled={page <= 1} title="Previous page" aria-label="Previous member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+          <nav aria-label="Member result pages" className="members-actions">
+            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.max(1, current - 1)); }} disabled={directoryBusy || page <= 1} title="Previous page" aria-label="Previous member page" className="admin-kit-button">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-body text-xs text-xert-concrete/60 tabular-nums">Page {page} of {pageCount}</span>
-            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={page >= pageCount} title="Next page" aria-label="Next member page" className="min-h-11 min-w-11 inline-flex items-center justify-center border border-xert-steel/40 text-xert-steel disabled:opacity-30">
+            <span className="font-body text-xs text-text-secondary tabular-nums">Page {page} of {pageCount}</span>
+            <button type="button" onClick={() => { setViewing(null); setPage(current => Math.min(pageCount, current + 1)); }} disabled={directoryBusy || page >= pageCount} title="Next page" aria-label="Next member page" className="admin-kit-button">
               <ChevronRight className="w-4 h-4" />
             </button>
           </nav>
@@ -1218,17 +282,20 @@ export default function MembersManager({ initialMemberId, onIntentHandled }) {
           onClose={() => setViewing(null)}
           onGrant={() => setGranting(viewing)}
           onNotesChanged={refresh}
+          onDirtyChange={setDrawerDirty}
+          operationOpen={Boolean(granting)}
+          grantVersion={grantVersion}
         />
       )}
 
       {granting && (
-        <GrantCreditsModal member={granting} onDone={() => { setGranting(null); setViewing(null); refresh(); }} onCancel={() => setGranting(null)} />
+        <GrantCreditsModal onDirtyChange={setOperationDirty} member={granting} onDone={() => { setGranting(null); setGrantVersion(version => version + 1); refresh(); }} onCancel={() => setGranting(null)} />
       )}
 
       {loggingFollowUp && (
-        <FollowUpModal member={loggingFollowUp} onDone={() => { setLoggingFollowUp(null); refresh(); }} onCancel={() => setLoggingFollowUp(null)} />
+        <FollowUpModal onDirtyChange={setOperationDirty} member={loggingFollowUp} onDone={() => { setLoggingFollowUp(null); refresh(); }} onCancel={() => setLoggingFollowUp(null)} />
       )}
-      <AdminConfirmDialog
+      <MemberConfirmation
         open={Boolean(pendingRoleChange)}
         onOpenChange={open => !open && setPendingRoleChange(null)}
         title={pendingRoleChange?.role === 'admin' ? 'Grant administrator access?' : 'Remove administrator access?'}

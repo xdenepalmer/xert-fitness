@@ -1,3 +1,4 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -78,10 +79,7 @@ test('activation outreach copy sends each member to the correct next step', () =
 });
 
 test('web member admin keeps activation authoritative, bounded and independently recoverable', async () => {
-  const source = await readFile(
-    new URL('../src/components/admin/MembersManager.jsx', import.meta.url),
-    'utf8',
-  );
+  const source = readMembersSource();
 
   assert.match(source, /adminMemberActivationOverview\(30\)/);
   assert.match(source, /adminListMemberActivationQueue\(12\)/);

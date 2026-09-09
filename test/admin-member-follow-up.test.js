@@ -1,3 +1,4 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -17,7 +18,7 @@ test('follow-up data loader is bounded and degrades only when its migration is a
 });
 
 test('member admin renders direct contact actions and refreshes after staff follow-up', () => {
-  const source = read('../src/components/admin/MembersManager.jsx');
+  const source = readMembersSource();
   assert.match(source, /Follow-up queue/);
   assert.match(source, /No first booking/);
   assert.match(source, /Credits expiring/);

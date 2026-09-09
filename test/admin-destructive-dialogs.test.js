@@ -12,7 +12,7 @@ const adminSources = [
 
 test('destructive admin actions use the shared accessible confirmation dialog', () => {
   for (const { path, source } of adminSources) {
-    assert.match(source, /<AdminConfirmDialog/, `${path} must render the shared confirmation dialog`);
+    assert.match(source, /<(?:AdminConfirmDialog|MemberConfirmation)/, `${path} must render the shared confirmation dialog`);
     assert.match(source, /pending(?:Delete|Removal|RoleChange)/, `${path} must retain the selected target until confirmation`);
     assert.doesNotMatch(source, /(?:window\.)?confirm\s*\(/, `${path} must not use a browser-native confirmation prompt`);
   }

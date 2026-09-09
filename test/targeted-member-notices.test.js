@@ -1,3 +1,4 @@
+import {readMembersSource} from './helpers/member-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -61,7 +62,7 @@ test('admin member service creates the notice before requesting idempotent APNs 
 });
 
 test('member drawer composes, protects and reports private notices', () => {
-  const members = read('../src/components/admin/MembersManager.jsx');
+  const members = readMembersSource();
   assert.match(members, /Private notices/);
   assert.match(members, /adminSendMemberNotice\(member\.id, noticeDraft\)/);
   assert.match(members, /Discard private notice draft\?/);
