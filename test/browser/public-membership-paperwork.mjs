@@ -62,6 +62,11 @@ export async function checkMembershipPaperwork(page, { origin, requests, capture
     await seed({ response_id: agreementID });
     assert.equal(await page.getByRole('button', { name: 'Pay $430.00', exact: true }).count(), 0, 'An old marker without an acceptance hint resumes the agreement');
 
+    await seed({ ...accepted, phone: '' });
+    await page.getByRole('button', { name: 'Pay $430.00', exact: true }).waitFor();
+    await seed({ ...accepted, name: ' ALEX  MORGAN ', email: ' ALEX@example.invalid ', phone: '+61 400 000 000' });
+    await page.getByRole('button', { name: 'Pay $430.00', exact: true }).waitFor();
+
     // Complete the real terms UI, including its decline skip rule, with fictional I/O.
     await page.goto(origin + '/forms/terms-and-conditions?return=3months', { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
@@ -112,11 +117,29 @@ export async function checkMembershipPaperwork(page, { origin, requests, capture
     assert.equal(checkouts().length, before + 1, 'Both markers enable only the server verification request');
     await page.getByRole('alert').waitFor();
 
+    const rejectProof = async route => {
+      requests.push({ method: 'POST', path: '/api/checkout', fixture: true });
+      await fixtureResponse(route, { error: 'Complete and sign the questionnaire and membership agreement using these same contact details, then return to pay.' }, 400);
+    };
+    await page.route('**/api/checkout', rejectProof);
+    try {
+      await seed(accepted);
+      await page.getByRole('button', { name: 'Pay $430.00', exact: true }).click();
+      const recover = page.getByRole('link', { name: 'Re-complete the questionnaire and agreement', exact: true });
+      await recover.waitFor();
+      await capture('membership-proof-recovery');
+      await recover.click();
+      await page.waitForURL(url => url.pathname === '/forms/peq' && url.searchParams.get('return') === '3months');
+      assert.equal(checkouts().length, before + 2, 'A proof rejection offers a form route instead of a stuck Pay retry');
+    } finally {
+      await page.unroute('**/api/checkout', rejectProof);
+    }
+
     await seed(accepted);
-    await page.getByLabel('Email', { exact: true }).fill('different@example.invalid');
+    await page.locator('main input[type="email"]').fill('different@example.invalid');
     await page.getByRole('button', { name: 'Sign the questionnaire and agreement first', exact: true }).click();
     await page.waitForURL(url => url.pathname === '/forms/peq');
-    assert.equal(checkouts().length, before + 1, 'Editing purchaser identity cannot reuse another person’s markers');
+    assert.equal(checkouts().length, before + 2, 'Editing purchaser identity cannot reuse another person’s markers');
     await page.evaluate(() => {
       sessionStorage.removeItem('xert-form-complete:peq');
       sessionStorage.removeItem('xert-form-complete:terms-and-conditions');

@@ -59,16 +59,18 @@ invalid intermediate amounts, clearing a discount and discarding changes. It
 asserts no settings or payment activation mutation was requested.
 `--public-visitor-prices` supplies fictional settings reads to each payment page
 and verifies active, disabled and invalid discounts, including enlarged text.
-`--membership-paperwork` is a pending, known-failing regression probe, not a
-passing release gate. It describes the intended PEQ/agreement handoff, but that
-unpublished repair was excluded from the first web release. The `/3months`
-membership decisions and handler retain production behavior from `27d076b`.
-The current questionnaire RPC validates the casual PEQ rather than the member
-PEQ, and the agreement RPC does not distinguish accepted/signed terms from a
-completed decline. These known defects still need a separately approved
-verification-contract repair. Device markers and mocked boolean RPC responses
-cannot establish genuine signed-record validity. Earlier passing runs of this
-probe are not evidence that those contracts work.
+`--membership-paperwork` verifies the repaired `/3months` handoff: prerequisite
+return parameters, missing or mismatched agreement markers, declined terms,
+actual rendered agreement acceptance and signature capture, both saved response
+IDs in the checkout request, changed purchaser identity, and recovery from a
+server proof rejection. It uses fictional form submissions and blocked payments.
+Device markers guide navigation only; they cannot establish signed-record validity.
+`test/three-month-paperwork-sql.test.mjs` separately runs the actual migration SQL
+in isolated PGlite PostgreSQL, including signatures, saved snapshot shapes,
+identity matching, role permissions, and the real Node handler with Stripe
+network I/O stubbed. Original submitted records remain unchanged. The repair
+preserves existing guardian/signature-format policy and does not establish
+medical clearance or independently verified legal identity.
 Real casual checkout handler tests separately verify server-configured charge
 amounts and failure paths before an injected Stripe client. No isolated browser
 check proves a live payment, activation email or signed record.
