@@ -23,7 +23,7 @@ export function useAdminShellControls({ onNavigate, onPalette, desktopNavigation
     let prefixAt = 0;
     const onKey = event => {
       const typing = !!event.target.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]');
-      const modal = !!document.querySelector('[role="dialog"][aria-modal="true"]:not([aria-hidden="true"]), [role="alertdialog"][aria-modal="true"]');
+      const modal = !!document.querySelector('dialog:modal, [role="dialog"][aria-modal="true"]:not([aria-hidden="true"]), [role="alertdialog"][aria-modal="true"]');
       const action = matchShortcut(event, { typing, modal, prefix: Date.now() - prefixAt < 1000 });
       prefixAt = 0;
       if (!action) return;

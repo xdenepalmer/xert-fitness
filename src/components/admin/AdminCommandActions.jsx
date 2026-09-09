@@ -129,7 +129,9 @@ export default function AdminCommandActions({ command, onBack, onComplete, onBus
           }
           requestId.current ||= globalThis.crypto?.randomUUID?.();
           const saved = isAdd ? await staffBookMemberIntoClass(session.id, person.id, requestId.current) : await adminSetBookingStatus(person.booking_id, 'confirmed', requestId.current);
-          return `Booking confirmed. ${saved.warning || (saved.announcement_id ? 'Member notice receipt confirmed.' : 'Booking receipt confirmed.')}`;
+          if (isAdd && !['confirmed', 'waitlisted'].includes(saved?.booking_status)) throw new Error('The booking status could not be verified. Refresh the roster before continuing.');
+          const outcome = isAdd && saved.booking_status === 'waitlisted' ? 'Member added to the waitlist. A place is not yet confirmed.' : 'Booking confirmed.';
+          return `${outcome} ${saved.warning || (saved.announcement_id ? 'Member notice receipt confirmed.' : 'Booking receipt confirmed.')}`;
         },
       });
       setResult(receipt); setStage('done');
@@ -172,7 +174,7 @@ export default function AdminCommandActions({ command, onBack, onComplete, onBus
       <h3>Review before {isText ? 'sending' : isForm ? 'publishing' : 'saving'}</h3>
       {isForm && <><p>Publish “{form.title}” at /forms/{form.slug}. This makes the form available to the public.</p><p>{form.questions?.length || 0} fields · last edited {form.updated_at}</p></>}
       {isAttendance && <><ul>{roll.map(row => <li key={attendanceRowId(row)}>{row.full_name || row.email} · {attendance[attendanceRowId(row)]?.replace('_', ' ')}</li>)}</ul><p>Saving completes this class and removes it from the public timetable. First-time attendance cannot be undone here.</p></>}
-      {!isText && !isForm && !isAttendance && <p>Confirm this member’s place in the class shown above. The existing capacity, time conflict and queue rules apply. A member notice may be delivered.</p>}
+      {!isText && !isForm && !isAttendance && <p>{isAdd ? 'Add this member to the class shown above. Capacity and queue rules may place them on the waitlist instead of confirming a place.' : 'Confirm this member’s place in the class shown above.'} The existing capacity, time conflict and queue rules apply. A member notice may be delivered.</p>}
       {isText && <><p>Send this exact message to {recipients.length} selected recipients:</p><blockquote className="whitespace-pre-wrap">{message}</blockquote><ul>{recipients.map(row => <li key={row.phone}>{row.name} · {row.phone}</li>)}</ul><p>Sending cannot be undone. A failed response may have delivered messages; check delivery results before starting another campaign.</p></>}
       <button type="button" disabled={pending || (isText && !!error)} onClick={() => submit()}>{pending ? 'Saving…' : isText ? 'Send reviewed message' : isForm ? 'Publish reviewed form' : isAttendance ? 'Save attendance' : 'Confirm reviewed booking'}</button>
     </>}
