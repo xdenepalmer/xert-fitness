@@ -55,6 +55,9 @@ function KitFixture() {
         onRetry={() => setState('ready')} emptyTitle="No matching fictional members"
         emptyDescription="Change the search or status filter to see records." />
       <AdminStatCard label="Fictional memberships" value="320" detail="Local verification records, not live membership totals" />
+      <div className="kit-short-segments"><AdminSegmented label="Short segment targets" options={[
+        {value: 'one', label: '1'}, {value: 'two', label: '2'}, {value: 'three', label: '3'},
+      ]} /></div>
       <AdminSegmented label="Fixture view" value={view} onValueChange={setView} options={[
         {value: 'upcoming', label: 'Upcoming'}, {value: 'disabled', label: 'Unavailable', disabled: true}, {value: 'past', label: 'Past'},
       ]} />

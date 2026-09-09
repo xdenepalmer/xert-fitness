@@ -6,3 +6,4 @@
 .kit-fixture-column[data-narrow="true"] { max-width: 24rem; }
 .kit-fixture output { display: block; overflow-wrap: anywhere; margin-block: .5rem; }
 .kit-fixture p { overflow-wrap: anywhere; }
+.kit-short-segments { width: fit-content; max-width: 100%; }

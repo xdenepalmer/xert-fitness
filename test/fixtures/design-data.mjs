@@ -1,5 +1,6 @@
 // Fictional, local-browser-only data. Never imported by the application.
 import { installCommandData } from './admin-command-data.mjs';
+import { installCalendarData } from './admin-calendar-data.mjs';
 
 export const fixtureUser = {
   id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', role: 'authenticated',
@@ -56,9 +57,11 @@ const readRPCs = new Set([
 // Network-level isolation: keep real auth/router/components, intercept only I/O.
 // External data destinations are fulfilled here or aborted. Only unauthenticated
 // Google Fonts reads pass through so typography matches the real product.
-export async function installDesignFixtures(context, { origin, signedIn = false, requests = [], failures = {}, announcement = false, commands = false, mutations = [] }) {
+export async function installDesignFixtures(context, { origin, signedIn = false, requests = [], failures = {}, announcement = false, commands = false, calendar = false, mutations = [] }) {
   const data = designData();
+  if (commands && calendar) throw new Error('Use separate contexts for command mutation and read-only calendar fixtures.');
   const commandData = commands ? installCommandData(data, { mutations }) : null;
+  const calendarData = calendar ? installCalendarData(data) : null;
   if (announcement) Object.assign(data.admin_settings[0], {
     announcement_banner_enabled: true,
     announcement_banner_text: 'Welcome to XERT. Our coached training sessions are open for booking. Please arrive ten minutes early so your coach can help you get ready.',
@@ -88,7 +91,7 @@ export async function installDesignFixtures(context, { origin, signedIn = false,
       if (simulated) return respond(simulated.body, simulated.status || 200);
       if (rpc && !readRPCs.has(name)) return respond({ message: 'Mutation or unconfigured RPC blocked by local design fixture.' }, 501);
       if (!rpc && !['GET', 'HEAD', 'OPTIONS'].includes(method)) return respond({ message: 'Writes blocked by local design fixture.' }, 403);
-      const rows = commandData?.read(name, args) ?? data[name] ?? [];
+      const rows = calendarData?.read(name, args, url) ?? commandData?.read(name, args) ?? data[name] ?? [];
       const single = request.headers().accept?.includes('vnd.pgrst.object');
       return respond(single ? rows[0] ?? null : rows, 200, { 'content-range': rows.length ? `0-${rows.length - 1}/${rows.length}` : '*/0' });
     }

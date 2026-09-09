@@ -48,6 +48,10 @@ export async function checkAdminKit(context, { origin, width, capture = async ()
     const table = page.locator('[data-admin-table]');
     await table.waitFor();
     await waitCount(page, 320);
+    const shortTargets = await page.getByRole('radiogroup', { name: 'Short segment targets', exact: true }).getByRole('radio').evaluateAll(elements => elements.map(element => {
+      const box = element.getBoundingClientRect(); return { text: element.textContent, width: box.width, height: box.height };
+    }));
+    assert.ok(shortTargets.every(target => target.width >= 44 && target.height >= 44), `Short-label controls preserve 44px targets: ${JSON.stringify(shortTargets)}`);
     assert.equal(await table.getAttribute('data-virtualized'), 'true', 'A large table uses actual virtualization');
     assert.equal(await table.getByRole('table', { name: 'Fictional members', exact: true }).getAttribute('aria-rowcount'), '321', 'Accessible count includes all records and the header');
     const initialRows = await table.locator(rowSelector).count();
@@ -226,6 +230,49 @@ export async function checkAdminKit(context, { origin, width, capture = async ()
     assert.deepEqual(errors, [], 'No runtime errors during actual kit interactions');
   } catch (error) {
     await capture(page, 'kit-failure');
+    error.message += errors.length ? `; browser errors: ${errors.join(' | ')}` : '';
+    throw error;
+  } finally {
+    await page.close();
+  }
+}
+
+export async function checkAdminFilterGuard(context, { origin, capture = async () => {} }) {
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(origin + '/test/fixtures/admin-filter-guard.html', { waitUntil: 'networkidle' });
+    const headline = page.getByLabel('Headline', { exact: true });
+    await headline.waitFor();
+    await headline.fill('Keep this real editor draft during filter changes');
+    const query = page.getByRole('searchbox', { name: 'Isolated owner search', exact: true });
+    await query.fill('local filter');
+    await page.waitForURL(url => url.searchParams.get('fixtureQuery') === 'local filter');
+    assert.equal(await headline.inputValue(), 'Keep this real editor draft during filter changes', 'A URL filter does not remount or discard the actual content editor');
+    assert.equal(new URL(page.url()).pathname, '/admin/content');
+    assert.equal(new URL(page.url()).searchParams.get('workspace'), 'website');
+    const filteredUrl = page.url();
+    await page.getByRole('main').click({ position: { x: 8, y: 8 } });
+    await page.keyboard.press('Control+k');
+    const palette = page.getByRole('dialog', { name: 'Find an owner task', exact: true });
+    await palette.getByRole('combobox').fill('Class calendar');
+    await palette.getByRole('option').filter({ hasText: 'Class calendar' }).click();
+    const guard = page.getByRole('alertdialog', { name: 'Discard unsaved changes?', exact: true });
+    await guard.waitFor();
+    await capture(page, 'filter-real-dirty-guard');
+    await guard.getByRole('button', { name: 'Keep editing', exact: true }).click();
+    await guard.waitFor({ state: 'hidden' });
+    await page.keyboard.press('Escape');
+    assert.equal(page.url(), filteredUrl, 'Cancelled navigation retains the current filter URL');
+    assert.equal(await headline.inputValue(), 'Keep this real editor draft during filter changes', 'The real workspace guard remains active after URL filtering');
+    await page.getByRole('complementary', { name: 'Isolated owner filter', exact: true }).getByRole('button', { name: 'Reset filters', exact: true }).click();
+    await page.waitForURL(url => !url.searchParams.has('fixtureQuery'));
+    assert.equal(new URL(page.url()).searchParams.get('source'), 'filter-guard');
+    assert.equal(await headline.inputValue(), 'Keep this real editor draft during filter changes', 'Resetting owned filters also preserves the unsaved editor');
+    assert.deepEqual(errors, [], 'No runtime errors during real owner/filter guard composition');
+  } catch (error) {
+    await capture(page, 'filter-real-guard-failure');
     error.message += errors.length ? `; browser errors: ${errors.join(' | ')}` : '';
     throw error;
   } finally {

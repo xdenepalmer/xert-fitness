@@ -73,6 +73,20 @@ the viewport. Drawer checks cover modal focus, Escape/restore and field
 label/helper/error/ref/event composition. Loading, error/retry, empty states,
 segmented keyboard controls, timeline dates and reduced-motion skeletons are
 checked separately. This fixture is not a production route or an auth bypass.
+The kit run also composes the real authentication provider, admin route,
+Command Centre controller and content editor beside the filter bar. It changes
+URL filters while the editor has an unsaved draft, then verifies that cancelled
+workspace navigation and filter reset retain that draft. Short-label segmented
+buttons are measured in both dimensions, not just their height.
+
+`--calendar-data` supplies read-only fictional calendar data: member bookings,
+public sign-ups, a FIFO waitlist candidate and a past class with a pending member
+request. It is deliberately incompatible with the separate `--commands`
+mutation fixture. Use it for the calendar's before/after screenshots:
+
+```sh
+node scripts/verify-design.mjs --tag=calendar --routes=/admin/calendar --calendar-data
+```
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,
 git-excluded proof). Keep the result JSON alongside screenshots: a screenshot alone
 is not a passing assertion. Read the fixture request logs to distinguish a genuine

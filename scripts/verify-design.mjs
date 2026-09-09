@@ -11,7 +11,7 @@ import { checkPublicNavigation } from '../test/browser/public-navigation.mjs';
 import { checkAdminShell } from '../test/browser/admin-shell.mjs';
 import { checkAdminCommands } from '../test/browser/admin-commands.mjs';
 import { checkAdminRecovery } from '../test/browser/admin-recovery.mjs';
-import { checkAdminKit } from '../test/browser/admin-kit.mjs';
+import { checkAdminKit, checkAdminFilterGuard } from '../test/browser/admin-kit.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -54,7 +54,7 @@ try {
       const failures = {};
       const mutations = [];
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion, hasTouch: true, serviceWorkers: 'block' });
-      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), mutations });
+      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), calendar: process.argv.includes('--calendar-data'), mutations });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -210,6 +210,12 @@ try {
           results.push({ prefix: `${width}-admin-kit`, passed: true });
         } catch (error) {
           results.push({ prefix: `${width}-admin-kit`, passed: false, error: error.message });
+        }
+        try {
+          await checkAdminFilterGuard(context, { origin, capture: (targetPage, name) => targetPage.screenshot({ path: resolve(output, `${width}-${name}.png`) }) });
+          results.push({ prefix: `${width}-admin-filter-guard`, passed: true });
+        } catch (error) {
+          results.push({ prefix: `${width}-admin-filter-guard`, passed: false, error: error.message });
         }
       }
       await writeFile(resolve(output, `${width}-${signedIn ? 'signed-in' : 'signed-out'}-requests.json`), JSON.stringify(requests, null, 2));
