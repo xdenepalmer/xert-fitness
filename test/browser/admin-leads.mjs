@@ -111,5 +111,61 @@ export async function checkAdminLeads(page, { origin, failures, capture = async 
     await capture('leads-narrow-column-compact-text-200');
     await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
     await workspace.evaluate(element => { element.style.maxWidth = ''; });
+
+    // Hold a real read at the fixture boundary to inspect the transient state.
+    let releaseRead;
+    const readGate = new Promise(resolve => { releaseRead = resolve; });
+    const leadRead = url => url.pathname === '/rest/v1/member_interest';
+    await page.route(leadRead, async route => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await readGate;
+      return route.fallback();
+    });
+    const resumedRead = page.waitForResponse(response => leadRead(new URL(response.url())) && response.request().method() === 'GET' && response.status() === 200);
+    try {
+      await page.getByRole('button', { name: 'Refresh leads', exact: true }).click();
+      const loading = workspace.locator('[data-table-loading]');
+      await loading.waitFor({ timeout: 5000 });
+      const skeletonRows = loading.locator('[data-skeleton-row]');
+      assert.ok(await skeletonRows.count() >= 2, 'Loading mirrors repeated lead rows');
+      assert.equal(await skeletonRows.first().locator('td').count(), 5, 'Skeleton rows preserve selection plus four lead columns');
+      assert.equal(await loading.evaluate(element => [...element.querySelectorAll('input,button,select,textarea,a[href]')].filter(control => control.tabIndex >= 0 && !control.disabled).length), 0, 'Skeletons do not create fake focusable controls');
+      const assertSkeletonCellBounds = async () => {
+        assert.ok(await loading.locator('[data-skeleton-cell] .admin-kit-skeleton').count() >= 12, 'Bounds check covers the actual column placeholders');
+        const overflow = await loading.evaluate(element => [...element.querySelectorAll('[data-skeleton-cell]')].flatMap(cell => {
+          const bounds = cell.getBoundingClientRect();
+          return [...cell.querySelectorAll('.admin-kit-skeleton')].flatMap(skeleton => {
+            const rect = skeleton.getBoundingClientRect();
+            return rect.left < bounds.left - 1 || rect.right > bounds.right + 1 ? [{ column: cell.dataset.skeletonCell, left: rect.left, right: rect.right, cellLeft: bounds.left, cellRight: bounds.right }] : [];
+          });
+        }));
+        assert.deepEqual(overflow, [], 'Every loading placeholder remains inside its own lead column');
+      };
+      await skeletonRows.first().scrollIntoViewIfNeeded();
+      await assertSkeletonCellBounds();
+      await capture('leads-loading');
+      await workspace.evaluate(element => { element.style.maxWidth = '384px'; });
+      await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+      await skeletonRows.first().scrollIntoViewIfNeeded();
+      assert.ok((await workspace.boundingBox()).width <= 385);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'Column-aware loading also fits a narrow enlarged-text card');
+      await assertSkeletonCellBounds();
+      await capture('leads-loading-narrow-text-200');
+    } finally {
+      releaseRead();
+      // Do not remove a still-active route chain while its fallback is fulfilling.
+      await resumedRead;
+      await page.unroute(leadRead);
+      await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+      await workspace.evaluate(element => { element.style.maxWidth = ''; });
+    }
+    await page.getByText('Lead Member 001', { exact: true }).waitFor();
+
+    await page.goto(origin + '/admin/trainers?source=lead-proof&lead-status=casual&lead-search=Lead#retained-context', { waitUntil: 'networkidle' });
+    await page.getByText('Lead Trainer 001', { exact: true }).waitFor();
+    assert.equal(await page.getByLabel('Filter leads by status', { exact: true }).inputValue(), '', 'A member-only status does not become a trainer filter');
+    assert.equal(await page.getByLabel('Search leads by name or email', { exact: true }).inputValue(), 'Lead', 'Cross-type remount retains the valid URL search');
+    assert.equal(new URL(page.url()).searchParams.get('source'), 'lead-proof');
+    assert.equal(new URL(page.url()).hash, '#retained-context');
   }
 }
