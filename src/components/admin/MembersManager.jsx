@@ -233,7 +233,7 @@ export default function MembersManager({ initialMemberId, onIntentHandled, onDir
         <button type="button" onClick={() => void handleExport()} disabled={total === 0 || exporting || directoryBusy} className="admin-kit-button"><Download className="h-4 w-4" />{exporting ? 'Exporting…' : 'CSV'}</button>
       </AdminPageHeader>
       <fieldset className="members-filter" disabled={roleChangingId !== null} onChange={invalidateSearch}>
-        <AdminFilterBar queryKey="member-search" searchLabel="Search members" debounceMs={250} onChange={changeFilters} filters={[
+        <AdminFilterBar queryKey="member-search" searchLabel="Search members" onChange={changeFilters} filters={[
           {key:'member-role',label:'Filter members by role',options:[{value:'member',label:'Members'},{value:'admin',label:'Admins'}]},
           {key:'member-credit',label:'Filter members by credits',options:[{value:'available',label:'Has credits'},{value:'none',label:'No credits'}]},
         ]} />

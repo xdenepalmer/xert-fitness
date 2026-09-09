@@ -503,6 +503,7 @@
   --text-secondary-70: #D1DDE6B3;
   --text-secondary-70-rgb: 209 221 230;
   --text-secondary-70-alpha: 0.701961;
+  --tracking-heading: 0.2em;
   --admin-command-max-height: 34rem;
   --admin-command-viewport-height: 68dvh;
   --admin-kit-breakpoint-columns: 36rem;

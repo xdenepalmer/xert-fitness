@@ -188,6 +188,7 @@ enum XertTokens {
     static let spaceRowComfortable: CGFloat = 16
     static let spaceRowCompact: CGFloat = 8
     static let spaceSection: CGFloat = 32
+    static let trackingHeading = "0.2em"
     static let adminCommandMaxHeight: CGFloat = 544
     static let adminCommandViewportHeight = "68dvh"
     static let adminKitBreakpointColumns: CGFloat = 576

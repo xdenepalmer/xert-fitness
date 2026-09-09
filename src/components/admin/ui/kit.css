@@ -6,6 +6,7 @@
 .admin-kit-button:disabled, .admin-segmented button:disabled { opacity: var(--native-opacity-disabled); cursor: not-allowed; }
 .admin-kit-container :focus-visible, .admin-form-field :focus-visible, .admin-drawer :focus-visible, .admin-segmented :focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: var(--focus-offset); }
 .admin-kit-label { display: block; font-size: var(--font-size-label); font-weight: var(--admin-kit-font-weight-emphasis); color: var(--text-secondary); overflow-wrap: anywhere; }
+.admin-kit-section-heading { letter-spacing: var(--tracking-heading); }
 .admin-form-field { display: grid; gap: var(--space-label); min-width: 0; }
 .admin-kit-input { min-width: 0; width: 100%; min-height: var(--control-height); padding: var(--space-inline) var(--space-control); border: var(--nav-line-width) solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); font: inherit; font-size: max(16px, 1em); }
 .admin-kit-input[aria-invalid="true"] { border-color: var(--state-danger-text); }

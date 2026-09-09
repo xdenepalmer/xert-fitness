@@ -19,14 +19,16 @@ test('member directory queries normalize bounded server paging filters', () => {
 });
 
 test('member directory UI requests only one race-safe server page and exports every match', async () => {
-  const [component, data] = await Promise.all([
+  const [component, data, filterBar] = await Promise.all([
     readFile(new URL('../src/components/admin/MembersManager.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/adminData.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/admin/ui/AdminFilterBar.jsx', import.meta.url), 'utf8'),
   ]);
   const pageHelper = data.slice(data.indexOf('export async function adminListMembersPage'), data.indexOf('export async function adminRecentMembers'));
 
   assert.doesNotMatch(component, /adminListMembers\b/);
-  assert.match(component, /<AdminFilterBar[^>]*debounceMs=\{250\}/);
+  assert.doesNotMatch(component, /<AdminFilterBar[^>]*debounceMs=/, 'Members inherits the shared debounce token');
+  assert.match(filterBar, /debounceMs = kitTokens\['filter.debounce'\]/);
   assert.match(component, /member-search'\] \|\| ''\)\.trim\(\)/);
   assert.match(component, /let active = true[\s\S]*if \(!active \|\| requestId !== directoryRequest.current\) return/);
   assert.match(component, /current : \{\.\.\.next,page:1\}/);

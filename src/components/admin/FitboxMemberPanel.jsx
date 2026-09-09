@@ -79,7 +79,7 @@ export default function FitboxMemberPanel({ member, disabled = false }) {
     <section className="members-card" aria-labelledby="fitbox-member-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h4 id="fitbox-member-title" className="flex flex-wrap items-center gap-2 font-display text-sm uppercase tracking-[0.2em] text-text-secondary"><Link2 className="size-3.5" /> FitBox</h4>
+          <h4 id="fitbox-member-title" className="admin-kit-section-heading flex flex-wrap items-center gap-2 font-display text-sm uppercase text-text-secondary"><Link2 className="size-3.5" /> FitBox</h4>
           <p className="mt-1 font-body text-sm text-text-secondary">Membership and billing live in FitBox. This is what FitBox last told XERT.</p>
         </div>
         <button type="button" onClick={() => void load()} disabled={disabled || loading || checking} aria-label="Refresh FitBox details" className="admin-kit-button">

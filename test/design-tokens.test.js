@@ -38,6 +38,18 @@ test('all checked-in outputs are byte-identical to deterministic generation', ()
   for (const [path, content] of Object.entries(generated)) assert.equal(read(path), content, path);
 });
 
+test('heading tracking and filter delay remain controlled by their token sources', () => {
+  const generated = generateTokens(source);
+  assert.match(generated['src/styles/tokens.css'], /--tracking-heading: 0\.2em;/);
+  const changed = structuredClone(source);
+  changed.semantics['tracking.heading'] = '0.3em';
+  changed.components['admin.kit.filter.debounce'] = '375ms';
+  const updated = generateTokens(changed);
+  assert.match(updated['src/styles/tokens.css'], /--tracking-heading: 0\.3em;/);
+  assert.match(updated['src/components/admin/ui/kitTokens.mjs'], /"filter.debounce": 375/);
+  assert.match(updated['ios/XertFitnessApp/XertFitnessApp/Generated/XertTokens.swift'], /static let trackingHeading = "0\.3em"/);
+});
+
 test('calendar container queries follow changed shared breakpoints without private literals', () => {
   const changed = structuredClone(source);
   changed.components['admin.kit.breakpoint.columns'] = '41rem';

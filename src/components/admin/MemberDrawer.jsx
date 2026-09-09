@@ -210,7 +210,7 @@ export default function MemberDrawer({ member, onClose, onGrant, onNotesChanged,
             <section>
               <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                 <div>
-                  <h4 className="flex flex-wrap items-center gap-2 font-display text-sm uppercase tracking-[0.2em] text-text-secondary" >
+                  <h4 className="admin-kit-section-heading flex flex-wrap items-center gap-2 font-display text-sm uppercase text-text-secondary" >
                     <BellRing className="w-3.5 h-3.5" /> Private notices
                   </h4>
                   <p className="font-body text-sm leading-relaxed mt-1 text-text-secondary" >
@@ -321,7 +321,7 @@ export default function MemberDrawer({ member, onClose, onGrant, onNotesChanged,
             {/* Staff notes */}
             <section>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                <h4 className="flex flex-wrap items-center gap-2 font-display text-sm uppercase tracking-[0.2em] text-text-secondary" >
+                <h4 className="admin-kit-section-heading flex flex-wrap items-center gap-2 font-display text-sm uppercase text-text-secondary" >
                   <MessageSquarePlus className="w-3.5 h-3.5" /> Staff notes
                 </h4>
                 {detail.notes.some(note => note.archived_at) && (
@@ -394,7 +394,7 @@ export default function MemberDrawer({ member, onClose, onGrant, onNotesChanged,
             {/* Credits */}
             <section>
               <div className="flex flex-wrap items-center justify-between mb-3">
-                <h4 className="flex flex-wrap items-center gap-2 font-display text-sm uppercase tracking-[0.2em] text-text-secondary" >
+                <h4 className="admin-kit-section-heading flex flex-wrap items-center gap-2 font-display text-sm uppercase text-text-secondary" >
                   <Ticket className="w-3.5 h-3.5" /> Credits
                 </h4>
                 <button type="button" disabled={!detail.creditAuditAvailable || !detailMutationsAllowed || busy} onClick={onGrant}
@@ -436,7 +436,7 @@ export default function MemberDrawer({ member, onClose, onGrant, onNotesChanged,
 
             {/* Bookings */}
             <section>
-              <h4 className="flex flex-wrap items-center gap-2 font-display text-sm uppercase tracking-[0.2em] mb-3 text-text-secondary" >
+              <h4 className="admin-kit-section-heading flex flex-wrap items-center gap-2 font-display text-sm uppercase mb-3 text-text-secondary" >
                 <CalendarDays className="w-3.5 h-3.5" /> Bookings
               </h4>
               {detail.bookings.length === 0 ? (
@@ -466,7 +466,7 @@ export default function MemberDrawer({ member, onClose, onGrant, onNotesChanged,
 
             {/* Purchases */}
             <section>
-              <h4 className="flex flex-wrap items-center gap-2 font-display text-sm uppercase tracking-[0.2em] mb-3 text-text-secondary" >
+              <h4 className="admin-kit-section-heading flex flex-wrap items-center gap-2 font-display text-sm uppercase mb-3 text-text-secondary" >
                 <Receipt className="w-3.5 h-3.5" /> Purchases
               </h4>
               {detail.orders.length === 0 ? (

@@ -35,6 +35,20 @@ test('kit text emphasis remains themeable through shared weight tokens', async (
   }
 });
 
+test('member section headings inherit shared semantic letter spacing', async () => {
+  const styles = await read('ui/kit.css');
+  assert.match(styles, /\.admin-kit-section-heading\s*\{[^}]*letter-spacing:\s*var\(--tracking-heading\)/);
+  for (const name of ['MemberDrawer.jsx', 'FitboxMemberPanel.jsx']) {
+    const source = await read(name);
+    const headings = [...source.matchAll(/<h4\b[^>]*className="([^"]*)"/g)];
+    assert.ok(headings.length > 0);
+    for (const [, classes] of headings) {
+      assert.match(classes, /\badmin-kit-section-heading\b/);
+      assert.doesNotMatch(classes, /tracking-\[/);
+    }
+  }
+});
+
 test('no workspace hand-rolls a primary button, an input class or a page title', async () => {
   for (const name of [...await managers(), ...await kitFiles()]) {
     const source = await read(name);
