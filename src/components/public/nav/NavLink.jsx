@@ -3,7 +3,10 @@ import { flushSync } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { shouldTransition } from './navState';
 
-export default function NavLink({ to, href, onClick, children, ...props }) {
+/** @typedef {Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> & {to?: import('react-router-dom').To, href?: string}} NavLinkProps */
+
+/** @param {NavLinkProps} props */
+export default function NavLink({ to = '', href, onClick, children, ...props }) {
   const navigate = useNavigate();
   if (href) return <a href={href} onClick={onClick} {...props}>{children}</a>;
   const handleClick = event => {

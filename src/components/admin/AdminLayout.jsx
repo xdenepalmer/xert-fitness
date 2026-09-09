@@ -72,7 +72,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
     });
 
     const handleKeyDown = event => {
-      const foregroundModal = [...document.querySelectorAll('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')].filter(dialog => dialog.getAttribute('aria-hidden') !== 'true').at(-1);
+      const foregroundModal = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')).filter(dialog => dialog.getAttribute('aria-hidden') !== 'true').at(-1);
       if (foregroundModal && foregroundModal !== sidebarRef.current) return;
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -159,10 +159,12 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
   };
   const initials = (profile?.full_name || user?.email || 'A')
     .split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('');
+  /** @type {React.CSSProperties & {'--admin-sidebar-width': string}} */
+  const shellStyle = { '--admin-sidebar-width': `${shell.width}px` };
 
   return (
     <div data-admin-shell data-density={shell.density} data-collapsed={desktopNavigation && shell.collapsed} data-desktop={desktopNavigation}
-      style={{ '--admin-sidebar-width': `${shell.width}px` }} className="admin-shell flex h-[100dvh] min-h-0 overflow-hidden overscroll-none bg-surface-base">
+      style={shellStyle} className="admin-shell flex h-[100dvh] min-h-0 overflow-hidden overscroll-none bg-surface-base">
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
         ref={sidebarRef}

@@ -40,6 +40,7 @@ export function useAdminShellControls({ onNavigate, onPalette, desktopNavigation
     const { min, max } = dimensions();
     setWidth(Math.max(min, Math.min(max, value)));
   };
+  /** @type {React.HTMLAttributes<HTMLDivElement>} */
   const resizeProps = {
     role: 'separator', 'aria-label': 'Resize navigation', 'aria-orientation': 'vertical',
     'aria-valuemin': dimensions().min, 'aria-valuemax': dimensions().max, 'aria-valuenow': width,
