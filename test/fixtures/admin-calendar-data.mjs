@@ -58,6 +58,33 @@ export function installCalendarData(data) {
   }];
   return {
     read(name, args = {}, url) {
+      if (name === 'admin_search_class_attendees') {
+        const query = String(args.p_query || '').trim().toLowerCase();
+        if (query.length < 2) return [];
+        const digits = query.replace(/\D/g, '');
+        const matches = [];
+        for (const session of data.class_sessions) {
+          if (args.p_from && session.start_time < args.p_from) continue;
+          if (args.p_to && session.start_time > args.p_to) continue;
+          const people = [
+            ...(rosters.get(session.id) || []).map(row => ({ ...row, source: 'member' })),
+            ...signups.filter(row => row.class_session_id === session.id).map(row => ({ ...row, source: 'signup' })),
+          ];
+          for (const person of people) {
+            const email = query.includes('@') ? person.email : person.email.split('@')[0];
+            if (!person.full_name.toLowerCase().includes(query) && !email.toLowerCase().includes(query)
+              && !(digits && String(person.phone || '').replace(/\D/g, '').includes(digits))) continue;
+            matches.push({ source: person.source, booking_id: person.booking_id || person.id,
+              member_id: person.source === 'member' ? person.member_id : null,
+              full_name: person.full_name, email: person.email, phone: person.phone || '',
+              status: person.status, booked_at: person.booked_at || person.created_at,
+              session_id: session.id, session_title: session.title, session_start: session.start_time,
+              coach_name: session.coach_name, location_zone: session.location_zone });
+          }
+        }
+        return matches.sort((a, b) => a.session_start.localeCompare(b.session_start) || a.full_name.localeCompare(b.full_name))
+          .slice(0, Math.max(1, Math.min(500, args.p_limit ?? 100)));
+      }
       if (name === 'admin_session_roster') return structuredClone(rosters.get(args.p_session_id) || []);
       if (name === 'class_bookings') {
         const filter = url?.searchParams.get('class_session_id');

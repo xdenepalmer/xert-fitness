@@ -185,6 +185,12 @@ empty state from an endpoint the fixture has not implemented.
 These are UI checks with controlled I/O, not end-to-end production transaction
 tests. They never confirm a real booking, send a message or take a payment.
 
+## Integration regression checks
+
+Use `--calendar-data --calendar-search` with `/admin/calendar` to verify whole-timetable member/public-signup lookup, selected rosters outside retained filters, truthful lookup errors, recovery and enlarged-text results. The fictional search adapter enforces the real query/date/limit shape and never forwards requests.
+
+The forms workflow also checks the merged one-person-per-row written-answer view, including first/last answer pairing and enlarged-text card indexes. `--qr` on `/admin/orders` downloads all three distinct visitor-pass PNGs and checks each displayed payment-page destination. These checks do not take payments or send receipts.
+
 ## Native verification
 
 The existing **XERT iOS Verify** Codemagic workflow can be manually run against

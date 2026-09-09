@@ -33,3 +33,24 @@ test('calendar fixture exposes a reviewable FIFO candidate and a separate pendin
   const capacity = fixture.read('admin_class_capacity', {});
   assert.ok(capacity.every(row => row.spots_left === row.capacity - row.taken));
 });
+
+test('attendee search fixture respects literal query and bounds across both booking sources', () => {
+  const data = { class_sessions: [] };
+  const fixture = installCalendarData(data);
+  const find = query => fixture.read('admin_search_class_attendees', { p_query: query, p_from: null, p_to: null, p_limit: 100 });
+  const member = find('Morgan');
+  assert.equal(member.length, 1);
+  assert.equal(member[0].source, 'member');
+  assert.equal(member[0].session_id, calendarFixtureIds.pastClass);
+  assert.equal(member[0].session_title, 'Morning Strength');
+  assert.equal(find('Taylor')[0].source, 'signup');
+  assert.equal(find('Taylor')[0].member_id, null);
+  assert.deepEqual(find('q'), []);
+  assert.deepEqual(find('%'), []);
+  assert.deepEqual(find('example.invalid'), [], 'An email domain alone is not a local-part match');
+  assert.equal(find('morgan.ellis@example.invalid').length, 1);
+  assert.equal(fixture.read('admin_search_class_attendees', { p_query: 'Morgan', p_from: data.class_sessions[0].start_time, p_limit: 100 }).length, 0);
+  assert.equal(fixture.read('admin_search_class_attendees', { p_query: 'an', p_limit: 1 }).length, 1);
+  member[0].status = 'cancelled';
+  assert.equal(find('Morgan')[0].status, 'confirmed');
+});

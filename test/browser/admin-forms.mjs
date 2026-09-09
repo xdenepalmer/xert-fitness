@@ -71,6 +71,34 @@ export async function checkAdminForms(page, { origin, failures, capture = async 
   const csv = Buffer.concat(chunks).toString('utf8');
   assert.equal((csv.match(/form\.member\.\d{3}@example\.invalid/g) || []).length, 503, 'Response export spans both server pages');
   assert.ok(csv.includes('Do you accept these original terms?'), 'Export retains original captured questions');
+  const written = page.getByRole('region', { name: 'Written answers', exact: true });
+  await written.waitFor();
+  const checkWrittenPerson = async (number) => {
+    const cards = written.locator('.forms-written-cards');
+    const rows = await cards.isVisible() ? cards.locator('li') : written.locator('tbody tr');
+    assert.equal(await rows.count(), 502, 'Written-answer view retains every respondent who actually supplied a written answer');
+    const person = rows.filter({ hasText: `Form Member ${number}` });
+    assert.equal(await person.count(), 1, 'A person has one unambiguous written-answer row');
+    assert.ok((await person.textContent()).includes(`Fictional response ${number}: clear coaching and a welcoming class.`), 'Written answers remain paired with the correct respondent');
+    if (await cards.isVisible()) {
+      const lines = await person.locator('p span').first().evaluate(element => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
+      });
+      assert.equal(lines, 1, 'A respondent index remains one legible number, not vertically split digits');
+    }
+  };
+  await checkWrittenPerson('002');
+  await checkWrittenPerson('503');
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await checkWrittenPerson('002');
+  await checkWrittenPerson('503');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'Per-person answers do not overflow the page at enlarged text');
+  const writtenCards = written.locator('.forms-written-cards');
+  await (await writtenCards.isVisible() ? writtenCards.locator('li') : written.locator('tbody tr')).filter({ hasText: 'Form Member 503' }).scrollIntoViewIfNeeded();
+  await capture('written-answers-per-person-text-200');
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
   await page.getByRole(baseline ? 'button' : 'radio', { name: 'Responses', exact: true }).click();
   if (!baseline) {
     const table = page.locator('[data-admin-table][aria-label="Form responses"]');

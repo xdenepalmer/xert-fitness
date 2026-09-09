@@ -13,6 +13,7 @@ import { checkAdminCommands } from '../test/browser/admin-commands.mjs';
 import { checkAdminRecovery } from '../test/browser/admin-recovery.mjs';
 import { checkAdminKit, checkAdminFilterGuard } from '../test/browser/admin-kit.mjs';
 import { checkAdminCalendar } from '../test/browser/admin-calendar.mjs';
+import { checkAttendeeSearch } from '../test/browser/admin-attendee-search.mjs';
 import { checkAdminLeads } from '../test/browser/admin-leads.mjs';
 import { checkAdminHeaderLayout } from '../test/browser/admin-header.mjs';
 import { checkAdminForms } from '../test/browser/admin-forms.mjs';
@@ -221,6 +222,16 @@ try {
           } catch (error) {
             await page.screenshot({ path: resolve(output, `${prefix}-calendar-failure.png`) });
             results.push({ prefix: `${prefix}-calendar-flows`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/calendar' && signedIn && process.argv.includes('--calendar-search')) {
+          try {
+            await checkAttendeeSearch(page, { origin, failures, capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during attendee search');
+            results.push({ prefix: `${prefix}-attendee-search`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-attendee-search-failure.png`) });
+            results.push({ prefix: `${prefix}-attendee-search`, passed: false, error: error.message, browserErrors: errors });
           }
         }
         if (path === '/admin/forms' && signedIn && (process.argv.includes('--forms-before') || process.argv.includes('--forms'))) {

@@ -56,7 +56,7 @@ const readRPCs = new Set([
   'sessions_with_availability', 'my_bookings', 'my_member_announcements', 'admin_daily_operations',
   'admin_waitlist_overview', 'admin_search_members', 'admin_members_overview',
   'public_class_availability',
-  'admin_session_roster', 'admin_class_capacity',
+  'admin_session_roster', 'admin_class_capacity', 'admin_search_class_attendees',
 ]);
 
 // Network-level isolation: keep real auth/router/components, intercept only I/O.
