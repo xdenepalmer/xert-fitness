@@ -8,7 +8,7 @@ import { activeQuestions, archiveFormResponse, archiveOwnerForm, CHARTABLE_TYPES
 import { numberedAnswers } from '@/lib/formAnswers';
 import AdminConfirmDialog from './AdminConfirmDialog';
 import FormQRCode from './FormQRCode';
-import FormResponseRecord from './FormResponseRecord';
+import FormResponseRecord, { FormRecordLoading } from './FormResponseRecord';
 import { respondentIdentity, respondentLabel } from '@/lib/formResponseRecord';
 import { ADMIN_BUTTON, ADMIN_PANEL, AdminBadge, AdminDataTable, AdminEmptyState, AdminFilterBar, AdminFormField, AdminPageHeader, AdminSegmented, AdminSkeleton, AdminStatCard } from './ui';
 import './forms.css';
@@ -18,6 +18,15 @@ const control = 'admin-kit-input';
 const shell = 'forms-workspace admin-kit-container';
 const button = 'admin-kit-button';
 const primary = `admin-kit-button ${ADMIN_BUTTON.primary}`;
+
+function FormCardsLoading() {
+  return <div role="status" aria-label="Loading forms" className="forms-grid forms-grid-two">{[0,1,2].map(index => <article key={index} aria-hidden="true" data-form-placeholder="card" className={`${panel} forms-card`}><div className="forms-contact"><AdminSkeleton decorative size="title" /><AdminSkeleton decorative size="short" className="forms-loading-badge" /><AdminSkeleton decorative size="medium" /></div></article>)}</div>;
+}
+
+function AnalyticsLoading({ questions, view }) {
+  if (view === 'trends') return <div role="status" aria-label="Loading responses"><section aria-hidden="true" data-form-placeholder="trend" className={`${panel} forms-card forms-loading-stack`}><AdminSkeleton decorative size="title" /><ol className="forms-trends forms-loading-trends">{Array.from({length:14}, (_,index) => <li key={index}><AdminSkeleton decorative size="short" /><AdminSkeleton decorative /><AdminSkeleton decorative size="short" /></li>)}</ol></section></div>;
+  return <div role="status" aria-label="Loading responses" className="forms-grid forms-grid-two">{questions.map(question => <section key={question.id} aria-hidden="true" data-form-placeholder="question" className={`${panel} forms-card forms-loading-stack`}><AdminSkeleton decorative size="title" /><AdminSkeleton decorative size="short" /><div className="forms-loading-stack">{[0,1,2].map(index => <div key={index} data-form-placeholder="answer-row" className="forms-contact"><AdminSkeleton decorative /><AdminSkeleton decorative size="medium" /></div>)}</div></section>)}</div>;
+}
 
 function Toggle({ checked, onChange, label, description = '' }) {
   return <div className="forms-toggle"><span><span className="admin-kit-label">{label}</span>{description && <span className="forms-secondary">{description}</span>}</span><button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className={button}>{checked ? 'On' : 'Off'}</button></div>;
@@ -214,7 +223,7 @@ function Analytics({ form, onBack }) {
   const selectedResponseMatches = selectedResponseID && selectedResponse?.id === selectedResponseID;
 
   if (selectedResponseID && !selectedResponseMatches) {
-    return <div className={shell}><button type="button" className={button} onClick={() => setSelectedResponseID(null)}><ArrowLeft className="h-4 w-4" /> All responses</button>{loadingSelectedResponse ? <AdminSkeleton variant="editor" label="Loading full response" /> : <div role="alert"><AdminEmptyState title="Unable to load full response" description={error || 'This response could not be loaded.'} action={<button type="button" className={button} onClick={() => setRecordAttempt(value => value + 1)}>Retry full response</button>} /></div>}</div>;
+    return <div className={shell}><button type="button" className={button} onClick={() => setSelectedResponseID(null)}><ArrowLeft className="h-4 w-4" /> All responses</button>{loadingSelectedResponse ? <FormRecordLoading /> : <div role="alert"><AdminEmptyState title="Unable to load full response" description={error || 'This response could not be loaded.'} action={<button type="button" className={button} onClick={() => setRecordAttempt(value => value + 1)}>Retry full response</button>} /></div>}</div>;
   }
 
   if (selectedResponseMatches) {
@@ -226,7 +235,7 @@ function Analytics({ form, onBack }) {
     <div className="forms-grid forms-stats">{[['Responses',responses.length],['New',responses.filter(item => item.status === 'new').length],['Avg. time',responses.length ? `${Math.round(responses.reduce((sum,item) => sum + (item.time_taken_seconds || 0), 0) / responses.length)}s` : '—'],['Fields',questions.length]].map(([label,value]) => <AdminStatCard key={label} label={label} value={loading ? '—' : value} />)}</div>
     <AdminSegmented label="Analytics view" options={[{value:'overview',label:'Overview'},{value:'responses',label:'Responses'},{value:'trends',label:'Trends'}]} value={tab} onValueChange={setTab} />
     {error && <p role="alert" className="border border-status-warning-300/30 bg-status-warning-300/10 p-3 text-sm text-status-warning-100">{error}</p>}
-    {tab !== 'responses' && loading ? <AdminSkeleton variant="editor" label="Loading responses" /> : tab !== 'responses' && listError ? <div role="alert"><AdminEmptyState title="Unable to load responses" description={listError} action={<button type="button" className={button} onClick={() => setListAttempt(value => value + 1)}>Retry</button>} /></div> : tab === 'overview' ? <div className="forms-grid forms-grid-two">{questions.map(question => {
+    {tab !== 'responses' && loading ? <AnalyticsLoading questions={questions} view={tab} /> : tab !== 'responses' && listError ? <div role="alert"><AdminEmptyState title="Unable to load responses" description={listError} action={<button type="button" className={button} onClick={() => setListAttempt(value => value + 1)}>Retry</button>} /></div> : tab === 'overview' ? <div className="forms-grid forms-grid-two">{questions.map(question => {
       const values = responses.map(item => item.answers?.[question.id]).filter(value => value !== undefined && value !== null && value !== '');
       if (CHARTABLE_TYPES.has(question.type)) {
         const flattened = values.flatMap(value => Array.isArray(value) ? value : [value]).map(String);
@@ -303,7 +312,7 @@ export default function FormsSurveysManager({ initialAction = null, onIntentHand
     </AdminPageHeader>
     <div className="forms-grid forms-stats">{[['Total forms',forms.length],['Live',forms.filter(item=>item.is_active).length],['Responses',forms.reduce((sum,item)=>sum+(item.response_count||0),0)],['Types used',new Set(forms.map(item=>item.form_type)).size]].map(([label,value]) => <AdminStatCard key={label} label={label} value={loading ? '—' : value} />)}</div>
     <AdminFilterBar queryKey="form-search" searchLabel="Search forms" filters={[{key:'form-type',label:'Form type',options:FORM_TYPES}]} onChange={values => {setQuery(values['form-search'] || '');setFilter(values['form-type'] || 'all');}} />
-    {loading ? <div role="status" aria-label="Loading forms" className="forms-grid forms-grid-two">{[0,1,2].map(index => <div key={index} className={panel}><AdminSkeleton decorative variant="metric" /></div>)}</div>
+    {loading ? <FormCardsLoading />
       : error ? <div role="alert"><AdminEmptyState title="Unable to load forms" description={error} action={<button type="button" className={button} onClick={load}>Retry</button>} /></div>
       : filtered.length ? <div className="forms-grid forms-grid-two">{filtered.map(form => <button type="button" key={form.id} onClick={() => {setActive(form);setView('manage');setNotice('');setError('');}} className={`${panel} forms-card`}><div className="forms-contact"><span className="font-semibold text-text-primary">{form.title}</span><span><AdminBadge status={form.is_active ? 'active' : 'inactive'}>{form.is_active ? 'Live' : 'Paused'}</AdminBadge></span><span className="forms-secondary">{FORM_TYPES.find(type=>type.value===form.form_type)?.label} · {activeQuestions(form).length} fields · {form.response_count||0} responses</span></div></button>)}</div>
       : <Empty title={forms.length ? 'No matching forms' : 'No forms yet'} detail={forms.length ? 'Clear the search or type filter to see other forms.' : 'Create a survey, registration, application, feedback form or anything else Byron needs.'} />}

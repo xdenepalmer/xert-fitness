@@ -20,6 +20,14 @@
 .forms-contact { display: grid; gap: var(--space-label); }
 .forms-card { width: 100%; text-align: start; padding: var(--space-group); }
 .forms-card:hover { border-color: var(--border-strong); }
+.forms-loading-stack { display: grid; gap: var(--space-group); }
+.forms-trends.forms-loading-trends li { grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr); }
+.admin-kit-skeleton.forms-loading-badge { height: calc(var(--font-size-label) + var(--space-label) * 2); border-radius: var(--radius-pill); }
+.forms-record-loading { background: var(--surface-paper); }
+.forms-record-loading .admin-kit-skeleton { background: var(--document-neutral-200); }
+.forms-record-loading header { border-bottom: var(--nav-line-width) solid var(--document-neutral-300); }
+.forms-loading-metadata { background: var(--document-neutral-50); border: var(--nav-line-width) solid var(--document-neutral-300); }
+.forms-loading-answer { border: var(--nav-line-width) solid var(--document-neutral-200); }
 .forms-error { color: var(--state-danger-text); }
 .forms-record-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-control); }
 .forms-record-toolbar > p { color: var(--text-secondary); }

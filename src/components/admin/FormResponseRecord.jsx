@@ -6,7 +6,7 @@ import {
   respondentLabel,
 } from '@/lib/formResponseRecord';
 import { waitForPrintableImages } from '@/lib/printReady';
-import { ADMIN_BUTTON } from './ui';
+import { ADMIN_BUTTON, AdminSkeleton } from './ui';
 
 const secondaryButton = 'admin-kit-button';
 const printButton = `admin-kit-button ${ADMIN_BUTTON.primary}`;
@@ -121,6 +121,26 @@ function ResponseField({ field, number }) {
 
 function MetadataItem({ label, children, wide = false }) {
   return <div className={wide ? 'forms-record-wide' : ''}><dt className="text-[10px] font-bold uppercase tracking-[0.18em] text-document-neutral-500">{label}</dt><dd className="mt-1 break-words text-sm text-document-neutral-950">{children || 'Not provided'}</dd></div>;
+}
+
+/** Documentary layout while the full, immutable selected response is loading. */
+export function FormRecordLoading() {
+  return <div role="status" aria-label="Loading full response" className="forms-record-loading admin-kit-container mx-auto max-w-[850px]">
+    <div aria-hidden="true">
+      <header data-form-placeholder="record-header" className="forms-record-padding forms-loading-stack">
+        <div className="forms-actions"><AdminSkeleton decorative size="medium" /><AdminSkeleton decorative size="short" /></div>
+        <AdminSkeleton decorative size="short" />
+        <AdminSkeleton decorative size="title" />
+        <AdminSkeleton decorative />
+      </header>
+      <div className="forms-record-padding forms-loading-stack">
+        <section data-form-placeholder="record-metadata" className="forms-record-padding forms-loading-metadata">
+          <div className="forms-grid forms-grid-two">{[0,1,2,3,4,5].map(index => <div key={index} data-form-placeholder="metadata-item" className="forms-contact"><AdminSkeleton decorative size="short" /><AdminSkeleton decorative /></div>)}</div>
+        </section>
+        <div className="forms-loading-stack">{[0,1].map(index => <section key={index} data-form-placeholder="record-answer" className="forms-record-padding forms-loading-answer forms-loading-stack"><AdminSkeleton decorative size="title" /><AdminSkeleton decorative /><AdminSkeleton decorative size="medium" /></section>)}</div>
+      </div>
+    </div>
+  </div>;
 }
 
 export default function FormResponseRecord({ form, response, responses, onSelect, onBack, onStatusChange, updating = false, error = '' }) {
