@@ -13,6 +13,9 @@
 .admin-shell #admin-navigation nav button[aria-current="page"], .admin-shell #admin-navigation nav button[aria-expanded="true"] { background: var(--surface-overlay); }
 .admin-shell header { background: var(--surface-base); border-color: var(--border-hairline); }
 .admin-shell h1 { font-family: var(--font-display); font-size: var(--nav-font-title); }
+.admin-shell-toolbar { flex-wrap: wrap; }
+.admin-shell-identity { flex: 1 1 calc(var(--control-height) * 3); }
+.admin-shell-actions { max-width: 100%; margin-inline-start: auto; flex-wrap: wrap; justify-content: flex-end; }
 .admin-shell-control { min-height: var(--control-height); min-width: var(--control-height); display: grid; place-items: center; border: var(--nav-line-width) solid var(--border-hairline); border-radius: var(--nav-radius-control); color: var(--text-secondary); background: var(--surface-raised); }
 .admin-shell-control svg { width: var(--space-row-comfortable); height: var(--space-row-comfortable); }
 .admin-shell :focus-visible, .admin-tabs button:focus-visible { outline: var(--nav-indicator-height) solid var(--focus-ring); outline-offset: var(--nav-indicator-height); }

@@ -278,13 +278,13 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
       <div ref={workspaceRef} data-admin-workspace className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="relative z-30 shrink-0 border-b border-white/[0.06] bg-surface-sidebar/90 backdrop-blur">
-          <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-8 sm:pt-4">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="admin-shell-toolbar flex items-center justify-between gap-3 px-4 pb-2 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-8 sm:pt-4">
+            <div className="admin-shell-identity flex min-w-0 items-center gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-xert-steel/15 text-xert-steel lg:hidden">
                 <currentHub.icon className="h-[18px] w-[18px]" />
               </span>
               <div className="min-w-0">
-                <h1 className="flex min-w-0 items-center gap-1.5 font-body text-base font-semibold normal-case tracking-normal text-xert-offwhite sm:text-lg">
+                <h1 className="flex min-w-0 flex-wrap items-center gap-1.5 font-body text-base font-semibold normal-case tracking-normal text-xert-offwhite sm:text-lg">
                   {currentHub.items.length > 1 && (
                     <span className="inline-flex items-center gap-1.5">
                       <span className="text-xert-pale/45">{currentHub.label}</span>
@@ -300,7 +300,7 @@ export default function AdminLayout({ activeSection, onSectionChange, hasUnsaved
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="admin-shell-actions flex items-center gap-2">
             {desktopNavigation && <button type="button" className="admin-shell-control" onClick={() => shell.setCollapsed(value => !value)} aria-label={shell.collapsed ? 'Expand navigation' : 'Collapse navigation'} title={shell.collapsed ? 'Expand navigation' : 'Collapse navigation'}>{shell.collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}</button>}
             <button type="button" className="admin-shell-control" onClick={() => shell.setDensity(value => value === 'compact' ? 'comfortable' : 'compact')} aria-label={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'} title={shell.density === 'compact' ? 'Comfortable density' : 'Compact density'}><SlidersHorizontal /></button>
             <button type="button" className="admin-shell-control" onClick={() => shell.setShortcutsOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts"><Keyboard /></button>
