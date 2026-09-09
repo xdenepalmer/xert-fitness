@@ -151,8 +151,77 @@ struct XertSegmented<Value: Hashable>: View {
             if dynamicTypeSize.isAccessibilitySize {
                 picker.pickerStyle(.menu).xertTypography(.body).frame(minHeight: XertTokens.controlHeight)
             } else {
-                picker.pickerStyle(.segmented).frame(minHeight: XertTokens.controlHeight)
+                XertNativeSegments(title: title, selection: userSelection, choices: choices)
+                    .frame(minHeight: XertTokens.controlHeight)
             }
+        }
+    }
+}
+
+/// SwiftUI's segmented Picker retains a 32pt UIKit control inside a larger
+/// frame. Size the native control itself so its real hit region meets the
+/// semantic minimum while keeping native segment selection/accessibility.
+private final class XertMinimumHeightSegments: UISegmentedControl {
+    override var intrinsicContentSize: CGSize {
+        let size = super.intrinsicContentSize
+        return CGSize(width: size.width, height: max(size.height, XertTokens.controlHeight))
+    }
+
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let fit = super.sizeThatFits(size)
+        return CGSize(width: fit.width, height: max(fit.height, XertTokens.controlHeight))
+    }
+}
+
+@MainActor
+private struct XertNativeSegments<Value: Hashable>: UIViewRepresentable {
+    let title: String
+    @Binding var selection: Value
+    let choices: [XertChoice<Value>]
+    @Environment(\.isEnabled) private var isEnabled
+    @ScaledMetric(relativeTo: .body) private var fontSize = XertTokens.nativeTypeBody
+
+    func makeUIView(context: Context) -> XertMinimumHeightSegments {
+        let control = XertMinimumHeightSegments(items: [])
+        control.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        control.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
+        return control
+    }
+
+    func updateUIView(_ control: XertMinimumHeightSegments, context: Context) {
+        context.coordinator.parent = self
+        if control.numberOfSegments != choices.count || choices.enumerated().contains(where: { control.titleForSegment(at: $0.offset) != $0.element.label }) {
+            control.removeAllSegments()
+            for (index, choice) in choices.enumerated() {
+                control.insertSegment(withTitle: choice.label, at: index, animated: false)
+            }
+        }
+        control.selectedSegmentIndex = choices.firstIndex(where: { $0.value == selection }) ?? UISegmentedControl.noSegment
+        control.isEnabled = isEnabled
+        control.accessibilityLabel = title
+        control.backgroundColor = UIColor(XertTokens.surfaceSunken)
+        control.selectedSegmentTintColor = UIColor(XertTokens.accentDefault)
+        let font = UIFont.systemFont(ofSize: fontSize)
+        control.setTitleTextAttributes([.font: font, .foregroundColor: UIColor(XertTokens.textPrimary)], for: .normal)
+        control.setTitleTextAttributes([.font: font, .foregroundColor: UIColor(XertTokens.textInverse)], for: .selected)
+        control.invalidateIntrinsicContentSize()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: XertMinimumHeightSegments, context: Context) -> CGSize? {
+        let intrinsic = uiView.intrinsicContentSize
+        return CGSize(width: proposal.width ?? intrinsic.width, height: max(intrinsic.height, XertTokens.controlHeight))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var parent: XertNativeSegments
+        init(_ parent: XertNativeSegments) { self.parent = parent }
+        @objc func changed(_ control: UISegmentedControl) {
+            guard control.isEnabled, parent.choices.indices.contains(control.selectedSegmentIndex) else { return }
+            parent.selection = parent.choices[control.selectedSegmentIndex].value
         }
     }
 }

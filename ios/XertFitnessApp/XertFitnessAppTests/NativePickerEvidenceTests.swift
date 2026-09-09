@@ -45,6 +45,36 @@ final class NativePickerEvidenceTests: XCTestCase {
     }
 
     @MainActor
+    func testSegmentedTracksChangedValuesChoicesAndDisabledState() throws {
+        let model = PickerEvidenceSelection()
+        let window = host(PickerEvidence(selection: model, kind: .segmented, longLabels: false), size: .large)
+        defer { close(window) }
+        let control = try XCTUnwrap(descendants(window).compactMap { $0 as? UISegmentedControl }.first)
+        model.value = "waiting"
+        let selectionUpdated = expectation(for: NSPredicate { _, _ in control.selectedSegmentIndex == 1 }, evaluatedWith: control)
+        wait(for: [selectionUpdated], timeout: 2)
+        model.reversedChoices = true
+        let choicesUpdated = expectation(for: NSPredicate { _, _ in
+            control.titleForSegment(at: 0) == "Waiting" && control.selectedSegmentIndex == 0
+        }, evaluatedWith: control)
+        wait(for: [choicesUpdated], timeout: 2)
+        // A user event after reordering must resolve the current tagged value,
+        // not a stale coordinator array or the displayed index itself.
+        control.selectedSegmentIndex = 1
+        control.sendActions(for: .valueChanged)
+        XCTAssertEqual(model.value, "confirmed")
+        model.enabled = false
+        let disabledUpdated = expectation(for: NSPredicate { _, _ in !control.isEnabled }, evaluatedWith: control)
+        wait(for: [disabledUpdated], timeout: 2)
+        control.selectedSegmentIndex = 0
+        control.sendActions(for: .valueChanged)
+        XCTAssertEqual(model.value, "confirmed", "Disabled controls must not update the binding")
+        model.value = "removed-choice"
+        let missingChoiceCleared = expectation(for: NSPredicate { _, _ in control.selectedSegmentIndex == UISegmentedControl.noSegment }, evaluatedWith: control)
+        wait(for: [missingChoiceCleared], timeout: 2)
+    }
+
+    @MainActor
     func testLongSelectedLabelsProduceFocusedRuntimeEvidence() {
         for kind in PickerEvidenceKind.allCases {
             for size in [DynamicTypeSize.large, .accessibility3] {
@@ -72,7 +102,7 @@ final class NativePickerEvidenceTests: XCTestCase {
         host.view.layoutIfNeeded()
         // Flush the actual hosted hierarchy before public UIKit discovery.
         _ = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
-            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            _ = host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
         }
         return window
     }
@@ -90,9 +120,20 @@ final class NativePickerEvidenceTests: XCTestCase {
 
     @MainActor
     private func capture(_ window: UIWindow, name: String) {
-        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
-            XCTAssertTrue(window.drawHierarchy(in: window.bounds, afterScreenUpdates: true))
+        guard let hostedView = window.rootViewController?.view else {
+            XCTFail("Capture requires a mounted hosting view")
+            return
         }
+        // Match NativeDesignSystemTests' verified hosting-view render path.
+        // UIWindow remains the root for hit routing, not the drawing target.
+        hostedView.setNeedsLayout()
+        hostedView.layoutIfNeeded()
+        var rendered = false
+        let image = UIGraphicsImageRenderer(size: hostedView.bounds.size).image { _ in
+            rendered = hostedView.drawHierarchy(in: hostedView.bounds, afterScreenUpdates: true)
+        }
+        XCTAssertTrue(rendered, "The hosted picker hierarchy must render before attaching visual evidence")
+        XCTAssertNotNil(image.cgImage)
         let screenshot = XCTAttachment(image: image)
         screenshot.name = name
         screenshot.lifetime = .keepAlways
@@ -131,6 +172,8 @@ private enum PickerEvidenceKind: String, CaseIterable { case segmented, menu }
 @MainActor
 private final class PickerEvidenceSelection: ObservableObject {
     @Published var value = "confirmed"
+    @Published var reversedChoices = false
+    @Published var enabled = true
 }
 
 private struct PickerEvidence: View {
@@ -139,13 +182,15 @@ private struct PickerEvidence: View {
     let longLabels: Bool
     static let longSelectedLabel = "Confirmed attendance — Foundation Strength with individual technique coaching"
     private var choices: [XertChoice<String>] {
-        [XertChoice(value: "confirmed", label: longLabels ? Self.longSelectedLabel : "Confirmed"),
+        let values = [XertChoice(value: "confirmed", label: longLabels ? Self.longSelectedLabel : "Confirmed"),
          XertChoice(value: "waiting", label: longLabels ? "Waiting for a place in the next suitable session" : "Waiting")]
+        return selection.reversedChoices ? Array(values.reversed()) : values
     }
     var body: some View {
         VStack(alignment: .leading, spacing: XertSpace.lg) {
             if kind == .segmented {
                 XertSegmented(title: "Booking status", selection: $selection.value, choices: choices)
+                    .disabled(!selection.enabled)
             } else {
                 XertMenuField(title: "Move booking to", selection: $selection.value, choices: choices)
             }
