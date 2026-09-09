@@ -15,6 +15,7 @@ import { checkAdminKit, checkAdminFilterGuard } from '../test/browser/admin-kit.
 import { checkAdminCalendar } from '../test/browser/admin-calendar.mjs';
 import { checkAdminLeads } from '../test/browser/admin-leads.mjs';
 import { checkAdminHeaderLayout } from '../test/browser/admin-header.mjs';
+import { checkAdminForms } from '../test/browser/admin-forms.mjs';
 
 const option = (name, fallback) => process.argv.find(arg => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=') || fallback;
 const tag = option('tag', 'current').replace(/[^a-z0-9_-]/gi, '-');
@@ -57,7 +58,7 @@ try {
       const failures = {};
       const mutations = [];
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion, hasTouch: true, serviceWorkers: 'block' });
-      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), calendar: process.argv.includes('--calendar-data'), leads: process.argv.includes('--lead-data'), mutations });
+      await installDesignFixtures(context, { origin, signedIn, requests, failures, announcement: process.argv.includes('--announcement'), commands: process.argv.includes('--commands'), calendar: process.argv.includes('--calendar-data'), leads: process.argv.includes('--lead-data'), forms: process.argv.includes('--form-data'), mutations });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -213,6 +214,16 @@ try {
           } catch (error) {
             await page.screenshot({ path: resolve(output, `${prefix}-calendar-failure.png`) });
             results.push({ prefix: `${prefix}-calendar-flows`, passed: false, error: error.message, browserErrors: errors });
+          }
+        }
+        if (path === '/admin/forms' && signedIn && (process.argv.includes('--forms-before') || process.argv.includes('--forms'))) {
+          try {
+            await checkAdminForms(page, { origin, baseline: process.argv.includes('--forms-before'), capture: name => page.screenshot({ path: resolve(output, `${prefix}-${name}.png`) }) });
+            assert.deepEqual(errors, [], 'No runtime errors during form workflows');
+            results.push({ prefix: `${prefix}-form-flows`, passed: true });
+          } catch (error) {
+            await page.screenshot({ path: resolve(output, `${prefix}-forms-failure.png`) });
+            results.push({ prefix: `${prefix}-form-flows`, passed: false, error: error.message, browserErrors: errors });
           }
         }
         if (path === '/admin/members' && signedIn && (process.argv.includes('--leads') || process.argv.includes('--leads-before'))) {

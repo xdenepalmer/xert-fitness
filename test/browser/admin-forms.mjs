@@ -1,0 +1,71 @@
+import assert from 'node:assert/strict';
+
+export async function checkAdminForms(page, { origin, capture = async () => {}, baseline = true }) {
+  await page.goto(origin + '/admin/forms?source=forms-proof', { waitUntil: 'networkidle' });
+  const search = page.getByRole('textbox', { name: 'Search forms', exact: true });
+  await search.fill('Coaching');
+  await page.getByRole('button', { name: /Coaching registration/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /Member experience survey/ }).count(), 0);
+  await search.fill('');
+  await page.getByRole('button', { name: /Member experience survey/ }).click();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const title = page.getByRole('textbox', { name: 'Form title', exact: true });
+  await title.fill('Keep this fictional form draft');
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  const discard = page.getByRole('alertdialog', { name: 'Discard unsaved form changes?', exact: true });
+  await discard.waitFor();
+  await discard.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  assert.equal(await title.inputValue(), 'Keep this fictional form draft');
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await capture('form-editor-text-200');
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await discard.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Analytics', exact: true }).click();
+  await page.getByRole('button', { name: 'Export CSV', exact: true }).waitFor();
+  const exportButton = page.getByRole('button', { name: 'Export CSV', exact: true });
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent.includes('Export CSV') && !button.disabled));
+  const downloadPromise = page.waitForEvent('download');
+  await exportButton.click();
+  const download = await downloadPromise;
+  const chunks = [];
+  for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+  const csv = Buffer.concat(chunks).toString('utf8');
+  assert.equal((csv.match(/form\.member\.\d{3}@example\.invalid/g) || []).length, 503, 'Response export spans both server pages');
+  assert.ok(csv.includes('Do you accept these original terms?'), 'Export retains original captured questions');
+  await page.getByRole('button', { name: 'Responses', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search respondents', exact: true }).fill('Form Member 001');
+  await page.getByRole('button', { name: 'View full form', exact: true }).click();
+  const record = page.getByRole('article', { name: 'Original launch agreement', exact: true });
+  await record.waitFor();
+  if (!baseline) {
+    const contrast = await record.getByRole('heading', { name: 'Original launch agreement', exact: true }).evaluate(element => {
+      const rgba = value => (value.match(/[\d.]+/g) || []).map(Number);
+      const over = (front, back) => front.slice(0, 3).map((channel, index) => channel * (front[3] ?? 1) + back[index] * (1 - (front[3] ?? 1)));
+      const layers = [];
+      for (let node = element; node; node = node.parentElement) layers.unshift(rgba(getComputedStyle(node).backgroundColor));
+      const background = layers.reduce((back, front) => over(front, back), [255, 255, 255]);
+      const foreground = over(rgba(getComputedStyle(element).color), background);
+      const luminance = channels => channels.map(channel => channel / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+      const light = luminance(foreground), dark = luminance(background);
+      return { foreground, background, ratio: (Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05) };
+    });
+    assert.ok(contrast.ratio >= 4.5, `Original record heading stays legible against its actual rendered header: ${JSON.stringify(contrast)}`);
+  }
+  assert.ok((await record.textContent()).includes('Original recorded terms — fictional fixture only.'));
+  assert.ok((await record.textContent()).includes('Original unmatched value'));
+  assert.ok((await record.textContent()).includes('Archived administrative value'));
+  assert.ok((await record.textContent()).includes('Form definition preserved at submission.'));
+  assert.equal(await page.getByRole('heading', { name: 'Original launch agreement', exact: true }).evaluate(node => node === document.activeElement), true);
+  await capture('original-form-record');
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await capture('original-form-record-text-200');
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  await page.getByRole('button', { name: 'Older', exact: true }).click();
+  await page.getByRole('heading', { name: 'Reconstructed form layout — not verified as presented', exact: true }).waitFor();
+  await capture('legacy-form-record');
+  await page.getByRole('button', { name: 'All responses', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search respondents', exact: true }).fill('Form Member 503');
+  await page.getByText('Form Member 503', { exact: true }).waitFor();
+  await capture('last-response');
+}

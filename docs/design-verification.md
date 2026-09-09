@@ -85,6 +85,15 @@ cannot catch; intentionally clipped text is excluded from the visible ranges.
 `--compact` sets compact density through the actual shell control before admin
 screenshots and assertions; the normal run starts with comfortable density.
 
+`--form-data --forms-before --routes=/admin/forms` loads three fictional forms and
+503 responses across two server pages. The baseline exercises editor draft
+protection, complete CSV export, preserved versus reconstructed historical
+records, archived answers and response navigation. This is read-only fixture
+work; form mutations and all live APIs remain blocked. `--forms` additionally
+checks original-record heading contrast against the rendered, composited
+background. Do not combine it with
+`--commands`, which owns a separate in-memory form mutation fixture.
+
 `--calendar-data` supplies read-only fictional calendar data: member bookings,
 public sign-ups, a FIFO waitlist candidate and a past class with a pending member
 request. It is deliberately incompatible with the separate `--commands`
@@ -111,7 +120,9 @@ enquiries. It exposes exact result counts through the same CORS header the
 Supabase client reads, applies search/status/projection/range and returns a
 disabled provider handoff state. `--leads-before` exercises current pagination,
 selection reset, detail viewing, filters, complete CSV export and error/retry;
-`--leads` is reserved for final conversion assertions. Neither supports lead
+`--leads` adds shared-density inheritance/persistence, page-scoped select-all,
+dirty dismissal, failed-save draft retention,44px controls and fixed narrow-column
+checks. Both use the same blocked-mutation fixture; neither supports successful lead
 updates or provider dispatches.
 
 Results and images are written under `.superpowers/design-proof/<tag>/` (local,

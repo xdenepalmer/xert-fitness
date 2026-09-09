@@ -1,8 +1,31 @@
 import assert from 'node:assert/strict';
+import { assertReachableControl } from './control-geometry.mjs';
 
 export async function checkAdminLeads(page, { origin, failures, capture = async () => {}, baseline = false }) {
   await page.goto(origin + '/admin/members?source=lead-proof', { waitUntil: 'networkidle' });
   await page.getByText('Lead Member 001', { exact: true }).waitFor();
+  if (!baseline) {
+    const comfortableControl = page.getByRole('button', { name: 'Comfortable density', exact: true });
+    if (await comfortableControl.count()) await comfortableControl.click();
+    const rowSpacing = () => page.locator('[data-lead-pipeline="member"]').evaluate(element => {
+      const style = getComputedStyle(element);
+      return { actual: style.getPropertyValue('--space-row').trim(), compact: style.getPropertyValue('--space-row-compact').trim(), comfortable: style.getPropertyValue('--space-row-comfortable').trim() };
+    });
+    const comfortable = await rowSpacing();
+    assert.equal(comfortable.actual, comfortable.comfortable);
+    await page.getByRole('button', { name: 'Compact density', exact: true }).click();
+    await page.locator('[data-admin-shell][data-density="compact"]').waitFor();
+    const compact = await rowSpacing();
+    assert.equal(compact.actual, compact.compact, 'Lead rows inherit the shared shell compact preference');
+    assert.notEqual(compact.actual, comfortable.actual, 'Changing density changes actual row spacing');
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.getByText('Lead Member 001', { exact: true }).waitFor();
+    assert.equal((await rowSpacing()).actual, compact.compact, 'Compact lead density survives a workspace reload');
+    await page.getByRole('button', { name: 'Comfortable density', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Select all leads on this page', exact: true }).check();
+    assert.equal(await page.getByRole('checkbox', { checked: true }).count(), 51, 'Select-all covers precisely 50 loaded leads plus the header, not all112 server records');
+    await page.getByRole('checkbox', { name: 'Select all leads on this page', exact: true }).uncheck();
+  }
   await page.getByLabel('Select Lead Member 001', { exact: true }).check();
   await page.getByRole('button', { name: 'Next lead page', exact: true }).click();
   await page.getByText('Lead Member 051', { exact: true }).waitFor();
@@ -27,8 +50,18 @@ export async function checkAdminLeads(page, { origin, failures, capture = async 
     }
   }
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  if (!baseline) {
+    await assertReachableControl(detail.getByRole('button', { name: 'Save changes', exact: true }), 'Save lead changes');
+    await assertReachableControl(detail.getByRole('button', { name: 'Close lead details', exact: true }), 'Close lead details');
+  }
   await capture('leads-detail-text-200');
   await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  if (!baseline) {
+    await detail.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await detail.getByRole('alert').filter({ hasText: 'Mutation or unconfigured RPC blocked by local design fixture.' }).waitFor();
+    assert.equal(await detail.getByRole('textbox', { name: 'Admin notes', exact: true }).inputValue(), 'Keep this fictional lead draft', 'A rejected save retains the entire draft');
+    await capture('lead-save-failure-retained');
+  }
   await detail.getByRole('button', { name: /^Close (lead details|drawer)$/ }).click();
   if (!baseline) await discard.getByRole('button', { name: 'Discard changes', exact: true }).click();
   await detail.waitFor({ state: 'hidden' });
@@ -60,8 +93,23 @@ export async function checkAdminLeads(page, { origin, failures, capture = async 
   failures.member_interest = Number.POSITIVE_INFINITY;
   await page.getByRole('button', { name: 'Refresh leads', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Fixture class service temporarily unavailable.' }).waitFor();
+  if (!baseline) assert.equal(await page.getByText('No leads yet', { exact: true }).count(), 0, 'A service error must not be presented as an empty lead pipeline');
   await capture('leads-error');
   failures.member_interest = 0;
   await page.getByRole('button', { name: /^Retry( loading data)?$/ }).click();
   await page.getByText('Lead Member 001', { exact: true }).waitFor();
+  if (!baseline) {
+    const workspace = page.locator('[data-lead-pipeline="member"]');
+    await workspace.evaluate(element => { element.style.maxWidth = '384px'; });
+    await page.getByRole('button', { name: 'Compact density', exact: true }).click();
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const table = workspace.locator('[data-admin-table]');
+    await table.getByText('Lead Member 001', { exact: true }).scrollIntoViewIfNeeded();
+    assert.ok((await workspace.boundingBox()).width <= 385, 'Lead containing column remains fixed-width at enlarged text');
+    await assertReachableControl(table.getByRole('button', { name: 'Lead Member 001', exact: true }), 'Open lead details in a narrow column');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'Narrow lead column does not overflow the page');
+    await capture('leads-narrow-column-compact-text-200');
+    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+    await workspace.evaluate(element => { element.style.maxWidth = ''; });
+  }
 }
