@@ -17,7 +17,7 @@ import {
 } from '../src/lib/paymentActivation.js';
 import { createXertStripeClient } from '../src/lib/serverStripeClient.js';
 import {
-  CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, normalizeCasualVisitPriceCents, normalizeCasualVisitor,
+  CASUAL_VISIT_ACTION, casualVisitCheckoutParameters, normalizeCasualVisitor,
   visitorPassPricing,
   THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, THREE_MONTH_MEMBERSHIP_ACTION,
   THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId,
@@ -887,6 +887,13 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
     });
     if (proofError) fail('The questionnaire could not be checked. Please try again.', 503);
     if (proven !== true) fail('Complete and sign the questionnaire using these same contact details, then return to pay.', 400);
+    const { data: signed, error: signedError } = await admin.rpc('xert_membership_paperwork_signed', {
+      p_email: visitor.email,
+    });
+    if (signedError) fail('Your paperwork could not be checked. Please try again.', 503);
+    if (signed?.questionnaire !== true || signed?.agreement !== true) {
+      fail('Complete and sign the questionnaire and membership agreement using these same contact details, then return to pay.', 400);
+    }
   }
 
   // Keep expiry and every other parameter stable for a retry in this minute.
@@ -911,7 +918,7 @@ export async function startThreeMonthMembershipCheckout({ payload, admin, stripe
   return { url: url.toString(), amount_cents: visitorPassPricing(THREE_MONTH_MEMBERSHIP_ACTION, settings).charge };
 }
 
-async function handleCasualVisitCheckout({ payload, request, admin, json }) {
+export async function handleCasualVisitCheckout({ payload, request, admin, json, createStripe = createXertStripeClient }) {
   let visitor;
   try {
     visitor = normalizeCasualVisitor(payload);
@@ -921,7 +928,7 @@ async function handleCasualVisitCheckout({ payload, request, admin, json }) {
 
   const { data: settings, error: settingsError } = await admin
     .from('admin_settings')
-    .select('casual_payments_enabled, casual_visit_price_cents')
+    .select('casual_payments_enabled, casual_visit_price_cents, casual_visit_discount_cents, casual_visit_discount_enabled')
     .limit(1)
     .maybeSingle();
   if (settingsError) {
@@ -948,8 +955,8 @@ async function handleCasualVisitCheckout({ payload, request, admin, json }) {
 
   // The amount is read from the database every time: a price in the browser is
   // a suggestion, and this one has to be the club's.
-  const priceCents = normalizeCasualVisitPriceCents(settings?.casual_visit_price_cents);
-  const stripe = createXertStripeClient(process.env.STRIPE_SECRET_KEY);
+  const priceCents = visitorPassPricing(CASUAL_VISIT_ACTION, settings).charge;
+  const stripe = createStripe(process.env.STRIPE_SECRET_KEY);
   try {
     const session = await stripe.checkout.sessions.create(
       casualVisitCheckoutParameters({ visitor, priceCents, returnURLs }),

@@ -72,8 +72,8 @@ test('the door fee never touches the member fulfilment path', async () => {
   assert.match(checkout, /return handleCasualVisitCheckout\(\{ payload, request, admin, json \}\)/);
   assert.ok(checkout.indexOf('handleCasualVisitCheckout({ payload') < checkout.indexOf("if (!token) return json({ error: 'Not authenticated.' }, 401);"),
     'a walk-in has no account, so the casual path must come before the auth check');
-  assert.match(checkout, /\.select\('casual_payments_enabled, casual_visit_price_cents'\)/);
-  assert.match(checkout, /casual_payments_enabled === false/, 'the owner can switch it off');
+  // Runtime casual-visit-checkout tests verify the settings projection,
+  // charged amount and disabled-payment gate with real handler execution.
 
   const webhook = await read('../api/stripe-webhook.js');
   assert.match(webhook, /const casualVisit = casualVisitPaymentFromCheckout\(event\.data\?\.object\);/);

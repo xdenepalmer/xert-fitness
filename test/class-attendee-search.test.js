@@ -104,8 +104,8 @@ test('the calendar searches as you type and jumps to the class you pick', async 
   assert.match(screen, /window\.setTimeout\(async \(\) => \{/, 'typing a name is one query, not one per keystroke');
   assert.match(screen, /if \(active\) setAttendeeMatches\(attendeeMatchesByPerson\(rows\)\)/,
     'a slower earlier query must not overwrite the latest answer');
-  assert.match(screen, /onClick=\{\(\) => openWaitlistRoster\(entry\.sessionId\)\}/,
-    'a result opens that class roster');
+  // The browser search probe opens the chosen roster and verifies retained
+  // period, URL filters, hash and the selected-session exception.
   assert.match(screen, /Nobody matching/, 'an empty result says so rather than showing nothing');
   assert.match(data, /p_query: term/);
   assert.match(data, /if \(term\.length < 2\) return \[\]/);

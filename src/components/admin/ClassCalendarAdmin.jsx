@@ -379,9 +379,9 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
     return () => { active = false; window.clearTimeout(timer); };
   }, [attendeeQuery]);
 
-  const openWaitlistRoster = async sessionId => {
+  const openWaitlistRoster = async (sessionId, { preservePeriod = false } = {}) => {
     setView('list');
-    setTimeFilter('upcoming');
+    if (!preservePeriod) setTimeFilter('upcoming');
     try {
       await refreshBookings(sessionId);
       setExpandedBookings(sessionId);
@@ -801,7 +801,7 @@ export default function ClassCalendarAdmin({ initialAction, initialSessionId, on
                           <li key={`${entry.source}:${entry.bookingId}`}>
                             <button
                               type="button"
-                              onClick={() => openWaitlistRoster(entry.sessionId)}
+                              onClick={() => openWaitlistRoster(entry.sessionId, { preservePeriod: true })}
                               className={`flex min-h-11 w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 border-l-2 px-3 py-1.5 text-left transition-colors hover:bg-surface-sunken ${entry.active ? 'border-border-hairline' : 'border-border-hairline'}`}
                             >
                               <span className={`font-body text-sm ${entry.active ? 'text-text-primary' : 'text-text-secondary line-through'}`}>

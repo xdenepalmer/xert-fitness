@@ -338,7 +338,10 @@ function VisitorPriceRow({ field, settings, set }) {
           {money(`${field.key}-price`, priceInput, setPriceInput, () => {
             const cents = dollars(priceInput);
             if (cents === null) setPriceInput((priceCents / 100).toFixed(2));
-            else set(field.price, cents);
+            else {
+              set(field.price, cents);
+              if (running && discountCents >= cents) set(field.enabled, false);
+            }
           }, `${field.label} full price in dollars`)}
         </div>
         <div>

@@ -5,7 +5,7 @@ import PublicNav from '@/components/public/PublicNav';
 import PublicFooter from '@/components/public/PublicFooter';
 import { supabase } from '@/lib/supabase';
 import {
-  CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice,
+  CASUAL_VISIT_ACTION, casualVisitValidationError, formatCasualVisitPrice, formCompletionMatchesVisitor,
   recallCasualVisitor, rememberCasualVisitor,
   THREE_DAY_PASS_ACTION, THREE_DAY_PASS_PRICE_CENTS, THREE_MONTH_MEMBERSHIP_ACTION,
   THREE_MONTH_MEMBERSHIP_PRICE_CENTS, validQuestionnaireResponseId, visitorPassPricing,
@@ -14,6 +14,7 @@ import { readFormCompletion } from '@/lib/formPrerequisites';
 
 const CASUAL_PEQ_SLUG = 'peq-casual';
 const MEMBER_PEQ_SLUG = 'peq';
+const MEMBER_AGREEMENT_SLUG = 'terms-and-conditions';
 
 // A membership is not a drop-in, so it takes the member questionnaire, which
 // hands off to the membership agreement before returning here to pay.
@@ -44,6 +45,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // server checks whether they really did and tells staff either way.
   const [alreadySigned, setAlreadySigned] = useState(false);
   const [questionnaireResponseId, setQuestionnaireResponseId] = useState('');
+  const [membershipCompletion, setMembershipCompletion] = useState({ questionnaire: null, agreement: null });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const paid = params.get('paid') === '1';
@@ -53,6 +55,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // details are waiting, and the questionnaire answer is already known.
   useEffect(() => {
     const completed = readFormCompletion(threeMonth ? MEMBER_PEQ_SLUG : CASUAL_PEQ_SLUG);
+    if (threeMonth) setMembershipCompletion({ questionnaire: completed, agreement: readFormCompletion(MEMBER_AGREEMENT_SLUG) });
     const remembered = recallCasualVisitor();
     const carried = { ...(remembered || {}) };
     if (completed) {
@@ -98,7 +101,9 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
   // Signing here means signing on this device now; saying you already signed
   // sends nothing to verify, so the server looks the records up instead.
   const needsMembershipPaperwork = threeMonth && !alreadySigned
-    && (!validQuestionnaireResponseId(questionnaireResponseId) || questionnaire !== 'done');
+    && (questionnaire !== 'done'
+      || !formCompletionMatchesVisitor(membershipCompletion.questionnaire, visitor)
+      || !formCompletionMatchesVisitor(membershipCompletion.agreement, visitor));
 
   const pay = async event => {
     event.preventDefault();
@@ -111,7 +116,11 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
     }
     if (needsMembershipPaperwork) {
       rememberCasualVisitor(visitor);
-      navigate(`/forms/${MEMBER_PEQ_SLUG}?return=3months`);
+      if (formCompletionMatchesVisitor(membershipCompletion.questionnaire, visitor)) {
+        navigate(`/forms/${MEMBER_AGREEMENT_SLUG}?return=3months`);
+      } else {
+        navigate(`/forms/${MEMBER_PEQ_SLUG}?return=3months`);
+      }
       return;
     }
     if (needsThreeDayQuestionnaire) {
@@ -221,7 +230,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
                 </label>
 
                 {threeMonth ? (
-                  <fieldset className="border border-xert-steel/20 p-4">
+                  <fieldset className="min-w-0 border border-xert-steel/20 p-4">
                     <legend className="px-2 font-body text-xs uppercase tracking-wider text-xert-pale/60">Questionnaire &amp; membership agreement</legend>
                     <p className="mb-3 font-body text-xs leading-relaxed text-xert-pale/60">
                       Everyone training at XERT signs the pre-exercise questionnaire and the membership terms and conditions. If you signed them when you joined, say so and we will find them.
@@ -260,7 +269,7 @@ export default function CasualVisit({ threeDayPass = false, threeMonth = false }
                     )}
                   </fieldset>
                 ) : (
-                <fieldset className="border border-xert-steel/20 p-4">
+                <fieldset className="min-w-0 border border-xert-steel/20 p-4">
                   <legend className="px-2 font-body text-xs uppercase tracking-wider text-xert-pale/60">Pre-exercise questionnaire</legend>
                   {threeDayPass && <p className="mb-3 font-body text-xs leading-relaxed text-xert-pale/60">
                     Complete and sign the questionnaire on this device before paying. We check the saved response against your contact details. Your details will carry back here afterwards.
